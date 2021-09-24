@@ -1,2 +1,2 @@
 # Correlation-Changepoint-Detection
-Research for CPD
+Research for CPD on Cov/Corr
