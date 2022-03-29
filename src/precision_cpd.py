@@ -1,0 +1,102 @@
+import numpy as np
+from numpy.linalg import inv as inv
+import pandas as pd
+import glob
+import os
+import matplotlib.pyplot as plt
+import seaborn as sns
+sns.set()
+
+from sklearn.covariance import graphical_lasso, GraphicalLasso, GraphicalLassoCV
+from tqdm import tqdm
+
+from scipy.cluster import hierarchy
+from scipy.spatial.distance import squareform
+from scipy.cluster.hierarchy import dendrogram, linkage, fcluster
+import scipy.cluster.hierarchy as sch
+
+
+from statsmodels.tsa.seasonal import STL
+
+from utils import is_symmetric, is_pos_def
+from likelihood import LRT_all_coeffs, LRT_all_coeffs_full_likelihood, LRT_individual_coeffs_full_likelihood, apply_fdr_correction, LRT_covariance
+
+import warnings
+warnings.filterwarnings('ignore')  # <- remember to comment this if something breaks and you get confused
+
+
+class PrecisionCPD:
+    def __init__(self, args):
+        self.lam = args.lam
+        self.M = args.M
+        self.window_size = args.window_size
+        self.step_size = args.step_size
+        self.full_basis = args.full_basis
+
+    # data assumed to be cleaned and normalized, passed in shape: [T, dim]
+    def fit_glasso(self, data):
+        self.glasso = GraphicalLasso(max_iter=100, alpha=self.lam, tol=1e-5, verbose=False).fit(data)
+
+    def construct_basis_matrices(self):
+        precision = self.glasso.precision_.copy()
+        clust_dist_mat = np.abs(precision)
+        np.fill_diagonal(clust_dist_mat, 0.0)
+        clust_dist_mat = clust_dist_mat.max() - clust_dist_mat
+        np.fill_diagonal(clust_dist_mat, 0.0)
+        pairwise_distances = sch.distance.pdist(clust_dist_mat)
+        Z = linkage(pairwise_distances, method='average')
+        cutree1 = hierarchy.cut_tree(Z, n_clusters=self.M).squeeze()
+        self.basis_matrices = []
+        for i in range(max(set(cutree1))+1): # iterate over clusters
+            idxs = np.where(cutree1 == i)[0] # indexes for given cluster
+            A = np.zeros(precision.shape) # blank A matrix
+            for idx in idxs: # loop over indexes
+                for idx2 in idxs: # loop over indexes
+                    A[idx][idx2] = precision[idx][idx2].copy() # set i,j entry to be the entry from precision matrix for given cluster
+            self.basis_matrices.append(A)
+        self.basis_matrices = np.array(self.basis_matrices)
+        
+
+        leftover_basis_matrix = precision - self.basis_matrices.sum(axis=0)
+        self.basis_matrices_full = np.concatenate((self.basis_matrices, np.expand_dims(leftover_basis_matrix, 0)), 0)
+
+        assert is_pos_def(self.basis_matrices_full.sum(axis=0)), "Not PosDef"
+        assert is_pos_def(self.basis_matrices.sum(axis=0)), "Not PosDef"
+        for mat in self.basis_matrices_full:
+            assert is_symmetric(mat), "Not Symmetric"
+
+    # # data_full assumed to be passed in shape: [dim, T]
+    def perform_lrt_covariance(self, data_full):
+        lrt_vals, p_vals, null_likelihoods, alt_likelihoods = LRT_covariance(data_full, window_size=self.window_size)
+
+        return lrt_vals, p_vals
+
+    # data_full assumed to be passed in shape: [dim, T]
+    def perform_lrt_global(self, data_full):
+        basis_mats = self.basis_matrices
+        if bool(self.full_basis):
+            basis_mats = self.basis_matrices_full
+        lrt_vals, p_vals = LRT_all_coeffs_full_likelihood(data_full, M=basis_mats.shape[0], dim=data_full.shape[1], H_s=basis_mats, 
+                                                  window_size=self.window_size, lam=self.lam, step_size=self.step_size)
+        
+        return lrt_vals, p_vals
+
+    def perform_lrt_local(self, data_full):
+        basis_mats = self.basis_matrices
+        if bool(self.full_basis):
+            basis_mats = self.basis_matrices_full
+        lrt_vals_all, p_vals_all = LRT_individual_coeffs_full_likelihood(data_full, M=basis_mats.shape[0], dim=data_full.shape[1], H_s=basis_mats, 
+                                                                         window_size=self.window_size, lam=self.lam, step_size=self.step_size)
+
+        return lrt_vals_all, apply_fdr_correction(p_vals_all)
+        
+
+    
+
+
+
+    
+
+
+
+    

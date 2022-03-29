@@ -1,0 +1,191 @@
+import numpy as np
+from tqdm import tqdm
+from optim import optimize_coeffs, optimize_single_coeff
+from statsmodels.stats.multitest import fdrcorrection
+from scipy.stats import chi2, multivariate_normal
+from utils import is_pos_def, is_symmetric
+
+def likelihood_ratio_test(likelihood_null, likelihood_alternative, dof):
+    delta_d = -2*(likelihood_null-likelihood_alternative)
+    
+    return delta_d, chi2.pdf(delta_d, dof)
+
+def apply_fdr_correction(p_vals_all, alpha=0.05):
+    corrected_p_vals_all = []
+    for i in range(p_vals_all.shape[0]):
+        rejected, corrected_p_vals_i = fdrcorrection(p_vals_all[i], alpha=alpha)
+        corrected_p_vals_all.append(corrected_p_vals_i)
+    return np.array(corrected_p_vals_all)
+
+# this is maximized likelihood, not NLL
+def lasso_likelihood(alphas, H_s, C, lam=1e-2, include_l1=False):
+    psi_hat = sum([alphas[i]*H_s[i] for i in range(H_s.shape[0])])
+    l1_penalty = sum([np.abs(psi_hat[i, j])
+                  for i in range(C.shape[0])
+                  for j in range(C.shape[1]) if i != j])
+    
+    if include_l1:
+        return np.log(np.linalg.det(psi_hat)) - np.trace(psi_hat@C) - lam*l1_penalty
+    
+    else:
+        return np.log(np.linalg.det(psi_hat)) - np.trace(psi_hat@C)
+    
+def full_likelihood(alphas, H_s, C, N, lam=1e-2, include_l1=False):
+    P = C.shape[0]
+    psi_hat = sum([alphas[i]*H_s[i] for i in range(H_s.shape[0])])
+    l1_penalty = sum([np.abs(psi_hat[i, j])
+                  for i in range(C.shape[0])
+                  for j in range(C.shape[1]) if i != j])
+    
+    if include_l1:
+        likelihood = np.log(np.linalg.det(psi_hat)) - np.trace(psi_hat@C) - lam*l1_penalty - P*np.log(2*np.pi)
+        return likelihood*(N/2)
+    
+    else:
+        likelihood = np.log(np.linalg.det(psi_hat)) - np.trace(psi_hat@C) - P*np.log(2*np.pi)
+        return likelihood*(N/2)
+
+def LRT_all_coeffs(data_total, M, dim, H_s, window_size=500, lam=1e-2, step_size=1):
+    lrt_vals = []
+    p_vals = []
+    for i in tqdm(range(0, data_total.shape[1]-2*window_size, step_size)):
+        data_one = data_total[:, i:i+window_size]
+        data_two = data_total[:, i+window_size:i+2*window_size]
+        data_full = np.concatenate((data_one, data_two), axis=1)
+        C_one = np.cov(data_one, bias=True)
+        C_two = np.cov(data_two, bias=True)
+        C_full = np.cov(data_full, bias=True)
+
+        coeffs_hat_one = optimize_coeffs(H_s, C_one, lam=lam)
+        coeffs_hat_two = optimize_coeffs(H_s, C_two, lam=lam)
+        coeffs_hat_total = optimize_coeffs(H_s, C_full, lam=lam)
+        null_first = lasso_likelihood(coeffs_hat_total, H_s, C_one, lam=lam)
+        null_second = lasso_likelihood(coeffs_hat_total, H_s, C_two, lam=lam)
+        null_likelihood = null_first + null_second
+        alt_likelihood_one = lasso_likelihood(coeffs_hat_one, H_s, C_one, lam=lam)
+        alt_likelihood_two = lasso_likelihood(coeffs_hat_two, H_s, C_two, lam=lam)
+            
+        test_stat, p_val = likelihood_ratio_test(null_likelihood, alt_likelihood_one+alt_likelihood_two, M)
+        lrt_vals.append(test_stat)
+        p_vals.append(p_val)
+    return lrt_vals, p_vals
+
+
+def LRT_all_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=500, lam=1e-2, step_size=1):
+    lrt_vals = []
+    p_vals = []
+    for i in tqdm(range(0, data_total.shape[1]-2*window_size, step_size)):
+        data_one = data_total[:, i:i+window_size]
+        data_two = data_total[:, i+window_size:i+2*window_size]
+        data_full = np.concatenate((data_one, data_two), axis=1)
+        C_one = np.cov(data_one, bias=True)
+        C_two = np.cov(data_two, bias=True)
+        C_full = np.cov(data_full, bias=True)
+
+        coeffs_hat_one = optimize_coeffs(H_s, C_one, lam=lam)
+        coeffs_hat_two = optimize_coeffs(H_s, C_two, lam=lam)
+        coeffs_hat_total = optimize_coeffs(H_s, C_full, lam=lam)
+        null_first = full_likelihood(coeffs_hat_total, H_s, C_one, N=data_one.shape[1], 
+                                        lam=lam, include_l1=False)
+        null_second = full_likelihood(coeffs_hat_total, H_s, C_two, N=data_two.shape[1], 
+                                        lam=lam, include_l1=False)
+        null_likelihood = null_first + null_second
+        alt_likelihood_one = full_likelihood(coeffs_hat_one, H_s, C_one, N=data_one.shape[1], 
+                                        lam=lam, include_l1=False)
+        alt_likelihood_two = full_likelihood(coeffs_hat_two, H_s, C_two, N=data_two.shape[1], 
+                                        lam=lam, include_l1=False)
+            
+        test_stat, p_val = likelihood_ratio_test(null_likelihood, alt_likelihood_one+alt_likelihood_two, M)
+        lrt_vals.append(test_stat)
+        p_vals.append(p_val)
+    return lrt_vals, p_vals
+
+
+def LRT_individual_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=500, lam=1e-2, step_size=1):
+    lrt_vals = []
+    p_vals = []
+    for i in tqdm(range(0, data_total.shape[1]-2*window_size, step_size)):
+        start_win_indx = i
+        first_end_indx = i+window_size
+        last_end_indx = i+2*window_size
+        data_one = data_total[:, i:i+window_size]
+        data_two = data_total[:, i+window_size:i+2*window_size]
+        data_full = np.concatenate((data_one, data_two), axis=1)
+        C_one = np.cov(data_one, bias=True)
+        C_two = np.cov(data_two, bias=True)
+        C_full = np.cov(data_full, bias=True)
+        coeffs_hat_total = optimize_coeffs(H_s, C_full, lam=lam)
+        # null likelihood
+        null_first = full_likelihood(coeffs_hat_total, H_s, C_one, N=data_one.shape[1], 
+                                     lam=lam, include_l1=True)
+        null_second = full_likelihood(coeffs_hat_total, H_s, C_two, N=data_two.shape[1], 
+                                     lam=lam, include_l1=True)
+        null_likelihood = null_first + null_second
+        
+        test_stats_m = []
+        p_vals_m = []
+        # iterate over each coefficient
+        for i in range(M):
+            alpha_i_change_pre = optimize_single_coeff(coeffs_hat_total, H_s, C_one, coeff_idx=i,
+                                                       lam=lam)
+            alpha_i_change_post = optimize_single_coeff(coeffs_hat_total, H_s, C_two, coeff_idx=i,
+                                                        lam=lam)
+            # likelihood on pre data, alpha_one change
+            alt_likelihood_alpha_i_pre = full_likelihood(alpha_i_change_pre, H_s, C_one, N=data_one.shape[1], 
+                                                         lam=lam, include_l1=True)
+            # likelihood on post data, alpha_one change
+            alt_likelihood_alpha_i_post = full_likelihood(alpha_i_change_post, H_s, C_two, N=data_two.shape[1], 
+                                                          lam=lam, include_l1=True)
+            # total likelihood alt first coeff
+            alt_likelihood_alpha_i = alt_likelihood_alpha_i_pre + alt_likelihood_alpha_i_post
+            
+            test_stat_i, p_val_i = first_test = likelihood_ratio_test(null_likelihood, 
+                                                                      alt_likelihood_alpha_i, 2)
+            test_stats_m.append(test_stat_i)
+            p_vals_m.append(p_val_i)
+            
+        lrt_vals.append(test_stats_m)
+        p_vals.append(p_vals_m)
+    
+    # return arrays with shape (num_tests, M)
+    return np.array(lrt_vals), np.array(p_vals)
+
+
+def calc_likelihood_covariance(data, C):
+    assert is_pos_def(C), "Not PosDef"
+    assert is_symmetric(C), "Not Symmetric"
+    log_l = multivariate_normal.logpdf(data.T, mean=np.zeros(data.shape[0]), cov=C).sum()
+    
+    return log_l
+    #return log_l*(N/2)
+
+def LRT_covariance(data_total, window_size=500):
+    lrt_vals = []
+    p_vals = []
+    null_likelihoods = []
+    alt_likelihoods = []
+    dim = data_total.shape[0]
+    for i in tqdm(range(0, data_total.shape[1]-2*window_size, 1)):
+        data_one = data_total[:, i:i+window_size]
+        data_two = data_total[:, i+window_size:i+2*window_size]
+        data_full = np.concatenate((data_one, data_two), axis=1)
+        C_one = np.cov(data_one, bias=True)
+        C_two = np.cov(data_two, bias=True)
+        C_full = np.cov(data_full, bias=True)
+        # null likelihood
+        null_first = calc_likelihood_covariance(data_one, C_full)
+        null_second = calc_likelihood_covariance(data_two, C_full)
+        null_likelihood = null_first + null_second
+        alt_likelihood_one = calc_likelihood_covariance(data_one, C_one)
+        alt_likelihood_two = calc_likelihood_covariance(data_two, C_two)
+        
+        dof_calc = (dim*(dim+1))/2
+        test_stat, p_val = likelihood_ratio_test(null_likelihood, alt_likelihood_one+alt_likelihood_two, 
+                                                 dof_calc)
+        lrt_vals.append(test_stat)
+        p_vals.append(p_val)
+        null_likelihoods.append(null_likelihood)
+        alt_likelihoods.append(alt_likelihood_one+alt_likelihood_two)
+
+    return np.array(lrt_vals), np.array(p_vals), np.array(null_likelihoods), np.array(alt_likelihoods)
+
