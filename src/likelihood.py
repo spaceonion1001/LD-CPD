@@ -159,13 +159,13 @@ def calc_likelihood_covariance(data, C):
     return log_l
     #return log_l*(N/2)
 
-def LRT_covariance(data_total, window_size=500):
+def LRT_covariance(data_total, window_size=500, step_size=50):
     lrt_vals = []
     p_vals = []
     null_likelihoods = []
     alt_likelihoods = []
     dim = data_total.shape[0]
-    for i in tqdm(range(0, data_total.shape[1]-2*window_size, 1)):
+    for i in tqdm(range(0, data_total.shape[1]-2*window_size, step_size)):
         data_one = data_total[:, i:i+window_size]
         data_two = data_total[:, i+window_size:i+2*window_size]
         data_full = np.concatenate((data_one, data_two), axis=1)
