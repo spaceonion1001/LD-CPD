@@ -6,8 +6,8 @@ import seaborn as sns
 sns.set()
 
 from precision_cpd import PrecisionCPD
-from simulate import sim_changepoint_mv_normal_orthogonal
-from utils import load_alaska_data
+from simulate import sim_changepoint_mv_normal_cholesky, sim_changepoint_mv_normal_no_decomp, sim_changepoint_mv_normal_orthogonal
+from utils import load_alaska_data, scale_data, load_hjandrews_data, create_fig_dir
 
 def get_args():
     parser = argparse.ArgumentParser()
@@ -25,16 +25,24 @@ def get_args():
     parser.add_argument('--basic_test', type=int, default=0)
     parser.add_argument('--full_basis', type=int, default=1)
     parser.add_argument('--local', type=int, default=1)
+    parser.add_argument('--sim_type', type=str, default='orthogonal')
     args = parser.parse_args()
 
     return args
 
 def resolve_data(args):
     if bool(args.sim):
-        return sim_changepoint_mv_normal_orthogonal(M=args.M, dim=args.dim, N=args.N)[1].T
+        if args.sim_type == 'orthogonal':
+            return sim_changepoint_mv_normal_orthogonal(M=args.M, dim=args.dim, N=args.N)[1].T
+        elif args.sim_type == 'cholesky':
+            return scale_data(sim_changepoint_mv_normal_cholesky(dim=args.dim, N=args.N, num_coeffs_change=1, scale=2.0))
+        else:
+            return sim_changepoint_mv_normal_no_decomp(dim=args.dim, N=args.N, num_coeffs_change=1, scale=0.8).T
     else:
         if args.data == 'alaska':
             return load_alaska_data(args)
+        elif args.data == 'hjandrews':
+            return load_hjandrews_data(args)
         else:
             print("Error: Dataset not understood")
             exit(0)
@@ -42,6 +50,8 @@ def resolve_data(args):
 if __name__ == '__main__':
     args = get_args()
     data_full = resolve_data(args)
+    print(data_full.shape)
+    fig_dir_path = create_fig_dir(args.fig_path)
     model = PrecisionCPD(args)
     if bool(args.basic_test):
         lrt_vals, p_vals = model.perform_lrt_covariance(data_full.T)
@@ -50,29 +60,32 @@ if __name__ == '__main__':
         plt.plot(lrt_vals)
         plt.xlabel('Time')
         plt.ylabel('Test Statistic')
-        plt.savefig(os.path.join(args.fig_path, 'lrt_cov_basic_win{}.png'.format(args.window_size)))
+        plt.savefig(os.path.join(fig_dir_path, 'lrt_cov_basic_win{}_step{}.png'.format(args.window_size, args.step_size)))
         
     else:
         data_train = data_full[0:int(0.66*len(data_full)), :]
         model.fit_glasso(data_train)
         model.construct_basis_matrices()
         if bool(args.local):
+            print("Local Test")
             lrt_vals_all, p_vals_all = model.perform_lrt_local(data_full.T)
             for i in range(lrt_vals_all.shape[1]):
                 plt.plot(lrt_vals_all[:, i])
                 plt.xlabel('Time')
-                plt.ylabel('Test Statistic')
-                plt.savefig(os.path.join(args.fig_path, 'lrt_local_i{}_M{}_win{}_step{}_lam{}_full{}_sim{}.png'.format(i, args.M, args.window_size, 
+                plt.ylabel('Test Statistic {}'.format(i))
+                plt.savefig(os.path.join(fig_dir_path, 'lrt_local_i{}_M{}_win{}_step{}_lam{}_full{}_sim{}.png'.format(i, args.M, args.window_size, 
                                                                                                                     args.step_size, args.lam, 
                                                                                                                     args.full_basis, args.sim)))
                 plt.close()
 
         else:
+            print("Global Test")
             lrt_vals, p_vals = model.perform_lrt_global(data_full.T)
             plt.plot(lrt_vals)
             plt.xlabel('Time')
             plt.ylabel('Test Statistic')
-            plt.savefig(os.path.join(args.fig_path, 'lrt_global_M{}_win{}_step{}_lam{}_full{}_sim{}.png'.format(args.M, args.window_size, 
+            plt.savefig(os.path.join(fig_dir_path, 'lrt_global_M{}_win{}_step{}_lam{}_full{}_sim{}.png'.format(args.M, args.window_size, 
                                                                                                                 args.step_size, args.lam, 
                                                                                                                 args.full_basis, args.sim)))
+            plt.close()
     

@@ -37,6 +37,7 @@ def collect_precision_matrix(H_s, prec_coeffs):
     return precision
 
 def sim_changepoint_mv_normal_orthogonal(M=2, dim=4, N=500):
+    print("Simulating Anderson Decomp Data")
     assert dim % M == 0, "Need dim divisible by M for sake of sampling at the moment"
     H_s, precision_one, prec_coeffs_one = generate_matrices_orthogonal(M=M, dim=dim)
     data_one, C_one = sim_data(covar=inv(precision_one), dim=dim, N=N)
@@ -48,7 +49,7 @@ def sim_changepoint_mv_normal_orthogonal(M=2, dim=4, N=500):
     
     data_total = np.concatenate((data_one, data_two), axis=1)
     C_total = np.cov(data_total)
-    
+    print("Finished Simulation")
     return H_s, data_total
 
 def sim_changepoint_mv_normal_orthogonal_mult_coeff(M=2, dim=4, N=500, num_coeffs_change=1):
@@ -83,6 +84,7 @@ def sim_data(covar, dim, N=1000):
     return data_sim, C
 
 def sim_changepoint_mv_normal_no_decomp(dim, N, num_coeffs_change=1, scale=0.8):
+    print("Simulating Data with No Decomp")
     C_one = make_spd_matrix(dim)
     data_one = np.random.multivariate_normal(np.zeros(dim), C_one, N)
     C_two = C_one.copy()
@@ -106,13 +108,14 @@ def sim_changepoint_mv_normal_no_decomp(dim, N, num_coeffs_change=1, scale=0.8):
     assert is_symmetric(C_one)
     assert is_pos_def(C_two)
     assert is_symmetric(C_two)
-    
-    return data_total.T
+    print("Finished Simulation")
+    return data_total
 
-def sim_changepoint_mv_normal_cholesky(dim, N, num_coeffs_change=1):
+def sim_changepoint_mv_normal_cholesky(dim, N, num_coeffs_change=1, scale=0.8):
+    print("Simulating Cholesky Decomp Data")
     L_one = make_spd_matrix(dim)
     C_one = L_one.dot(L_one.T)
-    data_one = np.random.multivariate_normal(np.zeros(dim), C_one, N)
+    data_one = np.random.multivariate_normal(np.zeros(dim), inv(C_one), N)
     L_two = L_one.copy()
     for _ in range(num_coeffs_change):
         rand_i_j = np.random.choice(np.arange(dim), 2, replace=False)
@@ -125,13 +128,13 @@ def sim_changepoint_mv_normal_cholesky(dim, N, num_coeffs_change=1):
 
     C_two = L_two.dot(L_two.T)
 
-    data_two = np.random.multivariate_normal(np.zeros(dim), C_two, N)
+    data_two = np.random.multivariate_normal(np.zeros(dim), inv(C_two), N)
     data_total = np.concatenate((data_one, data_two), axis=0)
     
     assert is_pos_def(C_one)
     assert is_symmetric(C_one)
     assert is_pos_def(C_two)
     assert is_symmetric(C_two)
-    
-    return data_total.T
+    print("Finished Simulation")
+    return data_total
 
