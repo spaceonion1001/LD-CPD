@@ -138,3 +138,34 @@ def sim_changepoint_mv_normal_cholesky(dim, N, num_coeffs_change=1, scale=0.8):
     print("Finished Simulation")
     return data_total
 
+def sim_changepoint_mv_normal_ldlt(dim, N, num_coeffs_change=1, scale=0.8):
+    print("Simulating LDLT Decomp Data")
+    L_one = make_spd_matrix(dim)
+    L_one = np.tril(L_one)
+    np.fill_diagonal(L_one, 1.0)
+    D = np.diag(np.ones(dim)*2.0)
+    C_one = L_one@D@(L_one.T)
+    data_one = np.random.multivariate_normal(np.zeros(dim), inv(C_one), N)
+    L_two = L_one.copy()
+    for _ in range(num_coeffs_change):
+        rand_i_j = np.random.choice(np.arange(dim), 2, replace=False)
+        i, j = rand_i_j[0], rand_i_j[1]
+        assert i != j, "Only the off-diagonal should be changed"
+        L_two = L_two.copy()
+        val = L_two[i, j]
+        val += scale
+        # no need for symmetric change - it's a cholesky
+        L_two[i, j] = val
+    
+    np.fill_diagonal(L_two, 1.0)
+    C_two = L_two@D@(L_two.T)
+
+    data_two = np.random.multivariate_normal(np.zeros(dim), inv(C_two), N)
+    data_total = np.concatenate((data_one, data_two), axis=0)
+    
+    assert is_pos_def(C_one)
+    assert is_symmetric(C_one)
+    assert is_pos_def(C_two)
+    assert is_symmetric(C_two)
+    print("Finished Simulation")
+    return data_total

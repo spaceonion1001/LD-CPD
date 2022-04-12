@@ -1,12 +1,13 @@
 import argparse
 import os
 import numpy as np
+np.random.seed(42)
 import matplotlib.pyplot as plt
 import seaborn as sns
 sns.set()
 
 from precision_cpd import PrecisionCPD
-from simulate import sim_changepoint_mv_normal_cholesky, sim_changepoint_mv_normal_no_decomp, sim_changepoint_mv_normal_orthogonal
+from simulate import sim_changepoint_mv_normal_cholesky, sim_changepoint_mv_normal_no_decomp, sim_changepoint_mv_normal_orthogonal, sim_changepoint_mv_normal_ldlt
 from utils import load_alaska_data, scale_data, load_hjandrews_data, create_fig_dir
 
 def get_args():
@@ -26,6 +27,7 @@ def get_args():
     parser.add_argument('--full_basis', type=int, default=1)
     parser.add_argument('--local', type=int, default=1)
     parser.add_argument('--sim_type', type=str, default='orthogonal')
+    parser.add_argument('--sim_scale', type=float, default=1.5)
     args = parser.parse_args()
 
     return args
@@ -35,9 +37,11 @@ def resolve_data(args):
         if args.sim_type == 'orthogonal':
             return sim_changepoint_mv_normal_orthogonal(M=args.M, dim=args.dim, N=args.N)[1].T
         elif args.sim_type == 'cholesky':
-            return scale_data(sim_changepoint_mv_normal_cholesky(dim=args.dim, N=args.N, num_coeffs_change=1, scale=2.0))
+            return scale_data(sim_changepoint_mv_normal_cholesky(dim=args.dim, N=args.N, num_coeffs_change=1, scale=args.sim_scale))
+        elif args.sim_type == 'ldlt':
+            return scale_data(sim_changepoint_mv_normal_ldlt(dim=args.dim, N=args.N, num_coeffs_change=1, scale=args.sim_scale))
         else:
-            return sim_changepoint_mv_normal_no_decomp(dim=args.dim, N=args.N, num_coeffs_change=1, scale=0.8).T
+            return sim_changepoint_mv_normal_no_decomp(dim=args.dim, N=args.N, num_coeffs_change=1, scale=args.sim_scale).T
     else:
         if args.data == 'alaska':
             return load_alaska_data(args)
