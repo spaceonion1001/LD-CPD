@@ -43,4 +43,17 @@ def create_fig_dir(fig_path):
 
     return new_dir_path
 
+
+def lasso_likelihood(alphas, H_s, C, lam=1e-2, include_l1=False):
+    psi_hat = sum([alphas[i]*H_s[i] for i in range(H_s.shape[0])])
+    l1_penalty = sum([np.abs(psi_hat[i, j])
+                  for i in range(C.shape[0])
+                  for j in range(C.shape[1]) if i != j])
+    
+    if include_l1:
+        return np.log(np.linalg.det(psi_hat)) - np.trace(psi_hat@C) - lam*l1_penalty
+    
+    else:
+        return np.log(np.linalg.det(psi_hat)) - np.trace(psi_hat@C)
+
     

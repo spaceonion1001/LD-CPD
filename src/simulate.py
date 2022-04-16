@@ -162,7 +162,7 @@ def sim_changepoint_mv_normal_ldlt(dim, N, num_coeffs_change=1, scale=0.8):
 
     data_two = np.random.multivariate_normal(np.zeros(dim), inv(C_two), N)
     data_total = np.concatenate((data_one, data_two), axis=0)
-    
+
     assert is_pos_def(C_one)
     assert is_symmetric(C_one)
     assert is_pos_def(C_two)

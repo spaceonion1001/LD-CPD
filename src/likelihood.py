@@ -1,6 +1,6 @@
 import numpy as np
 from tqdm import tqdm
-from optim import optimize_coeffs, optimize_single_coeff
+from optim import optimize_coeffs, optimize_single_coeff, optimize_coeffs_first_order
 from statsmodels.stats.multitest import fdrcorrection
 from scipy.stats import chi2, multivariate_normal
 from utils import is_pos_def, is_symmetric
@@ -33,6 +33,7 @@ def lasso_likelihood(alphas, H_s, C, lam=1e-2, include_l1=False):
 def full_likelihood(alphas, H_s, C, N, lam=1e-2, include_l1=False):
     P = C.shape[0]
     psi_hat = sum([alphas[i]*H_s[i] for i in range(H_s.shape[0])])
+    assert is_pos_def(psi_hat)
     l1_penalty = sum([np.abs(psi_hat[i, j])
                   for i in range(C.shape[0])
                   for j in range(C.shape[1]) if i != j])
@@ -82,9 +83,19 @@ def LRT_all_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=500, lam
         C_two = np.cov(data_two, bias=True)
         C_full = np.cov(data_full, bias=True)
 
-        coeffs_hat_one = optimize_coeffs(H_s, C_one, lam=lam)
-        coeffs_hat_two = optimize_coeffs(H_s, C_two, lam=lam)
-        coeffs_hat_total = optimize_coeffs(H_s, C_full, lam=lam)
+        ###############
+        # CVX SOLVER #
+
+        # coeffs_hat_one = optimize_coeffs(H_s, C_one, lam=lam)
+        # coeffs_hat_two = optimize_coeffs(H_s, C_two, lam=lam)
+        # coeffs_hat_total = optimize_coeffs(H_s, C_full, lam=lam)
+
+        # FIRST ORDER SUBDERIV #
+        coeffs_hat_one = optimize_coeffs_first_order(H_s, C_one, lam=lam, beta=1e-3, iters=100)
+        coeffs_hat_two = optimize_coeffs_first_order(H_s, C_two, lam=lam, beta=1e-3, iters=100)
+        coeffs_hat_total = optimize_coeffs_first_order(H_s, C_full, lam=lam, beta=1e-3, iters=100)
+
+        ################
         null_first = full_likelihood(coeffs_hat_total, H_s, C_one, N=data_one.shape[1], 
                                         lam=lam, include_l1=False)
         null_second = full_likelihood(coeffs_hat_total, H_s, C_two, N=data_two.shape[1], 
@@ -115,6 +126,9 @@ def LRT_individual_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=5
         C_two = np.cov(data_two, bias=True)
         C_full = np.cov(data_full, bias=True)
         coeffs_hat_total = optimize_coeffs(H_s, C_full, lam=lam)
+        # torch optim
+        # TODO
+        #coeffs_hat_total = optimize_coeffs_torch(H_s, C_full, lam=lam)
         # null likelihood
         null_first = full_likelihood(coeffs_hat_total, H_s, C_one, N=data_one.shape[1], 
                                      lam=lam, include_l1=True)
@@ -130,6 +144,12 @@ def LRT_individual_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=5
                                                        lam=lam)
             alpha_i_change_post = optimize_single_coeff(coeffs_hat_total, H_s, C_two, coeff_idx=i,
                                                         lam=lam)
+            # torch optim
+            # TODO
+            # alpha_i_change_pre = optimize_single_coeff_torch(coeffs_hat_total, H_s, C_one, coeff_idx=i,
+            #                                            lam=lam)
+            # alpha_i_change_post = optimize_single_coeff_torch(coeffs_hat_total, H_s, C_two, coeff_idx=i,
+            #                                             lam=lam)
             # likelihood on pre data, alpha_one change
             alt_likelihood_alpha_i_pre = full_likelihood(alpha_i_change_pre, H_s, C_one, N=data_one.shape[1], 
                                                          lam=lam, include_l1=True)

@@ -13,7 +13,7 @@ from utils import load_alaska_data, scale_data, load_hjandrews_data, create_fig_
 def get_args():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--lam', type=float, default=1e-2)
+    parser.add_argument('--lam', type=float, default=1e-1)
     parser.add_argument('--sim', type=int, default=1)
     parser.add_argument('--M', type=int, default=2)
     parser.add_argument('--window_size', type=int, default=100)
