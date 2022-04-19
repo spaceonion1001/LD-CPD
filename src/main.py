@@ -1,7 +1,7 @@
 import argparse
 import os
 import numpy as np
-np.random.seed(42)
+np.random.seed(24)
 import matplotlib.pyplot as plt
 import seaborn as sns
 sns.set()
@@ -35,7 +35,7 @@ def get_args():
 def resolve_data(args):
     if bool(args.sim):
         if args.sim_type == 'orthogonal':
-            return sim_changepoint_mv_normal_orthogonal(M=args.M, dim=args.dim, N=args.N)[1].T
+            return sim_changepoint_mv_normal_orthogonal(sim_scale=args.sim_scale, M=args.M, dim=args.dim, N=args.N)[1].T
         elif args.sim_type == 'cholesky':
             return scale_data(sim_changepoint_mv_normal_cholesky(dim=args.dim, N=args.N, num_coeffs_change=1, scale=args.sim_scale))
         elif args.sim_type == 'ldlt':

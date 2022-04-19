@@ -36,14 +36,14 @@ def collect_precision_matrix(H_s, prec_coeffs):
     
     return precision
 
-def sim_changepoint_mv_normal_orthogonal(M=2, dim=4, N=500):
+def sim_changepoint_mv_normal_orthogonal(sim_scale=0.8, M=2, dim=4, N=500):
     print("Simulating Anderson Decomp Data")
     assert dim % M == 0, "Need dim divisible by M for sake of sampling at the moment"
     H_s, precision_one, prec_coeffs_one = generate_matrices_orthogonal(M=M, dim=dim)
     data_one, C_one = sim_data(covar=inv(precision_one), dim=dim, N=N)
     
     prec_coeffs_two = prec_coeffs_one.copy()
-    prec_coeffs_two[0] += 0.8
+    prec_coeffs_two[0] += sim_scale#*np.random.choice([-1, 1])
     precision_two = collect_precision_matrix(H_s, prec_coeffs_two)
     data_two, C_two = sim_data(covar=inv(precision_two), dim=dim, N=N)
     
@@ -52,7 +52,7 @@ def sim_changepoint_mv_normal_orthogonal(M=2, dim=4, N=500):
     print("Finished Simulation")
     return H_s, data_total
 
-def sim_changepoint_mv_normal_orthogonal_mult_coeff(M=2, dim=4, N=500, num_coeffs_change=1):
+def sim_changepoint_mv_normal_orthogonal_mult_coeff(sim_scale=0.8, M=2, dim=4, N=500, num_coeffs_change=1):
     assert dim % M == 0, "Need dim divisible by M for sake of sampling at the moment"
     H_s, precision_one, prec_coeffs_one = generate_matrices_orthogonal(M=M, dim=dim)
     data_one, C_one = sim_data(covar=inv(precision_one), dim=dim, N=N)
@@ -63,7 +63,7 @@ def sim_changepoint_mv_normal_orthogonal_mult_coeff(M=2, dim=4, N=500, num_coeff
     to_change_coeffs = np.random.choice(np.arange(M), num_coeffs_change, replace=False)
     prec_coeffs_two = prec_coeffs_one.copy()
     for i in range(num_coeffs_change):
-        prec_coeffs_two[to_change_coeffs[i]] += np.random.uniform(0.1, 0.3, 1)[0]
+        prec_coeffs_two[to_change_coeffs[i]] += sim_scale #np.random.uniform(0.8, 1.5, 1)[0]
         
     precision_two = collect_precision_matrix(H_s, prec_coeffs_two)
     data_two, C_two = sim_data(covar=inv(precision_two), dim=dim, N=N)
