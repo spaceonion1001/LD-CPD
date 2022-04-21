@@ -160,8 +160,8 @@ def LRT_individual_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=5
             # total likelihood alt first coeff
             alt_likelihood_alpha_i = alt_likelihood_alpha_i_pre + alt_likelihood_alpha_i_post
             
-            test_stat_i, p_val_i = first_test = likelihood_ratio_test(null_likelihood, 
-                                                                      alt_likelihood_alpha_i, 2)
+            test_stat_i, p_val_i = likelihood_ratio_test(null_likelihood, 
+                                                         alt_likelihood_alpha_i, 2)
             test_stats_m.append(test_stat_i)
             p_vals_m.append(p_val_i)
             
