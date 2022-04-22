@@ -18,7 +18,7 @@ import scipy.cluster.hierarchy as sch
 
 from statsmodels.tsa.seasonal import STL
 
-from utils import is_symmetric, is_pos_def
+from utils import is_symmetric, is_pos_def, vectorize_matrix, symmetrize_from_vector
 from likelihood import LRT_all_coeffs, LRT_all_coeffs_full_likelihood, LRT_individual_coeffs_full_likelihood, apply_fdr_correction, LRT_covariance
 
 import warnings
@@ -32,6 +32,7 @@ class PrecisionCPD:
         self.window_size = args.window_size
         self.step_size = args.step_size
         self.full_basis = args.full_basis
+        self.include_l1 = args.include_l1
 
     # data assumed to be cleaned and normalized, passed in shape: [T, dim]
     def fit_glasso(self, data):
@@ -39,6 +40,7 @@ class PrecisionCPD:
 
     def construct_basis_matrices(self):
         precision = self.glasso.precision_.copy()
+        self.dim = precision.shape[0]
         clust_dist_mat = np.abs(precision)
         np.fill_diagonal(clust_dist_mat, 0.0)
         clust_dist_mat = clust_dist_mat.max() - clust_dist_mat
@@ -53,17 +55,16 @@ class PrecisionCPD:
             for idx in idxs: # loop over indexes
                 for idx2 in idxs: # loop over indexes
                     A[idx][idx2] = precision[idx][idx2].copy() # set i,j entry to be the entry from precision matrix for given cluster
-            self.basis_matrices.append(A)
+            self.basis_matrices.append(vectorize_matrix(A))
         self.basis_matrices = np.array(self.basis_matrices)
         
+        leftover_basis_matrix = precision - symmetrize_from_vector(self.basis_matrices.sum(axis=0), dim=self.dim)
+        self.basis_matrices_full = np.concatenate((self.basis_matrices, np.expand_dims(vectorize_matrix(leftover_basis_matrix), 0)), 0)
 
-        leftover_basis_matrix = precision - self.basis_matrices.sum(axis=0)
-        self.basis_matrices_full = np.concatenate((self.basis_matrices, np.expand_dims(leftover_basis_matrix, 0)), 0)
-
-        assert is_pos_def(self.basis_matrices_full.sum(axis=0)), "Not PosDef"
-        assert is_pos_def(self.basis_matrices.sum(axis=0)), "Not PosDef"
+        assert is_pos_def(symmetrize_from_vector(self.basis_matrices_full.sum(axis=0), dim=self.dim)), "Not PosDef"
+        assert is_pos_def(symmetrize_from_vector(self.basis_matrices.sum(axis=0), dim=self.dim)), "Not PosDef"
         for mat in self.basis_matrices_full:
-            assert is_symmetric(mat), "Not Symmetric"
+            assert is_symmetric(symmetrize_from_vector(mat, dim=self.dim)), "Not Symmetric"
 
     # # data_full assumed to be passed in shape: [dim, T]
     def perform_lrt_covariance(self, data_full):
@@ -77,7 +78,7 @@ class PrecisionCPD:
         if bool(self.full_basis):
             basis_mats = self.basis_matrices_full
         lrt_vals, p_vals = LRT_all_coeffs_full_likelihood(data_full, M=basis_mats.shape[0], dim=data_full.shape[1], H_s=basis_mats, 
-                                                  window_size=self.window_size, lam=self.lam, step_size=self.step_size)
+                                                  window_size=self.window_size, lam=self.lam, step_size=self.step_size, include_l1=self.include_l1)
         
         return lrt_vals, p_vals
 
@@ -86,7 +87,7 @@ class PrecisionCPD:
         if bool(self.full_basis):
             basis_mats = self.basis_matrices_full
         lrt_vals_all, p_vals_all = LRT_individual_coeffs_full_likelihood(data_full, M=basis_mats.shape[0], dim=data_full.shape[1], H_s=basis_mats, 
-                                                                         window_size=self.window_size, lam=self.lam, step_size=self.step_size)
+                                                                         window_size=self.window_size, lam=self.lam, step_size=self.step_size, include_l1=self.include_l1)
 
         return lrt_vals_all, apply_fdr_correction(p_vals_all)
         

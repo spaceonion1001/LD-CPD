@@ -3,7 +3,7 @@ from tqdm import tqdm
 from optim import optimize_coeffs, optimize_single_coeff, optimize_coeffs_first_order, optimize_coeffs_first_order_single
 from statsmodels.stats.multitest import fdrcorrection
 from scipy.stats import chi2, multivariate_normal
-from utils import is_pos_def, is_symmetric
+from utils import is_pos_def, is_symmetric, vectorize_matrix, symmetrize_from_vector
 
 def likelihood_ratio_test(likelihood_null, likelihood_alternative, dof):
     delta_d = -2*(likelihood_null-likelihood_alternative)
@@ -19,7 +19,9 @@ def apply_fdr_correction(p_vals_all, alpha=0.05):
 
 # this is maximized likelihood, not NLL
 def lasso_likelihood(alphas, H_s, C, lam=1e-2, include_l1=False):
+    dim = C.shape[0]
     psi_hat = sum([alphas[i]*H_s[i] for i in range(H_s.shape[0])])
+    psi_hat = symmetrize_from_vector(psi_hat, dim)
     l1_penalty = sum([np.abs(psi_hat[i, j])
                   for i in range(C.shape[0])
                   for j in range(C.shape[1]) if i != j])
@@ -33,6 +35,7 @@ def lasso_likelihood(alphas, H_s, C, lam=1e-2, include_l1=False):
 def full_likelihood(alphas, H_s, C, N, lam=1e-2, include_l1=False):
     P = C.shape[0]
     psi_hat = sum([alphas[i]*H_s[i] for i in range(H_s.shape[0])])
+    psi_hat = symmetrize_from_vector(psi_hat, P)
     assert is_pos_def(psi_hat)
     l1_penalty = sum([np.abs(psi_hat[i, j])
                   for i in range(C.shape[0])
@@ -72,7 +75,7 @@ def LRT_all_coeffs(data_total, M, dim, H_s, window_size=500, lam=1e-2, step_size
     return lrt_vals, p_vals
 
 
-def LRT_all_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=500, lam=1e-2, step_size=1):
+def LRT_all_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=500, lam=1e-2, step_size=1, beta=5e-3, iters=100, include_l1=True):
     lrt_vals = []
     p_vals = []
     for i in tqdm(range(0, data_total.shape[1]-2*window_size, step_size)):
@@ -91,20 +94,20 @@ def LRT_all_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=500, lam
         # coeffs_hat_total = optimize_coeffs(H_s, C_full, lam=lam)
 
         # FIRST ORDER SUBDERIV #
-        coeffs_hat_one = optimize_coeffs_first_order(H_s, C_one, lam=lam, beta=5e-3, iters=100)
-        coeffs_hat_two = optimize_coeffs_first_order(H_s, C_two, lam=lam, beta=5e-3, iters=100)
-        coeffs_hat_total = optimize_coeffs_first_order(H_s, C_full, lam=lam, beta=5e-3, iters=100)
+        coeffs_hat_one = optimize_coeffs_first_order(H_s, C_one, lam=lam, beta=beta, iters=iters)
+        coeffs_hat_two = optimize_coeffs_first_order(H_s, C_two, lam=lam, beta=beta, iters=iters)
+        coeffs_hat_total = optimize_coeffs_first_order(H_s, C_full, lam=lam, beta=beta, iters=iters)
 
         ################
         null_first = full_likelihood(coeffs_hat_total, H_s, C_one, N=data_one.shape[1], 
-                                        lam=lam, include_l1=False)
+                                        lam=lam, include_l1=include_l1)
         null_second = full_likelihood(coeffs_hat_total, H_s, C_two, N=data_two.shape[1], 
-                                        lam=lam, include_l1=False)
+                                        lam=lam, include_l1=include_l1)
         null_likelihood = null_first + null_second
         alt_likelihood_one = full_likelihood(coeffs_hat_one, H_s, C_one, N=data_one.shape[1], 
-                                        lam=lam, include_l1=False)
+                                        lam=lam, include_l1=include_l1)
         alt_likelihood_two = full_likelihood(coeffs_hat_two, H_s, C_two, N=data_two.shape[1], 
-                                        lam=lam, include_l1=False)
+                                        lam=lam, include_l1=include_l1)
             
         test_stat, p_val = likelihood_ratio_test(null_likelihood, alt_likelihood_one+alt_likelihood_two, M)
         lrt_vals.append(test_stat)
@@ -112,7 +115,7 @@ def LRT_all_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=500, lam
     return lrt_vals, p_vals
 
 
-def LRT_individual_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=500, lam=1e-2, step_size=1):
+def LRT_individual_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=500, lam=1e-2, step_size=1, beta=5e-3, iters=100, include_l1=True):
     lrt_vals = []
     p_vals = []
     for i in tqdm(range(0, data_total.shape[1]-2*window_size, step_size)):
@@ -128,13 +131,13 @@ def LRT_individual_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=5
 
         #############################
         #coeffs_hat_total = optimize_coeffs(H_s, C_full, lam=lam)
-        coeffs_hat_total = optimize_coeffs_first_order(H_s, C_full, lam=lam, beta=5e-3, iters=100)
+        coeffs_hat_total = optimize_coeffs_first_order(H_s, C_full, lam=lam, beta=beta, iters=iters)
         ##############################
         # null likelihood
         null_first = full_likelihood(coeffs_hat_total, H_s, C_one, N=data_one.shape[1], 
-                                     lam=lam, include_l1=True)
+                                     lam=lam, include_l1=include_l1)
         null_second = full_likelihood(coeffs_hat_total, H_s, C_two, N=data_two.shape[1], 
-                                     lam=lam, include_l1=True)
+                                     lam=lam, include_l1=include_l1)
         null_likelihood = null_first + null_second
         
         test_stats_m = []
@@ -147,16 +150,16 @@ def LRT_individual_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=5
             #                                            lam=lam)
             # alpha_i_change_post = optimize_single_coeff(coeffs_hat_total, H_s, C_two, coeff_idx=i,
             #                                             lam=lam)
-            alpha_i_change_pre = optimize_coeffs_first_order_single(coeffs_hat_total, H_s, C_one, lam=lam, beta=5e-3, iters=100, optim_indx=i)
-            alpha_i_change_post = optimize_coeffs_first_order_single(coeffs_hat_total, H_s, C_two, lam=lam, beta=5e-3, iters=100, optim_indx=i)
+            alpha_i_change_pre = optimize_coeffs_first_order_single(coeffs_hat_total, H_s, C_one, lam=lam, beta=beta, iters=iters, optim_indx=i)
+            alpha_i_change_post = optimize_coeffs_first_order_single(coeffs_hat_total, H_s, C_two, lam=lam, beta=beta, iters=iters, optim_indx=i)
             ####################################
             
             # likelihood on pre data, alpha_one change
             alt_likelihood_alpha_i_pre = full_likelihood(alpha_i_change_pre, H_s, C_one, N=data_one.shape[1], 
-                                                         lam=lam, include_l1=True)
+                                                         lam=lam, include_l1=include_l1)
             # likelihood on post data, alpha_one change
             alt_likelihood_alpha_i_post = full_likelihood(alpha_i_change_post, H_s, C_two, N=data_two.shape[1], 
-                                                          lam=lam, include_l1=True)
+                                                          lam=lam, include_l1=include_l1)
             # total likelihood alt first coeff
             alt_likelihood_alpha_i = alt_likelihood_alpha_i_pre + alt_likelihood_alpha_i_post
             

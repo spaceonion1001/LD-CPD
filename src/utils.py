@@ -34,6 +34,25 @@ def scale_data(data):
 
     return data_scaled
 
+def vectorize_matrix(A):
+    """
+    Turns a symmetric matrix A into a vector from the lower triangle
+    """
+    indxes = np.tril_indices(A.shape[0])
+
+    return A[indxes]
+
+def symmetrize_from_vector(a, dim):
+    """
+    Turns a vector of lower triangular matrix entries into symmetric matrix
+    """
+    A = np.zeros((dim,dim))
+    A[np.tril_indices(A.shape[0], k = 0)] = a
+    A = A + A.T - np.diag(np.diag(A))
+
+    return A
+
+
 def create_fig_dir(fig_path):
     today = datetime.now()
 
@@ -45,7 +64,9 @@ def create_fig_dir(fig_path):
 
 
 def lasso_likelihood(alphas, H_s, C, lam=1e-2, include_l1=False):
+    dim = C.shape[0]
     psi_hat = sum([alphas[i]*H_s[i] for i in range(H_s.shape[0])])
+    psi_hat = symmetrize_from_vector(psi_hat, dim)
     l1_penalty = sum([np.abs(psi_hat[i, j])
                   for i in range(C.shape[0])
                   for j in range(C.shape[1]) if i != j])

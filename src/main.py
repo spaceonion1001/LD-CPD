@@ -28,8 +28,10 @@ def get_args():
     parser.add_argument('--local', type=int, default=1)
     parser.add_argument('--sim_type', type=str, default='orthogonal')
     parser.add_argument('--sim_scale', type=float, default=1.5)
+    parser.add_argument('--include_l1', type=int, default=1)
     args = parser.parse_args()
 
+    args.include_l1 = bool(args.include_l1)
     return args
 
 def resolve_data(args):
