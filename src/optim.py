@@ -64,7 +64,7 @@ def l1_penalty_subderiv(alphas, H, i):
                     l1_pen_sum += term*np.sign(term)*np.sign(alphas[i])
     return l1_pen_sum
 
-def gradient_step(alphas, H_s, C, lam=1e-2, beta=1e-2, t=3):
+def gradient_step(alphas, H_s, C, lam=1e-2, beta=1e-2, t=2.0):
     M = H_s.shape[0]
     dim = C.shape[0]
     alphas_new = np.zeros(alphas.shape)
@@ -81,7 +81,7 @@ def gradient_step(alphas, H_s, C, lam=1e-2, beta=1e-2, t=3):
 
     return alphas_new
 
-def gradient_step_single(alphas, H_s, C, lam=1e-2, beta=1e-2, t=3, optim_indx=0):
+def gradient_step_single(alphas, H_s, C, lam=1e-2, beta=1e-2, t=2.0, optim_indx=0):
     M = H_s.shape[0]
     dim = C.shape[0]
     alphas_new = alphas.copy()
@@ -97,7 +97,7 @@ def gradient_step_single(alphas, H_s, C, lam=1e-2, beta=1e-2, t=3, optim_indx=0)
 
     return alphas_new
 
-def optimize_coeffs_first_order(H_s, C, lam=1e-2, beta=1e-2, iters=200, include_l1=True, t=2):
+def optimize_coeffs_first_order(H_s, C, lam=1e-2, beta=1e-2, iters=200, include_l1=True, t=2.0):
     M = H_s.shape[0]
     alphas_imo = np.ones(M)
     best_likelihood = lasso_likelihood(alphas_imo, H_s, C, lam=lam, include_l1=include_l1)
@@ -114,7 +114,7 @@ def optimize_coeffs_first_order(H_s, C, lam=1e-2, beta=1e-2, iters=200, include_
     #best_coeffs = alphas_imo.copy()
     return best_coeffs
 
-def optimize_coeffs_first_order_single(alphas, H_s, C, lam=1e-2, beta=1e-2, iters=200, optim_indx=0, include_l1=True, t=2):
+def optimize_coeffs_first_order_single(alphas, H_s, C, lam=1e-2, beta=1e-2, iters=200, optim_indx=0, include_l1=True, t=2.0):
     M = H_s.shape[0]
     alphas_imo = alphas.copy()
     best_likelihood = lasso_likelihood(alphas_imo, H_s, C, lam=lam, include_l1=include_l1)

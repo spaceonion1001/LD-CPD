@@ -29,7 +29,10 @@ def get_args():
     parser.add_argument('--sim_type', type=str, default='orthogonal')
     parser.add_argument('--sim_scale', type=float, default=1.5)
     parser.add_argument('--include_l1', type=int, default=1)
-    parser.add_argument('--split_variance', type=int, default=1)
+    parser.add_argument('--split_variance', type=int, default=0)
+    parser.add_argument('--iters', type=int, default=100)
+    parser.add_argument('--beta', type=float, default=5e-3)
+    parser.add_argument('--t', type=float, default=2.0)
     args = parser.parse_args()
 
     return args
@@ -94,4 +97,5 @@ if __name__ == '__main__':
                                                                                                                 args.step_size, args.lam, 
                                                                                                                 args.full_basis, args.sim)))
             plt.close()
+        model.print_clusters_rv()
     

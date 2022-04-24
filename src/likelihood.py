@@ -75,7 +75,7 @@ def LRT_all_coeffs(data_total, M, dim, H_s, window_size=500, lam=1e-2, step_size
     return lrt_vals, p_vals
 
 
-def LRT_all_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=500, lam=1e-2, step_size=1, beta=5e-3, iters=100, include_l1=True):
+def LRT_all_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=500, lam=1e-2, step_size=1, beta=5e-3, iters=100, include_l1=True, t=2.0):
     lrt_vals = []
     p_vals = []
     for i in tqdm(range(0, data_total.shape[1]-2*window_size, step_size)):
@@ -94,9 +94,9 @@ def LRT_all_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=500, lam
         # coeffs_hat_total = optimize_coeffs(H_s, C_full, lam=lam)
 
         # FIRST ORDER SUBDERIV #
-        coeffs_hat_one = optimize_coeffs_first_order(H_s, C_one, lam=lam, beta=beta, iters=iters)
-        coeffs_hat_two = optimize_coeffs_first_order(H_s, C_two, lam=lam, beta=beta, iters=iters)
-        coeffs_hat_total = optimize_coeffs_first_order(H_s, C_full, lam=lam, beta=beta, iters=iters)
+        coeffs_hat_one = optimize_coeffs_first_order(H_s, C_one, lam=lam, beta=beta, iters=iters, t=t)
+        coeffs_hat_two = optimize_coeffs_first_order(H_s, C_two, lam=lam, beta=beta, iters=iters, t=t)
+        coeffs_hat_total = optimize_coeffs_first_order(H_s, C_full, lam=lam, beta=beta, iters=iters, t=t)
 
         ################
         null_first = full_likelihood(coeffs_hat_total, H_s, C_one, N=data_one.shape[1], 
@@ -115,7 +115,7 @@ def LRT_all_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=500, lam
     return lrt_vals, p_vals
 
 
-def LRT_individual_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=500, lam=1e-2, step_size=1, beta=5e-3, iters=100, include_l1=True):
+def LRT_individual_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=500, lam=1e-2, step_size=1, beta=5e-3, iters=100, include_l1=True, t=2.0):
     lrt_vals = []
     p_vals = []
     for i in tqdm(range(0, data_total.shape[1]-2*window_size, step_size)):
@@ -131,7 +131,7 @@ def LRT_individual_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=5
 
         #############################
         #coeffs_hat_total = optimize_coeffs(H_s, C_full, lam=lam)
-        coeffs_hat_total = optimize_coeffs_first_order(H_s, C_full, lam=lam, beta=beta, iters=iters)
+        coeffs_hat_total = optimize_coeffs_first_order(H_s, C_full, lam=lam, beta=beta, iters=iters, t=t)
         ##############################
         # null likelihood
         null_first = full_likelihood(coeffs_hat_total, H_s, C_one, N=data_one.shape[1], 
@@ -150,8 +150,8 @@ def LRT_individual_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=5
             #                                            lam=lam)
             # alpha_i_change_post = optimize_single_coeff(coeffs_hat_total, H_s, C_two, coeff_idx=i,
             #                                             lam=lam)
-            alpha_i_change_pre = optimize_coeffs_first_order_single(coeffs_hat_total, H_s, C_one, lam=lam, beta=beta, iters=iters, optim_indx=i)
-            alpha_i_change_post = optimize_coeffs_first_order_single(coeffs_hat_total, H_s, C_two, lam=lam, beta=beta, iters=iters, optim_indx=i)
+            alpha_i_change_pre = optimize_coeffs_first_order_single(coeffs_hat_total, H_s, C_one, lam=lam, beta=beta, iters=iters, optim_indx=i, t=t)
+            alpha_i_change_post = optimize_coeffs_first_order_single(coeffs_hat_total, H_s, C_two, lam=lam, beta=beta, iters=iters, optim_indx=i, t=t)
             ####################################
             
             # likelihood on pre data, alpha_one change

@@ -34,6 +34,9 @@ class PrecisionCPD:
         self.full_basis = args.full_basis
         self.include_l1 = bool(args.include_l1)
         self.split_variance = bool(args.split_variance)
+        self.iters = args.iters
+        self.beta = args.beta
+        self.t = args.t
 
     # data assumed to be cleaned and normalized, passed in shape: [T, dim]
     def fit_glasso(self, data):
@@ -83,7 +86,8 @@ class PrecisionCPD:
         if bool(self.full_basis):
             basis_mats = self.basis_matrices_full
         lrt_vals, p_vals = LRT_all_coeffs_full_likelihood(data_full, M=basis_mats.shape[0], dim=data_full.shape[1], H_s=basis_mats, 
-                                                  window_size=self.window_size, lam=self.lam, step_size=self.step_size, include_l1=self.include_l1)
+                                                          window_size=self.window_size, lam=self.lam, step_size=self.step_size, include_l1=self.include_l1, 
+                                                          iters=self.iters, beta=self.beta)
         
         return lrt_vals, p_vals
 
@@ -92,9 +96,28 @@ class PrecisionCPD:
         if bool(self.full_basis):
             basis_mats = self.basis_matrices_full
         lrt_vals_all, p_vals_all = LRT_individual_coeffs_full_likelihood(data_full, M=basis_mats.shape[0], dim=data_full.shape[1], H_s=basis_mats, 
-                                                                         window_size=self.window_size, lam=self.lam, step_size=self.step_size, include_l1=self.include_l1)
+                                                                         window_size=self.window_size, lam=self.lam, step_size=self.step_size, include_l1=self.include_l1, 
+                                                                         iters=self.iters, beta=self.beta)
 
         return lrt_vals_all, apply_fdr_correction(p_vals_all)
+
+    def print_clusters_rv(self):
+        basis_mats = self.basis_matrices
+        if bool(self.full_basis):
+            basis_mats = self.basis_matrices_full
+        for i in range(basis_mats.shape[0]):
+            curr_mat = symmetrize_from_vector(basis_mats[i], self.dim)
+            nonzero_cols = np.nonzero(np.any(curr_mat != 0, axis=0))[0]
+            print("****************************************")
+            if i == (basis_mats.shape[0] - 1):
+                print("Leftover Basis Matrix {}".format(i))
+            elif self.split_variance and i == (basis_mats.shape[0] - 2):
+                print("Variance Basis Matrix {}".format(i))
+            else:
+                print("Basis Matrix {}".format(i))
+            print("Channels Contained {}".format(nonzero_cols))
+            print("****************************************")
+            print()
         
 
     
