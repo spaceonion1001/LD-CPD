@@ -32,7 +32,8 @@ class PrecisionCPD:
         self.window_size = args.window_size
         self.step_size = args.step_size
         self.full_basis = args.full_basis
-        self.include_l1 = args.include_l1
+        self.include_l1 = bool(args.include_l1)
+        self.split_variance = bool(args.split_variance)
 
     # data assumed to be cleaned and normalized, passed in shape: [T, dim]
     def fit_glasso(self, data):
@@ -55,7 +56,11 @@ class PrecisionCPD:
             for idx in idxs: # loop over indexes
                 for idx2 in idxs: # loop over indexes
                     A[idx][idx2] = precision[idx][idx2].copy() # set i,j entry to be the entry from precision matrix for given cluster
+            if self.split_variance:
+                np.fill_diagonal(A, 0)
             self.basis_matrices.append(vectorize_matrix(A))
+        if self.split_variance:
+            self.basis_matrices.append(vectorize_matrix(np.diag(np.diag(precision))))
         self.basis_matrices = np.array(self.basis_matrices)
         
         leftover_basis_matrix = precision - symmetrize_from_vector(self.basis_matrices.sum(axis=0), dim=self.dim)

@@ -97,32 +97,36 @@ def gradient_step_single(alphas, H_s, C, lam=1e-2, beta=1e-2, t=3, optim_indx=0)
 
     return alphas_new
 
-def optimize_coeffs_first_order(H_s, C, lam=1e-2, beta=1e-2, iters=200, include_l1=True):
+def optimize_coeffs_first_order(H_s, C, lam=1e-2, beta=1e-2, iters=200, include_l1=True, t=2):
     M = H_s.shape[0]
     alphas_imo = np.ones(M)
     best_likelihood = lasso_likelihood(alphas_imo, H_s, C, lam=lam, include_l1=include_l1)
     best_coeffs = alphas_imo.copy()
     for it in range(iters):
-        alphas_imo = gradient_step(alphas_imo, H_s, C, lam=lam, beta=beta)
+        alphas_imo = gradient_step(alphas_imo, H_s, C, lam=lam, beta=beta, t=t)
         likelihood = lasso_likelihood(alphas_imo, H_s, C, lam=lam, include_l1=include_l1)
         if likelihood > best_likelihood:
             best_likelihood = likelihood
             best_coeffs = alphas_imo.copy()
+        # schedule t
+        t = t*1.4
     
     #best_coeffs = alphas_imo.copy()
     return best_coeffs
 
-def optimize_coeffs_first_order_single(alphas, H_s, C, lam=1e-2, beta=1e-2, iters=200, optim_indx=0, include_l1=True):
+def optimize_coeffs_first_order_single(alphas, H_s, C, lam=1e-2, beta=1e-2, iters=200, optim_indx=0, include_l1=True, t=2):
     M = H_s.shape[0]
     alphas_imo = alphas.copy()
     best_likelihood = lasso_likelihood(alphas_imo, H_s, C, lam=lam, include_l1=include_l1)
     best_coeffs = alphas_imo.copy()
     for it in range(iters):
-        alphas_imo = gradient_step_single(alphas_imo, H_s, C, lam=lam, beta=beta, optim_indx=optim_indx)
+        alphas_imo = gradient_step_single(alphas_imo, H_s, C, lam=lam, beta=beta, t=t, optim_indx=optim_indx)
         likelihood = lasso_likelihood(alphas_imo, H_s, C, lam=lam, include_l1=include_l1)
         if likelihood > best_likelihood:
             best_likelihood = likelihood
             best_coeffs = alphas_imo.copy()
+        # schedule t
+        t = t*1.4
     
     #best_coeffs = alphas_imo.copy()
     return best_coeffs
