@@ -3,6 +3,8 @@ from sklearn.datasets import make_spd_matrix
 from sklearn.preprocessing import scale
 from utils import is_pos_def, is_symmetric
 from numpy.linalg import inv as inv
+from statsmodels.tsa.vector_ar.var_model import VARProcess
+import matplotlib.pyplot as plt
 
 def generate_matrices_orthogonal(prec_coeffs=None, M=2, dim=4):
     H_s = []
@@ -169,3 +171,41 @@ def sim_changepoint_mv_normal_ldlt(dim, N, num_coeffs_change=1, scale=0.8):
     assert is_symmetric(C_two)
     print("Finished Simulation")
     return data_total
+
+def sim_changepoint_var_process(dim, N, num_coeffs_change, scale=0.5):
+    # simulate this where we change the noise covariance via a Cholesky decomposition on precision
+    # VAR(1)
+    print("Simulating VAR Data")
+    coeffs = np.random.uniform(low=-0.1, high=0.1, size=(1, dim, dim))
+    L_one = make_spd_matrix(dim)
+    C_one = L_one.dot(L_one.T)
+    L_two = L_one.copy()
+    for _ in range(num_coeffs_change):
+        rand_i_j = np.random.choice(np.arange(dim), 2, replace=False)
+        i, j = rand_i_j[0], rand_i_j[1]
+        L_two = L_two.copy()
+        val = L_two[i, j]
+        val += scale
+        # no need for symmetric change - it's a cholesky
+        L_two[i, j] = val
+
+    C_two = L_two.dot(L_two.T)
+
+    assert is_pos_def(C_one)
+    assert is_symmetric(C_one)
+    assert is_pos_def(C_two)
+    assert is_symmetric(C_two)
+
+    var_one = VARProcess(coefs=coeffs, coefs_exog=np.zeros(1), sigma_u=inv(C_one))
+    var_two = VARProcess(coefs=coeffs, coefs_exog=np.zeros(1), sigma_u=inv(C_two))
+
+    data_one = var_one.simulate_var(steps=N)
+    data_two = var_two.simulate_var(steps=N)
+
+    data_total = np.concatenate((data_one, data_two), axis=0)
+
+    print("Finished Simulation")
+    return data_total
+
+
+
