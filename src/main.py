@@ -1,7 +1,7 @@
 import argparse
 import os
+from venv import create
 import numpy as np
-np.random.seed(42)
 import matplotlib.pyplot as plt
 import seaborn as sns
 sns.set()
@@ -23,6 +23,7 @@ def get_args():
     parser.add_argument('--data', type=str, default='alaska')
     parser.add_argument('--data_path', type=str, default='/home/dink/Documents/Research/data')
     parser.add_argument('--fig_path', type=str, default='/home/dink/Documents/Research/Correlation-Changepoint-Detection/figs')
+    parser.add_argument('--results_path', type=str, default='/home/dink/Documents/Research/Correlation-Changepoint-Detection/results')
     parser.add_argument('--basic_test', type=int, default=0)
     parser.add_argument('--full_basis', type=int, default=1)
     parser.add_argument('--local', type=int, default=1)
@@ -33,6 +34,8 @@ def get_args():
     parser.add_argument('--iters', type=int, default=100)
     parser.add_argument('--beta', type=float, default=5e-3)
     parser.add_argument('--t', type=float, default=1.0)
+    parser.add_argument('--save_test_stat', type=int, default=0)
+    parser.add_argument('--random_seed', type=int, default=42)
     args = parser.parse_args()
 
     return args
@@ -58,9 +61,11 @@ def resolve_data(args):
 
 if __name__ == '__main__':
     args = get_args()
+    np.random.seed(args.random_seed)
     data_full = resolve_data(args)
     print(data_full.shape)
     fig_dir_path = create_fig_dir(args.fig_path)
+    results_dir_path = create_fig_dir(args.results_path)
     model = PrecisionCPD(args)
     if bool(args.basic_test):
         lrt_vals, p_vals = model.perform_lrt_covariance(data_full.T)
@@ -69,8 +74,7 @@ if __name__ == '__main__':
         plt.plot(lrt_vals)
         plt.xlabel('Time')
         plt.ylabel('Test Statistic')
-        plt.savefig(os.path.join(fig_dir_path, 'lrt_cov_basic_win{}_step{}.png'.format(args.window_size, args.step_size)))
-        
+        plt.savefig(os.path.join(fig_dir_path, 'lrt_cov_basic_win{}_step{}.png'.format(args.window_size, args.step_size)))            
     else:
         data_train = data_full[0:int(0.66*len(data_full)), :]
         model.fit_glasso(data_train)
@@ -86,6 +90,9 @@ if __name__ == '__main__':
                                                                                                                     args.step_size, args.lam, 
                                                                                                                     args.full_basis, args.sim)))
                 plt.close()
+            if bool(args.save_test_stat):
+                test_results = np.hstack([lrt_vals_all, p_vals_all])
+                np.savetxt(os.path.join(results_dir_path, 'lrt_local_all'), test_results, delimiter=',')
 
         else:
             print("Global Test")
@@ -97,5 +104,8 @@ if __name__ == '__main__':
                                                                                                                 args.step_size, args.lam, 
                                                                                                                 args.full_basis, args.sim)))
             plt.close()
+            if bool(args.save_test_stat):
+                test_results = np.vstack([lrt_vals, p_vals]).T
+                np.savetxt(os.path.join(results_dir_path, 'lrt_global'), test_results, delimiter=',')
         model.print_clusters_rv()
     

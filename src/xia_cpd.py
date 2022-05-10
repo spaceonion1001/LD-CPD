@@ -14,7 +14,7 @@ def get_args():
     parser.add_argument('--dim', type=int, default=16)
     parser.add_argument('--N', type=int, default=1000)
     parser.add_argument('--sim_scale', type=float, default=0.8)
-
+    parser.add_argument('--random_seed', type=int, default=42)
     args = parser.parse_args()
 
     return args
@@ -152,8 +152,8 @@ def indicator_global_stat(M, p, alpha=0.01):
     return threshold
 
 def main():
-    np.random.seed(42)
     args = get_args()
+    np.random.seed(args.random_seed)
     data = resolve_data(args)
     beta_hats_x, beta_hats_y = perform_regression(data)
     middle = data.shape[0]//2

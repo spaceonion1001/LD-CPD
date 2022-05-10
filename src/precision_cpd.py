@@ -89,7 +89,7 @@ class PrecisionCPD:
                                                           window_size=self.window_size, lam=self.lam, step_size=self.step_size, include_l1=self.include_l1, 
                                                           iters=self.iters, beta=self.beta)
         
-        return lrt_vals, p_vals
+        return np.array(lrt_vals), np.array(p_vals)
 
     def perform_lrt_local(self, data_full):
         basis_mats = self.basis_matrices
@@ -99,7 +99,7 @@ class PrecisionCPD:
                                                                          window_size=self.window_size, lam=self.lam, step_size=self.step_size, include_l1=self.include_l1, 
                                                                          iters=self.iters, beta=self.beta)
 
-        return lrt_vals_all, apply_fdr_correction(p_vals_all)
+        return np.array(lrt_vals_all), np.array(apply_fdr_correction(p_vals_all))
 
     def print_clusters_rv(self):
         basis_mats = self.basis_matrices
