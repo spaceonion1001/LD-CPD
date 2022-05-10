@@ -2,6 +2,7 @@ import numpy as np
 from numpy.linalg import inv
 import cvxpy as cp
 from utils import lasso_likelihood, vectorize_matrix, symmetrize_from_vector
+from numba import jit
 
 
 def optimize_coeffs(H_s, C, lam=1e-2):
@@ -51,6 +52,7 @@ def optimize_single_coeff(alphas, H_s, C, coeff_idx=0, lam=1e-2):
     new_alphas[coeff_idx] = single_alpha.value
     return new_alphas
 
+@jit(nopython=True)
 def l1_penalty_subderiv(alphas, H, i):
     l1_pen_sum = 0
     dim = H.shape[0]
@@ -64,11 +66,14 @@ def l1_penalty_subderiv(alphas, H, i):
                     l1_pen_sum += term*np.sign(term)*np.sign(alphas[i])
     return l1_pen_sum
 
+@jit(nopython=True)
 def gradient_step(alphas, H_s, C, lam=1e-2, beta=1e-2, t=2.0):
     M = H_s.shape[0]
     dim = C.shape[0]
     alphas_new = np.zeros(alphas.shape)
-    psi_hat = sum([alphas[i]*H_s[i] for i in range(H_s.shape[0])])
+    psi_hat = np.zeros(int((dim*(dim+1))/2))
+    for i in range(H_s.shape[0]):
+        psi_hat = psi_hat + alphas[i]*H_s[i]
     psi_hat = symmetrize_from_vector(psi_hat, dim)
     inv_psi_hat = inv(psi_hat)
     for i in range(M):
@@ -81,11 +86,14 @@ def gradient_step(alphas, H_s, C, lam=1e-2, beta=1e-2, t=2.0):
 
     return alphas_new
 
+@jit(nopython=True)
 def gradient_step_single(alphas, H_s, C, lam=1e-2, beta=1e-2, t=2.0, optim_indx=0):
     M = H_s.shape[0]
     dim = C.shape[0]
     alphas_new = alphas.copy()
-    psi_hat = sum([alphas[i]*H_s[i] for i in range(H_s.shape[0])])
+    psi_hat = np.zeros(int((dim*(dim+1))/2))
+    for i in range(H_s.shape[0]):
+        psi_hat = psi_hat + alphas[i]*H_s[i]
     psi_hat = symmetrize_from_vector(psi_hat, dim)
     inv_psi_hat = inv(psi_hat)
     first = np.trace(symmetrize_from_vector(H_s[optim_indx], dim)@C)
@@ -97,6 +105,7 @@ def gradient_step_single(alphas, H_s, C, lam=1e-2, beta=1e-2, t=2.0, optim_indx=
 
     return alphas_new
 
+@jit(nopython=True)
 def optimize_coeffs_first_order(H_s, C, lam=1e-2, beta=1e-2, iters=200, include_l1=True, t=2.0):
     M = H_s.shape[0]
     alphas_imo = np.ones(M)
@@ -114,6 +123,7 @@ def optimize_coeffs_first_order(H_s, C, lam=1e-2, beta=1e-2, iters=200, include_
     #best_coeffs = alphas_imo.copy()
     return best_coeffs
 
+@jit(nopython=True)
 def optimize_coeffs_first_order_single(alphas, H_s, C, lam=1e-2, beta=1e-2, iters=200, optim_indx=0, include_l1=True, t=2.0):
     M = H_s.shape[0]
     alphas_imo = alphas.copy()

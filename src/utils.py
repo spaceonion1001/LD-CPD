@@ -1,7 +1,7 @@
 import numpy as np
 import os
 from datetime import datetime
-
+from numba import jit
 from sklearn.preprocessing import StandardScaler
 
 
@@ -42,12 +42,18 @@ def vectorize_matrix(A):
 
     return A[indxes]
 
+@jit(nopython=True)
 def symmetrize_from_vector(a, dim):
     """
     Turns a vector of lower triangular matrix entries into symmetric matrix
     """
     A = np.zeros((dim,dim))
-    A[np.tril_indices(A.shape[0], k = 0)] = a
+    ti_1, ti_2 = np.tril_indices(A.shape[0], k=0)
+    for idx in range(a.shape[0]):
+        val = a[idx]
+        i = ti_1[idx]
+        j = ti_2[idx]
+        A[i,j] = val
     A = A + A.T - np.diag(np.diag(A))
 
     return A
@@ -62,15 +68,18 @@ def create_fig_dir(fig_path):
 
     return new_dir_path
 
-
+@jit(nopython=True)
 def lasso_likelihood(alphas, H_s, C, lam=1e-2, include_l1=False):
     dim = C.shape[0]
-    psi_hat = sum([alphas[i]*H_s[i] for i in range(H_s.shape[0])])
+    psi_hat = np.zeros(int((dim*(dim+1))/2))
+    for i in range(H_s.shape[0]):
+        psi_hat = psi_hat + alphas[i]*H_s[i]
     psi_hat = symmetrize_from_vector(psi_hat, dim)
-    l1_penalty = sum([np.abs(psi_hat[i, j])
-                  for i in range(C.shape[0])
-                  for j in range(C.shape[1]) if i != j])
-    
+    l1_penalty = 0
+    for i in range(C.shape[0]):
+        for j in range(C.shape[1]):
+            if i != j:
+                l1_penalty += np.abs(psi_hat[i,j])
     if include_l1:
         return np.log(np.linalg.det(psi_hat)) - np.trace(psi_hat@C) - lam*l1_penalty
     

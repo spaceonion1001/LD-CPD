@@ -4,6 +4,7 @@ from optim import optimize_coeffs, optimize_single_coeff, optimize_coeffs_first_
 from statsmodels.stats.multitest import fdrcorrection
 from scipy.stats import chi2, multivariate_normal
 from utils import is_pos_def, is_symmetric, vectorize_matrix, symmetrize_from_vector
+from numba import jit
 
 def likelihood_ratio_test(likelihood_null, likelihood_alternative, dof):
     delta_d = -2*(likelihood_null-likelihood_alternative)
@@ -31,7 +32,7 @@ def lasso_likelihood(alphas, H_s, C, lam=1e-2, include_l1=False):
     
     else:
         return np.log(np.linalg.det(psi_hat)) - np.trace(psi_hat@C)
-    
+
 def full_likelihood(alphas, H_s, C, N, lam=1e-2, include_l1=False):
     P = C.shape[0]
     psi_hat = sum([alphas[i]*H_s[i] for i in range(H_s.shape[0])])
@@ -73,7 +74,6 @@ def LRT_all_coeffs(data_total, M, dim, H_s, window_size=500, lam=1e-2, step_size
         lrt_vals.append(test_stat)
         p_vals.append(p_val)
     return lrt_vals, p_vals
-
 
 def LRT_all_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=500, lam=1e-2, step_size=1, beta=5e-3, iters=100, include_l1=True, t=2.0):
     lrt_vals = []
