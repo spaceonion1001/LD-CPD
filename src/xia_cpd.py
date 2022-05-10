@@ -4,6 +4,7 @@ from numpy.linalg import inv as inv
 from scipy.optimize import least_squares, minimize
 from simulate import sim_changepoint_mv_normal_cholesky
 from utils import scale_data
+from tqdm import tqdm
 
 import argparse
 
@@ -53,7 +54,7 @@ def perform_regression(data, kd=2):
     y_log_dim = np.log(dim)/Y_data.shape[0]
     beta_hats_x = []
     beta_hats_y = []
-    for i in range(dim):
+    for i in tqdm(range(dim)):
         X_m_i = np.delete(X_data, i, axis=1)
         X_i = X_data[:, i]
         sig_i_i_x = np.var(X_i)
@@ -121,31 +122,58 @@ def calculate_T(residuals_cov_corrected):
     return T
 
 def calculate_theta(residuals_cov_corrected, beta_hats, N):
-    """
-    TODO
-    """
     dim = residuals_cov_corrected.shape[0]
     theta = np.zeros((dim, dim))
 
-    for i in range(dim):
-        for j in range(dim):
-            #top = (1 + beta_hats[])
+    for i in range(dim-1):
+        for j in range(i+1, dim):
+            top = (1 + (beta_hats.T[i, j]**2)*residuals_cov_corrected[i, i]/residuals_cov_corrected[j,j])
+            bottom = N*residuals_cov_corrected[i,i]*residuals_cov_corrected[j,j]
+            theta[i,j] = top/bottom
+            theta[j,i] = theta[i,j]
+    
+    np.fill_diagonal(theta, np.diag(residuals_cov_corrected))
+    return theta
 
-            pass
+def calculate_standardized_stat(T_x, T_y, theta_x, theta_y):
+    W = (T_x - T_y)/np.sqrt(theta_x+theta_y)
 
+    return W
 
+def calculate_global_stat(W):
+    M = np.max(W**2)
 
+    return M
+
+def indicator_global_stat(M, p, alpha=0.01):
+    q_alpha = -np.log(8*np.pi)-2*np.log(np.log(np.power(1-alpha, -1)))
+    threshold = q_alpha+4*np.log(p)-np.log(np.log(p))
+
+    return threshold
 
 def main():
     np.random.seed(42)
     args = get_args()
     data = resolve_data(args)
     beta_hats_x, beta_hats_y = perform_regression(data)
-    residuals_x = calculate_residuals(beta_hats_x, data[:1000, :])
+    middle = data.shape[0]//2
+    residuals_x = calculate_residuals(beta_hats_x, data[:middle, :])
     residuals_x_cov_corrected = bias_corrected_residual_covariance(residuals_x, beta_hats_x)
     T_x = calculate_T(residuals_x_cov_corrected)
-    print(T_x)
+    theta_x = calculate_theta(residuals_x_cov_corrected, beta_hats_x, N=data[:middle, :].shape[0])
 
+    residuals_y = calculate_residuals(beta_hats_y, data[middle:, :])
+    residuals_y_cov_corrected = bias_corrected_residual_covariance(residuals_y, beta_hats_y)
+    T_y = calculate_T(residuals_y_cov_corrected)
+    theta_y = calculate_theta(residuals_y_cov_corrected, beta_hats_y, N=data[middle:, :].shape[0])
+
+    W = calculate_standardized_stat(T_x, T_y, theta_x, theta_y)
+    M = calculate_global_stat(W)
+    threshold = indicator_global_stat(M, p=data.shape[1], alpha=0.01)
+
+    print(M)
+    print(threshold)
+    print(M>threshold)
 
 
 
