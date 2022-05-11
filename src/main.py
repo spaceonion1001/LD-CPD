@@ -8,7 +8,7 @@ sns.set()
 
 from precision_cpd import PrecisionCPD
 from simulate import sim_changepoint_mv_normal_cholesky, sim_changepoint_mv_normal_no_decomp, sim_changepoint_mv_normal_orthogonal, sim_changepoint_mv_normal_ldlt
-from utils import load_alaska_data, scale_data, load_hjandrews_data, create_fig_dir
+from utils import load_alaska_data, scale_data, load_hjandrews_data, create_fig_dir, load_holiday_farm_data
 
 def get_args():
     parser = argparse.ArgumentParser()
@@ -36,6 +36,7 @@ def get_args():
     parser.add_argument('--t', type=float, default=1.0)
     parser.add_argument('--save_test_stat', type=int, default=0)
     parser.add_argument('--random_seed', type=int, default=42)
+    parser.add_argument('--train_percent', type=float, default=0.25)
     args = parser.parse_args()
 
     return args
@@ -55,6 +56,8 @@ def resolve_data(args):
             return load_alaska_data(args)
         elif args.data == 'hjandrews':
             return load_hjandrews_data(args)
+        elif args.data == 'holidayfarm':
+            return load_holiday_farm_data(args)
         else:
             print("Error: Dataset not understood")
             exit(0)
@@ -76,7 +79,7 @@ if __name__ == '__main__':
         plt.ylabel('Test Statistic')
         plt.savefig(os.path.join(fig_dir_path, 'lrt_cov_basic_win{}_step{}.png'.format(args.window_size, args.step_size)))            
     else:
-        data_train = data_full[0:int(0.66*len(data_full)), :]
+        data_train = data_full[0:int(args.train_percent*len(data_full)), :]
         model.fit_glasso(data_train)
         model.construct_basis_matrices()
         if bool(args.local):
@@ -109,3 +112,6 @@ if __name__ == '__main__':
                 np.savetxt(os.path.join(results_dir_path, 'lrt_global'), test_results, delimiter=',')
         model.print_clusters_rv()
     
+
+
+#  python src/main.py --sim 0 --data holidayfarm --M 4 --lam 1e-1 --window_size 500 --step_size 200 --split_variance 1 --full_basis 1 --beta 5e-3 --iters 100 --t 20

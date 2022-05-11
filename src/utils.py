@@ -1,8 +1,8 @@
 import numpy as np
 import os
 from datetime import datetime
-from numba import jit
 from sklearn.preprocessing import StandardScaler
+from numba import jit
 
 
 def is_pos_def(A):
@@ -26,6 +26,11 @@ def load_alaska_data(args):
 def load_hjandrews_data(args):
     print('Loading Alaska Data...')
     data = np.loadtxt(os.path.join(args.data_path, 'hj_andrews_resid.csv'))
+    return data
+
+def load_holiday_farm_data(args):
+    print('Loading Holiday Farm Data...')
+    data = np.loadtxt(os.path.join(args.data_path, 'holiday_farm_clean.csv'), delimiter=',')
     return data
 
 def scale_data(data):
@@ -54,6 +59,16 @@ def symmetrize_from_vector(a, dim):
         i = ti_1[idx]
         j = ti_2[idx]
         A[i,j] = val
+    A = A + A.T - np.diag(np.diag(A))
+
+    return A
+
+def symmetrize_from_vector_alt(a, dim):
+    """
+    Turns a vector of lower triangular matrix entries into symmetric matrix
+    """
+    A = np.zeros((dim,dim))
+    A[np.tril_indices(A.shape[0], k = 0)] = a
     A = A + A.T - np.diag(np.diag(A))
 
     return A

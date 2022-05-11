@@ -2,7 +2,7 @@ from pickletools import read_string1
 import numpy as np
 from numpy.linalg import inv as inv
 from scipy.optimize import least_squares, minimize
-from simulate import sim_changepoint_mv_normal_cholesky
+from simulate import sim_changepoint_mv_normal_cholesky, sim_changepoint_mv_normal_ldlt
 from utils import scale_data
 from tqdm import tqdm
 
@@ -21,7 +21,8 @@ def get_args():
 
 
 def resolve_data(args):
-    return scale_data(sim_changepoint_mv_normal_cholesky(dim=args.dim, N=args.N, num_coeffs_change=1, scale=args.sim_scale))
+    #return scale_data(sim_changepoint_mv_normal_cholesky(dim=args.dim, N=args.N, num_coeffs_change=1, scale=args.sim_scale))
+    return scale_data(sim_changepoint_mv_normal_ldlt(dim=args.dim, N=args.N, num_coeffs_change=1, scale=args.sim_scale))
 
 
 def loss_func(x, data, i=0, lam=1e-4):

@@ -1,16 +1,16 @@
 import numpy as np
 from numpy.linalg import inv
 import cvxpy as cp
-from utils import lasso_likelihood, vectorize_matrix, symmetrize_from_vector
+from utils import lasso_likelihood, vectorize_matrix, symmetrize_from_vector, symmetrize_from_vector_alt
 from numba import jit
+import pdb
 
 
 def optimize_coeffs(H_s, C, lam=1e-2):
     M = H_s.shape[0]
     dim = C.shape[0]
     alphas = cp.Variable(shape=(H_s.shape[0], ))
-    psi_hat = sum([alphas[i]*H_s[i] for i in range(M)])
-    psi_hat = symmetrize_from_vector(psi_hat, dim)
+    psi_hat = sum([alphas[i]*symmetrize_from_vector_alt(H_s[i], dim) for i in range(M)])
     l1_penalty = sum([cp.abs(psi_hat[i, j])
                 for i in range(dim)
                 for j in range(dim) if i != j])
@@ -29,13 +29,12 @@ def optimize_single_coeff(alphas, H_s, C, coeff_idx=0, lam=1e-2):
     M = H_s.shape[0]
     dim = C.shape[0]
     single_alpha = cp.Variable()
-    psi_hat = np.zeros(H_s[0].shape)
+    psi_hat = np.zeros((dim, dim))
     for i in range(M):
         if i == coeff_idx:
-            psi_hat += single_alpha*H_s[i]
+            psi_hat += single_alpha*symmetrize_from_vector_alt(H_s[i], dim)
         else:
-            psi_hat += alphas[i]*H_s[i]
-    psi_hat = symmetrize_from_vector(psi_hat, dim)
+            psi_hat += alphas[i]*symmetrize_from_vector_alt(H_s[i], dim)
     l1_penalty = sum([cp.abs(psi_hat[i, j])
                 for i in range(dim)
                 for j in range(dim) if i != j])
@@ -107,6 +106,7 @@ def gradient_step_single(alphas, H_s, C, lam=1e-2, beta=1e-2, t=2.0, optim_indx=
 
 @jit(nopython=True)
 def optimize_coeffs_first_order(H_s, C, lam=1e-2, beta=1e-2, iters=200, include_l1=True, t=2.0):
+    #print('*********\n\n')
     M = H_s.shape[0]
     alphas_imo = np.ones(M)
     best_likelihood = lasso_likelihood(alphas_imo, H_s, C, lam=lam, include_l1=include_l1)

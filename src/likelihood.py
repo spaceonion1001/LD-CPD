@@ -5,6 +5,7 @@ from statsmodels.stats.multitest import fdrcorrection
 from scipy.stats import chi2, multivariate_normal
 from utils import is_pos_def, is_symmetric, vectorize_matrix, symmetrize_from_vector
 from numba import jit
+import pdb
 
 def likelihood_ratio_test(likelihood_null, likelihood_alternative, dof):
     delta_d = -2*(likelihood_null-likelihood_alternative)
@@ -37,7 +38,7 @@ def full_likelihood(alphas, H_s, C, N, lam=1e-2, include_l1=False):
     P = C.shape[0]
     psi_hat = sum([alphas[i]*H_s[i] for i in range(H_s.shape[0])])
     psi_hat = symmetrize_from_vector(psi_hat, P)
-    assert is_pos_def(psi_hat)
+    assert is_pos_def(psi_hat), pdb.set_trace()
     l1_penalty = sum([np.abs(psi_hat[i, j])
                   for i in range(C.shape[0])
                   for j in range(C.shape[1]) if i != j])

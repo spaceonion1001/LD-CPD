@@ -117,6 +117,7 @@ def sim_changepoint_mv_normal_cholesky(dim, N, num_coeffs_change=1, scale=0.8):
     print("Simulating Cholesky Decomp Data")
     L_one = make_spd_matrix(dim)
     C_one = L_one.dot(L_one.T)
+    C_one = C_one/np.abs(C_one.max())
     data_one = np.random.multivariate_normal(np.zeros(dim), inv(C_one), N)
     L_two = L_one.copy()
     for _ in range(num_coeffs_change):
@@ -129,7 +130,8 @@ def sim_changepoint_mv_normal_cholesky(dim, N, num_coeffs_change=1, scale=0.8):
         L_two[i, j] = val
 
     C_two = L_two.dot(L_two.T)
-
+    C_two = C_two/np.abs(C_two.max())
+    print(C_one.max(), C_two.max())
     data_two = np.random.multivariate_normal(np.zeros(dim), inv(C_two), N)
     data_total = np.concatenate((data_one, data_two), axis=0)
     
@@ -147,6 +149,7 @@ def sim_changepoint_mv_normal_ldlt(dim, N, num_coeffs_change=1, scale=0.8):
     np.fill_diagonal(L_one, 1.0)
     D = np.diag(np.ones(dim)*2.0)
     C_one = L_one@D@(L_one.T)
+    C_one = C_one/np.abs(C_one.max())
     data_one = np.random.multivariate_normal(np.zeros(dim), inv(C_one), N)
     L_two = L_one.copy()
     for _ in range(num_coeffs_change):
@@ -161,10 +164,12 @@ def sim_changepoint_mv_normal_ldlt(dim, N, num_coeffs_change=1, scale=0.8):
     
     np.fill_diagonal(L_two, 1.0)
     C_two = L_two@D@(L_two.T)
-
+    C_two = C_two/np.abs(C_two.max())
     data_two = np.random.multivariate_normal(np.zeros(dim), inv(C_two), N)
     data_total = np.concatenate((data_one, data_two), axis=0)
 
+    print(np.abs(C_one-C_two).max())
+    print(C_one.max(), C_two.max())
     assert is_pos_def(C_one)
     assert is_symmetric(C_one)
     assert is_pos_def(C_two)
