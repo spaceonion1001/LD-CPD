@@ -5,6 +5,7 @@ from utils import is_pos_def, is_symmetric
 from numpy.linalg import inv as inv
 from statsmodels.tsa.vector_ar.var_model import VARProcess
 import matplotlib.pyplot as plt
+import os
 
 def generate_matrices_orthogonal(prec_coeffs=None, M=2, dim=4):
     H_s = []
@@ -110,28 +111,39 @@ def sim_changepoint_mv_normal_no_decomp(dim, N, num_coeffs_change=1, scale=0.8):
     assert is_symmetric(C_one)
     assert is_pos_def(C_two)
     assert is_symmetric(C_two)
+    assert sum(np.diag(C_one) <= 0) == 0
+    assert sum(np.diag(C_two) <= 0) == 0
     print("Finished Simulation")
     return data_total
 
 def sim_changepoint_mv_normal_cholesky(dim, N, num_coeffs_change=1, scale=0.8):
     print("Simulating Cholesky Decomp Data")
     L_one = make_spd_matrix(dim)
+    L_one = np.tril(L_one)
+    np.fill_diagonal(L_one, 1.0)
     C_one = L_one.dot(L_one.T)
-    C_one = C_one/np.abs(C_one.max())
+    #C_one = C_one/np.abs(C_one.max())
     data_one = np.random.multivariate_normal(np.zeros(dim), inv(C_one), N)
     L_two = L_one.copy()
     for _ in range(num_coeffs_change):
         rand_i_j = np.random.choice(np.arange(dim), 2, replace=False)
         i, j = rand_i_j[0], rand_i_j[1]
         L_two = L_two.copy()
-        val = L_two[i, j]
+        print(i,j)
+        if i >= j:
+            val = L_two[i, j]
+        else:
+            val = L_two[j,i]
         val += scale
         # no need for symmetric change - it's a cholesky
-        L_two[i, j] = val
-
+        if i >= j:
+            L_two[i, j] = val
+        else:
+            L_two[j,i] = val
     C_two = L_two.dot(L_two.T)
-    C_two = C_two/np.abs(C_two.max())
-    print(C_one.max(), C_two.max())
+    #adjustment = np.abs(np.linalg.eig(C_two)[0].min()) + 1e-12
+    #C_two += np.eye(dim)*adjustment
+    #C_two = C_two/np.abs(C_two.max())
     data_two = np.random.multivariate_normal(np.zeros(dim), inv(C_two), N)
     data_total = np.concatenate((data_one, data_two), axis=0)
     
@@ -139,18 +151,75 @@ def sim_changepoint_mv_normal_cholesky(dim, N, num_coeffs_change=1, scale=0.8):
     assert is_symmetric(C_one)
     assert is_pos_def(C_two)
     assert is_symmetric(C_two)
+    assert sum(np.diag(inv(C_one)) <= 0) == 0
+    assert sum(np.diag(inv(C_two)) <= 0) == 0
+    # print(C_one.max())
+    # print(C_two.max())
+    # print(inv(C_one).max())
+    # print(inv(C_two).max())
     print("Finished Simulation")
     return data_total
 
-def sim_changepoint_mv_normal_ldlt(dim, N, num_coeffs_change=1, scale=0.8):
+def sim_changepoint_mv_normal_ldlt(dim, N, path, num_coeffs_change=1, scale=0.8):
     print("Simulating LDLT Decomp Data")
     L_one = make_spd_matrix(dim)
     L_one = np.tril(L_one)
     np.fill_diagonal(L_one, 1.0)
     D = np.diag(np.ones(dim)*2.0)
     C_one = L_one@D@(L_one.T)
-    C_one = C_one/np.abs(C_one.max())
+    C_one = C_one#/np.abs(C_one.max())
     data_one = np.random.multivariate_normal(np.zeros(dim), inv(C_one), N)
+    L_two = L_one.copy()
+    for _ in range(num_coeffs_change):
+        rand_i_j = np.random.choice(np.arange(dim), 2, replace=False)
+        i, j = rand_i_j[0], rand_i_j[1]
+        assert i != j, "Only the off-diagonal should be changed"
+        L_two = L_two.copy()
+        if i >= j:
+            val = L_two[i, j]
+        else:
+            val = L_two[j,i]
+        val += scale
+        # no need for symmetric change - it's a cholesky
+        if i >= j:
+            L_two[i, j] = val
+        else:
+            L_two[j, i] = val
+    
+    np.fill_diagonal(L_two, 1.0)
+    C_two = L_two@D@(L_two.T)
+    C_two = C_two#/np.abs(C_two.max())
+    data_two = np.random.multivariate_normal(np.zeros(dim), inv(C_two), N)
+    data_total = np.concatenate((data_one, data_two), axis=0)
+
+    #print(np.abs(C_one-C_two).max())
+    #print(C_one.max(), C_two.max())
+    assert is_pos_def(C_one)
+    assert is_symmetric(C_one)
+    assert is_pos_def(C_two)
+    assert is_symmetric(C_two)
+    assert sum(np.diag(inv(C_one)) <= 0) == 0
+    assert sum(np.diag(inv(C_two)) <= 0) == 0
+    # print(C_one.max())
+    # print(C_two.max())
+    # print(inv(C_one).max())
+    # print(inv(C_two).max())
+    print("Finished Simulation")
+    neq_indices = np.where(C_one != C_two)
+    neq_indices_arr = np.concatenate((np.expand_dims(neq_indices[0],1), np.expand_dims(neq_indices[1], 1)), 1)
+    np.savetxt(os.path.join(path, 'ldlt_changed.csv'), neq_indices_arr, delimiter=',')
+    return data_total
+
+def sim_changepoint_var_process(dim, N, num_coeffs_change, scale=0.5):
+    # simulate this where we change the noise covariance via a LDLT decomposition on precision
+    # VAR(1)
+    print("Simulating VAR Data")
+    coeffs = np.random.uniform(low=-0.1, high=0.1, size=(1, dim, dim))
+    L_one = make_spd_matrix(dim)
+    L_one = np.tril(L_one)
+    np.fill_diagonal(L_one, 1.0)
+    D = np.diag(np.ones(dim)*2.0)
+    C_one = L_one@D@(L_one.T)
     L_two = L_one.copy()
     for _ in range(num_coeffs_change):
         rand_i_j = np.random.choice(np.arange(dim), 2, replace=False)
@@ -161,40 +230,9 @@ def sim_changepoint_mv_normal_ldlt(dim, N, num_coeffs_change=1, scale=0.8):
         val += scale
         # no need for symmetric change - it's a cholesky
         L_two[i, j] = val
-    
+
     np.fill_diagonal(L_two, 1.0)
     C_two = L_two@D@(L_two.T)
-    C_two = C_two/np.abs(C_two.max())
-    data_two = np.random.multivariate_normal(np.zeros(dim), inv(C_two), N)
-    data_total = np.concatenate((data_one, data_two), axis=0)
-
-    print(np.abs(C_one-C_two).max())
-    print(C_one.max(), C_two.max())
-    assert is_pos_def(C_one)
-    assert is_symmetric(C_one)
-    assert is_pos_def(C_two)
-    assert is_symmetric(C_two)
-    print("Finished Simulation")
-    return data_total
-
-def sim_changepoint_var_process(dim, N, num_coeffs_change, scale=0.5):
-    # simulate this where we change the noise covariance via a Cholesky decomposition on precision
-    # VAR(1)
-    print("Simulating VAR Data")
-    coeffs = np.random.uniform(low=-0.1, high=0.1, size=(1, dim, dim))
-    L_one = make_spd_matrix(dim)
-    C_one = L_one.dot(L_one.T)
-    L_two = L_one.copy()
-    for _ in range(num_coeffs_change):
-        rand_i_j = np.random.choice(np.arange(dim), 2, replace=False)
-        i, j = rand_i_j[0], rand_i_j[1]
-        L_two = L_two.copy()
-        val = L_two[i, j]
-        val += scale
-        # no need for symmetric change - it's a cholesky
-        L_two[i, j] = val
-
-    C_two = L_two.dot(L_two.T)
 
     assert is_pos_def(C_one)
     assert is_symmetric(C_one)
@@ -211,6 +249,7 @@ def sim_changepoint_var_process(dim, N, num_coeffs_change, scale=0.5):
 
     print("Finished Simulation")
     return data_total
+
 
 
 

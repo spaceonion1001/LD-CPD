@@ -7,13 +7,13 @@ import seaborn as sns
 sns.set()
 
 from precision_cpd import PrecisionCPD
-from simulate import sim_changepoint_mv_normal_cholesky, sim_changepoint_mv_normal_no_decomp, sim_changepoint_mv_normal_orthogonal, sim_changepoint_mv_normal_ldlt
-from utils import load_alaska_data, scale_data, load_hjandrews_data, create_fig_dir, load_holiday_farm_data
+from simulate import sim_changepoint_mv_normal_cholesky, sim_changepoint_mv_normal_no_decomp, sim_changepoint_mv_normal_orthogonal, sim_changepoint_mv_normal_ldlt, sim_changepoint_var_process
+from utils import difference_data, load_alaska_data, scale_data, load_hjandrews_data, create_fig_dir, load_holiday_farm_data
 
 def get_args():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--lam', type=float, default=1e-1)
+    parser.add_argument('--lam', type=float, default=3e-1)
     parser.add_argument('--sim', type=int, default=1)
     parser.add_argument('--M', type=int, default=2)
     parser.add_argument('--window_size', type=int, default=100)
@@ -41,14 +41,16 @@ def get_args():
 
     return args
 
-def resolve_data(args):
+def resolve_data(args, results_dir_path):
     if bool(args.sim):
         if args.sim_type == 'orthogonal':
             return sim_changepoint_mv_normal_orthogonal(sim_scale=args.sim_scale, M=args.M, dim=args.dim, N=args.N)[1].T
         elif args.sim_type == 'cholesky':
             return scale_data(sim_changepoint_mv_normal_cholesky(dim=args.dim, N=args.N, num_coeffs_change=1, scale=args.sim_scale))
         elif args.sim_type == 'ldlt':
-            return scale_data(sim_changepoint_mv_normal_ldlt(dim=args.dim, N=args.N, num_coeffs_change=1, scale=args.sim_scale))
+            return scale_data(sim_changepoint_mv_normal_ldlt(dim=args.dim, N=args.N, path=results_dir_path, num_coeffs_change=1, scale=args.sim_scale))
+        elif args.sim_type == 'var_process':
+            return scale_data(difference_data(sim_changepoint_var_process(dim=args.dim, N=args.N, num_coeffs_change=1, scale=args.sim_scale)))
         else:
             return sim_changepoint_mv_normal_no_decomp(dim=args.dim, N=args.N, num_coeffs_change=1, scale=args.sim_scale).T
     else:
@@ -65,10 +67,10 @@ def resolve_data(args):
 if __name__ == '__main__':
     args = get_args()
     np.random.seed(args.random_seed)
-    data_full = resolve_data(args)
-    print(data_full.shape)
     fig_dir_path = create_fig_dir(args.fig_path)
     results_dir_path = create_fig_dir(args.results_path)
+    data_full = resolve_data(args, results_dir_path)
+    print(data_full.shape)
     model = PrecisionCPD(args)
     if bool(args.basic_test):
         lrt_vals, p_vals = model.perform_lrt_covariance(data_full.T)

@@ -119,6 +119,7 @@ def optimize_coeffs_first_order(H_s, C, lam=1e-2, beta=1e-2, iters=200, include_
             best_coeffs = alphas_imo.copy()
         # schedule t
         t = t*1.4
+
     
     #best_coeffs = alphas_imo.copy()
     return best_coeffs

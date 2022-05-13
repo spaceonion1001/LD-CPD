@@ -3,7 +3,7 @@ import os
 from datetime import datetime
 from sklearn.preprocessing import StandardScaler
 from numba import jit
-
+import pandas as pd
 
 def is_pos_def(A):
     if is_symmetric(A):
@@ -73,6 +73,10 @@ def symmetrize_from_vector_alt(a, dim):
 
     return A
 
+def difference_data(data, order=1):
+    temp_df = pd.DataFrame(data)
+    temp_df = temp_df.diff(order, axis=0)
+    return temp_df.values[1:, :]
 
 def create_fig_dir(fig_path):
     today = datetime.now()
@@ -100,5 +104,57 @@ def lasso_likelihood(alphas, H_s, C, lam=1e-2, include_l1=False):
     
     else:
         return np.log(np.linalg.det(psi_hat)) - np.trace(psi_hat@C)
+
+def amoc_gen(alarms, fire_point, max_time_detection):
+    """
+    Generate an AMOC curve.
+    Arguments: 
+        alarms: p-vals?
+        fire_point: day of fire onset (int)
+        max_time_detection: the maximum number of days to detect a fire (int)
+    Returns: 
+        FPR_array: false positive rates (list)
+        detection_array: days to detection time (list)
+    """
+    thresholds = np.arange(0, 1, .01)
+    FPR_array = []
+    detection_array = []
+
+    # Check FPR and days to detection for each probability threshold
+    for threshold in thresholds:
+        detected = False
+        detection_time = 0
+        false_positives = 0
+        true_negatives = 0
+        
+        for p_value in alarms:
+            
+            # Two cases: false postive and true positive
+            if p_value <= threshold:
+                if detection_time <= fire_point: # Check for false positive
+                    false_positives += 1
+                
+                else: # True positive: fire detected
+                    detected = True
+                    detection_array.append(detection_time - fire_point)
+                    break
+            
+            else: # Two cases: false negative and true negative
+                if detection_time < fire_point: # Check for true negative -- needed for FPR
+                    true_negatives += 1
+            detection_time += 1
+
+        if false_positives + true_negatives != 0:
+            fp_rate = (false_positives) / (false_positives + true_negatives)
+            
+        else:
+            fp_rate = 0
+            pass
+
+        FPR_array.append(fp_rate)
+        if not detected:
+            detection_array.append(max_time_detection)
+    
+    return FPR_array, detection_array
 
     
