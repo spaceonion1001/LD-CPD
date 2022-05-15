@@ -250,6 +250,97 @@ def sim_changepoint_var_process(dim, N, num_coeffs_change, scale=0.5):
     print("Finished Simulation")
     return data_total
 
+def sim_changepoint_cai_model_one(dim):
+    D_diag = np.random.uniform(0.5, 2.5, dim)
+    D = np.diag(D_diag)
+    omega = np.zeros((dim, dim))
+    for i in range(dim):
+        omega[i, i] = 1
+        if i < dim-1:
+            omega[i, i+1] = 0.6
+            omega[i+1, i] = 0.6
+            if i < dim-2:
+                omega[i, i+2] = 0.3
+                omega[i+2, i] = 0.3
+    
+    omega = np.sqrt(D)@omega@np.sqrt(D)
+    return omega
+
+def sim_changepoint_cai_model_three(dim):
+    D_diag = np.random.uniform(0.5, 2.5, dim)
+    D = np.diag(D_diag)
+    omega = np.zeros((dim, dim))
+    for i in range(dim-1):
+        for j in range(i, dim):
+            b_val = 0.8*np.random.binomial(1, 0.05)
+            omega[i, j] = b_val
+            omega[j, i] = b_val
+    
+    np.fill_diagonal(omega, 1.0)
+    delta = np.abs(np.min(np.linalg.eig(omega)[0])) + 0.05
+    delta_times_I = np.eye(dim)*delta
+    omega_plus = omega + delta_times_I
+    middle = omega_plus/(1+delta)
+    omega = np.power(D, 0.5)@middle@np.power(D, 0.5)
+    assert(is_pos_def(omega))
+
+    return omega
+
+
+def create_U_cai(omega, dim, N):
+    U = np.zeros((dim, dim))
+    upper_indices = np.triu_indices(dim, k=1)
+    rand_four_indices = np.random.choice(np.arange(len(upper_indices[0])), size=4)
+    w = np.max(np.diag(omega))
+    log_dim_over_N = np.log(dim)/N
+    root_log_dim = np.sqrt(log_dim_over_N)
+    rand_val_zero = -2*w*root_log_dim
+    rand_val_one = -w*root_log_dim
+    rand_val_two = w*root_log_dim
+    rand_val_three = 2*w*root_log_dim
+    for idx in rand_four_indices:
+        i = upper_indices[0][idx]
+        j = upper_indices[1][idx]
+        pos_neg = np.random.choice(np.arange(4))
+        if pos_neg in [0, 1]:
+            rand_val = np.random.uniform(rand_val_zero, rand_val_one)
+        else:
+            rand_val = np.random.uniform(rand_val_two, rand_val_three)
+        U[i, j] = rand_val
+        U[j, i] = rand_val
+    return U
+
+def simulate_changepoint_cai(omega, U, N=1000):
+    # simulate 1000 points of data, but need to chop it to 100, 100 for the Cai comparison
+    dim = omega.shape[0]
+    min_eig_val_omega = np.linalg.eig(omega)[0].min()
+    min_eig_val_omega_plus = np.linalg.eig(omega+U)[0].min()
+    delta = np.abs(np.minimum(min_eig_val_omega, min_eig_val_omega_plus)) + 0.05
+    mat_shift = np.eye(dim)*delta
+    precision_one = omega + mat_shift
+    precision_two = omega + U + mat_shift
+    assert(is_pos_def(precision_one))
+    assert(is_pos_def(precision_two))
+    data_one = np.random.multivariate_normal(np.zeros(dim), inv(precision_one), N)
+    data_two = np.random.multivariate_normal(np.zeros(dim), inv(precision_two), N)
+    data_full = np.concatenate((data_one, data_two), axis=0)
+    return data_full
+
+def changepoint_cai_model_one(dim, N=100):
+    omega = sim_changepoint_cai_model_one(dim=dim)
+    U = create_U_cai(omega, dim=dim, N=N)
+    data_full = simulate_changepoint_cai(omega, U)
+
+    return data_full
+
+
+def changepoint_cai_model_three(dim, N=100):
+    omega = sim_changepoint_cai_model_three(dim=dim)
+    U = create_U_cai(omega, dim=dim, N=N)
+    data_full = simulate_changepoint_cai(omega, U)
+
+    return data_full
+
 
 
 

@@ -129,6 +129,9 @@ def LRT_individual_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=5
         C_one = np.cov(data_one, bias=True)
         C_two = np.cov(data_two, bias=True)
         C_full = np.cov(data_full, bias=True)
+        # C_one = np.corrcoef(data_one)
+        # C_two = np.corrcoef(data_two)
+        # C_full = np.corrcoef(data_full)
 
         #############################
         #coeffs_hat_total = optimize_coeffs(H_s, C_full, lam=lam)

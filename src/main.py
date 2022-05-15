@@ -7,7 +7,7 @@ import seaborn as sns
 sns.set()
 
 from precision_cpd import PrecisionCPD
-from simulate import sim_changepoint_mv_normal_cholesky, sim_changepoint_mv_normal_no_decomp, sim_changepoint_mv_normal_orthogonal, sim_changepoint_mv_normal_ldlt, sim_changepoint_var_process
+from simulate import *
 from utils import difference_data, load_alaska_data, scale_data, load_hjandrews_data, create_fig_dir, load_holiday_farm_data
 
 def get_args():
@@ -51,6 +51,10 @@ def resolve_data(args, results_dir_path):
             return scale_data(sim_changepoint_mv_normal_ldlt(dim=args.dim, N=args.N, path=results_dir_path, num_coeffs_change=1, scale=args.sim_scale))
         elif args.sim_type == 'var_process':
             return scale_data(difference_data(sim_changepoint_var_process(dim=args.dim, N=args.N, num_coeffs_change=1, scale=args.sim_scale)))
+        elif args.sim_type == 'cai_model_one':
+            return scale_data(changepoint_cai_model_one(dim=args.dim, N=args.N))
+        elif args.sim_type == 'cai_model_three':
+            return scale_data(changepoint_cai_model_three(dim=args.dim, N=args.N))
         else:
             return sim_changepoint_mv_normal_no_decomp(dim=args.dim, N=args.N, num_coeffs_change=1, scale=args.sim_scale).T
     else:
@@ -116,4 +120,4 @@ if __name__ == '__main__':
     
 
 
-#  python src/main.py --sim 0 --data holidayfarm --M 4 --lam 1e-1 --window_size 500 --step_size 200 --split_variance 1 --full_basis 1 --beta 5e-3 --iters 100 --t 20
+# python src/main.py --sim 0 --data alaska --M 2 --window_size 50 --step_size 1 --lam 1e-3 --train_percent 0.5 --full_basis 1 --split_variance 1
