@@ -24,13 +24,20 @@ def load_alaska_data(args):
     return data
 
 def load_hjandrews_data(args):
-    print('Loading Alaska Data...')
-    data = np.loadtxt(os.path.join(args.data_path, 'hj_andrews_resid.csv'))
-    return data
+    print('Loading HJ Andrews Data...')
+    data = np.loadtxt(os.path.join(args.data_path, 'hj_andrews_resid.csv'), delimiter=',')
+    random_sample = np.random.choice(np.arange(data.shape[1]), 40)
+
+    return data[:, random_sample]
 
 def load_holiday_farm_data(args):
     print('Loading Holiday Farm Data...')
     data = np.loadtxt(os.path.join(args.data_path, 'holiday_farm_clean.csv'), delimiter=',')
+    return data
+
+def load_tohoku_data(args):
+    print('Loading Tohoku Data...')
+    data = np.loadtxt(os.path.join(args.data_path, 'dtec/tk_two.csv'), delimiter=',')
     return data
 
 def scale_data(data):

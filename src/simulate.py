@@ -327,18 +327,20 @@ def simulate_changepoint_cai(omega, U, N=1000):
     return data_full
 
 def changepoint_cai_model_one(dim, N=100):
+    print("Simulating Cai Model One")
     omega = sim_changepoint_cai_model_one(dim=dim)
     U = create_U_cai(omega, dim=dim, N=N)
     data_full = simulate_changepoint_cai(omega, U)
-
+    print("Finished Simulation")
     return data_full
 
 
 def changepoint_cai_model_three(dim, N=100):
+    print("Simulating Cai Model Three")
     omega = sim_changepoint_cai_model_three(dim=dim)
     U = create_U_cai(omega, dim=dim, N=N)
     data_full = simulate_changepoint_cai(omega, U)
-
+    print("Finished Simulation")
     return data_full
 
 

@@ -3,8 +3,9 @@ import numpy as np
 from numpy.linalg import inv as inv
 from scipy.optimize import least_squares, minimize
 from simulate import sim_changepoint_mv_normal_cholesky, sim_changepoint_mv_normal_ldlt, sim_changepoint_var_process, changepoint_cai_model_one, changepoint_cai_model_three
-from utils import scale_data, difference_data
+from utils import scale_data, difference_data, vectorize_matrix
 from tqdm import tqdm
+from scipy.stats import norm
 
 import argparse
 
@@ -24,8 +25,8 @@ def resolve_data(args):
     #return scale_data(sim_changepoint_mv_normal_cholesky(dim=args.dim, N=args.N, num_coeffs_change=1, scale=args.sim_scale))
     #return scale_data(sim_changepoint_mv_normal_ldlt(dim=args.dim, N=args.N, num_coeffs_change=1, scale=args.sim_scale))
     #return scale_data(difference_data(sim_changepoint_var_process(dim=args.dim, N=args.N, num_coeffs_change=1, scale=args.sim_scale)))
-    #return changepoint_cai_model_one(dim=args.dim, N=args.N)[900:1100, :]
-    return scale_data(changepoint_cai_model_three(dim=args.dim, N=args.N)[900:1100, :])
+    return scale_data(changepoint_cai_model_one(dim=args.dim, N=args.N)[900:1100, :])
+    #return scale_data(changepoint_cai_model_three(dim=args.dim, N=args.N)[900:1100, :])
 
 
 def loss_func(x, data, i=0, lam=1e-4):
@@ -155,6 +156,13 @@ def indicator_global_stat(M, p, alpha=0.01):
 
     return threshold
 
+def indicator_local_stat(W, p, alpha=0.01):
+    # simplest t_hat
+    t_hat = 2*np.sqrt(np.log(p))
+    
+    return np.abs(W) >= t_hat
+
+
 def main():
     args = get_args()
     np.random.seed(args.random_seed)
@@ -178,6 +186,9 @@ def main():
     print(M)
     print(threshold)
     print(M>threshold)
+
+    local_test = np.triu(indicator_local_stat(W, p=data.shape[1], alpha=0.01).astype(int), k=1)
+    print(local_test)
 
 
 

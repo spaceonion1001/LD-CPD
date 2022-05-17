@@ -8,7 +8,7 @@ sns.set()
 
 from precision_cpd import PrecisionCPD
 from simulate import *
-from utils import difference_data, load_alaska_data, scale_data, load_hjandrews_data, create_fig_dir, load_holiday_farm_data
+from utils import difference_data, load_alaska_data, scale_data, load_hjandrews_data, create_fig_dir, load_holiday_farm_data, load_tohoku_data
 
 def get_args():
     parser = argparse.ArgumentParser()
@@ -60,6 +60,8 @@ def resolve_data(args, results_dir_path):
     else:
         if args.data == 'alaska':
             return load_alaska_data(args)
+        elif args.data == 'tohoku':
+            return scale_data(load_tohoku_data(args))
         elif args.data == 'hjandrews':
             return load_hjandrews_data(args)
         elif args.data == 'holidayfarm':
