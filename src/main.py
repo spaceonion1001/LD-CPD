@@ -24,6 +24,7 @@ def get_args():
     parser.add_argument('--data_path', type=str, default='/home/dink/Documents/Research/data')
     parser.add_argument('--fig_path', type=str, default='/home/dink/Documents/Research/Correlation-Changepoint-Detection/figs')
     parser.add_argument('--results_path', type=str, default='/home/dink/Documents/Research/Correlation-Changepoint-Detection/results')
+    parser.add_argument('--results_filename', type=str, default="lrt_results.csv")
     parser.add_argument('--basic_test', type=int, default=0)
     parser.add_argument('--full_basis', type=int, default=1)
     parser.add_argument('--local', type=int, default=1)
@@ -103,7 +104,7 @@ if __name__ == '__main__':
                 plt.close()
             if bool(args.save_test_stat):
                 test_results = np.hstack([lrt_vals_all, p_vals_all])
-                np.savetxt(os.path.join(results_dir_path, 'lrt_local_all'), test_results, delimiter=',')
+                np.savetxt(os.path.join(results_dir_path, args.results_filename), test_results, delimiter=',')
 
         else:
             print("Global Test")
@@ -117,7 +118,7 @@ if __name__ == '__main__':
             plt.close()
             if bool(args.save_test_stat):
                 test_results = np.vstack([lrt_vals, p_vals]).T
-                np.savetxt(os.path.join(results_dir_path, 'lrt_global'), test_results, delimiter=',')
+                np.savetxt(os.path.join(results_dir_path, 'lrt_global.csv'), test_results, delimiter=',')
         model.print_clusters_rv()
     
 
