@@ -118,6 +118,17 @@ class PrecisionCPD:
             print("Channels Contained {}".format(nonzero_cols))
             print("****************************************")
             print()
+    
+    def save_matrices_simulations(self, save_path):
+        print("Saving Basis Mats")
+        basis_mats = self.basis_matrices
+        if bool(self.full_basis):
+            basis_mats = self.basis_matrices_full
+        if not os.path.isdir(save_path):
+            os.mkdir(save_path)
+        for i in range(basis_mats.shape[0]):
+            np.savetxt(os.path.join(save_path, "matrix_{}.csv".format(i)), basis_mats[i], delimiter=',')
+        
         
 
     

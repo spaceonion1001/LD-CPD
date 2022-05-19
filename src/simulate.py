@@ -39,7 +39,7 @@ def collect_precision_matrix(H_s, prec_coeffs):
     
     return precision
 
-def sim_changepoint_mv_normal_orthogonal(sim_scale=0.8, M=2, dim=4, N=500):
+def sim_changepoint_mv_normal_orthogonal(sim_scale=0.8, M=2, dim=4, N=500, save_path=None):
     print("Simulating Anderson Decomp Data")
     assert dim % M == 0, "Need dim divisible by M for sake of sampling at the moment"
     H_s, precision_one, prec_coeffs_one = generate_matrices_orthogonal(M=M, dim=dim)
@@ -53,9 +53,13 @@ def sim_changepoint_mv_normal_orthogonal(sim_scale=0.8, M=2, dim=4, N=500):
     data_total = np.concatenate((data_one, data_two), axis=1)
     C_total = np.cov(data_total)
     print("Finished Simulation")
+    neq_indices = np.where(precision_one != precision_two)
+    neq_indices_arr = np.concatenate((np.expand_dims(neq_indices[0],1), np.expand_dims(neq_indices[1], 1)), 1)
+    if save_path is not None:
+        np.savetxt(os.path.join(save_path, 'changed_indx.csv'), neq_indices_arr)
     return H_s, data_total
 
-def sim_changepoint_mv_normal_orthogonal_mult_coeff(sim_scale=0.8, M=2, dim=4, N=500, num_coeffs_change=1):
+def sim_changepoint_mv_normal_orthogonal_mult_coeff(sim_scale=0.8, M=2, dim=4, N=500, num_coeffs_change=1, save_path=None):
     assert dim % M == 0, "Need dim divisible by M for sake of sampling at the moment"
     H_s, precision_one, prec_coeffs_one = generate_matrices_orthogonal(M=M, dim=dim)
     data_one, C_one = sim_data(covar=inv(precision_one), dim=dim, N=N)
@@ -66,7 +70,7 @@ def sim_changepoint_mv_normal_orthogonal_mult_coeff(sim_scale=0.8, M=2, dim=4, N
     to_change_coeffs = np.random.choice(np.arange(M), num_coeffs_change, replace=False)
     prec_coeffs_two = prec_coeffs_one.copy()
     for i in range(num_coeffs_change):
-        prec_coeffs_two[to_change_coeffs[i]] += sim_scale #np.random.uniform(0.8, 1.5, 1)[0]
+        prec_coeffs_two[to_change_coeffs[i]] += np.random.uniform(0.8, 1.5, 1)[0]*np.random.choice([-1, 1])
         
     precision_two = collect_precision_matrix(H_s, prec_coeffs_two)
     data_two, C_two = sim_data(covar=inv(precision_two), dim=dim, N=N)
@@ -75,7 +79,11 @@ def sim_changepoint_mv_normal_orthogonal_mult_coeff(sim_scale=0.8, M=2, dim=4, N
     C_total = np.cov(data_total)
     print("Precision Coefficients Pre-Changepoint: ", prec_coeffs_one)
     print("Precision Coefficients Post-Changepoint: ", prec_coeffs_two)
-    
+    neq_indices = np.where(prec_coeffs_one != prec_coeffs_two)
+    #neq_indices_arr = np.concatenate((np.expand_dims(neq_indices[0],1), np.expand_dims(neq_indices[1], 1)), 1)
+    print(neq_indices)
+    if save_path is not None:
+        np.savetxt(os.path.join(save_path, 'changed_indx.csv'), neq_indices)
     return H_s, data_total
 
 def sim_data(covar, dim, N=1000):
@@ -86,7 +94,7 @@ def sim_data(covar, dim, N=1000):
     
     return data_sim, C
 
-def sim_changepoint_mv_normal_no_decomp(dim, N, num_coeffs_change=1, scale=0.8):
+def sim_changepoint_mv_normal_no_decomp(dim, N, num_coeffs_change=1, scale=0.8, save_path=None):
     print("Simulating Data with No Decomp")
     C_one = make_spd_matrix(dim)
     data_one = np.random.multivariate_normal(np.zeros(dim), C_one, N)
@@ -114,12 +122,34 @@ def sim_changepoint_mv_normal_no_decomp(dim, N, num_coeffs_change=1, scale=0.8):
     assert sum(np.diag(C_one) <= 0) == 0
     assert sum(np.diag(C_two) <= 0) == 0
     print("Finished Simulation")
+    neq_indices = np.where(C_one != C_two)
+    neq_indices_arr = np.concatenate((np.expand_dims(neq_indices[0],1), np.expand_dims(neq_indices[1], 1)), 1)
+    if save_path is not None:
+        np.savetxt(os.path.join(save_path, 'changed_indx.csv'), neq_indices_arr)
     return data_total
 
-def sim_changepoint_mv_normal_cholesky(dim, N, num_coeffs_change=1, scale=0.8):
+def get_scale_val(C, dim):
+    w = np.max(np.diag(C))
+    #print(w)
+    log_dim_over_N = np.log(dim)/50
+    root_log_dim = np.sqrt(log_dim_over_N)
+    rand_val_zero = -2*w*root_log_dim
+    rand_val_one = -w*root_log_dim
+    rand_val_two = w*root_log_dim
+    rand_val_three = 2*w*root_log_dim
+    pos_neg = np.random.choice(np.arange(4))
+    if pos_neg in [0, 1]:
+        rand_val = np.random.uniform(rand_val_zero, rand_val_one)
+    else:
+        rand_val = np.random.uniform(rand_val_two, rand_val_three)
+    #print(rand_val_zero, rand_val_one, rand_val_two, rand_val_three)
+    return rand_val
+
+def sim_changepoint_mv_normal_cholesky(dim, N, num_coeffs_change=1, scale=0.8, save_path=None):
     print("Simulating Cholesky Decomp Data")
     L_one = make_spd_matrix(dim)
     L_one = np.tril(L_one)
+    L_one /= np.abs(L_one.max())
     np.fill_diagonal(L_one, 1.0)
     C_one = L_one.dot(L_one.T)
     #C_one = C_one/np.abs(C_one.max())
@@ -129,12 +159,12 @@ def sim_changepoint_mv_normal_cholesky(dim, N, num_coeffs_change=1, scale=0.8):
         rand_i_j = np.random.choice(np.arange(dim), 2, replace=False)
         i, j = rand_i_j[0], rand_i_j[1]
         L_two = L_two.copy()
-        print(i,j)
         if i >= j:
             val = L_two[i, j]
         else:
             val = L_two[j,i]
-        val += scale
+        val += get_scale_val(C_one, dim)
+        # val += scale
         # no need for symmetric change - it's a cholesky
         if i >= j:
             L_two[i, j] = val
@@ -153,17 +183,18 @@ def sim_changepoint_mv_normal_cholesky(dim, N, num_coeffs_change=1, scale=0.8):
     assert is_symmetric(C_two)
     assert sum(np.diag(inv(C_one)) <= 0) == 0
     assert sum(np.diag(inv(C_two)) <= 0) == 0
-    # print(C_one.max())
-    # print(C_two.max())
-    # print(inv(C_one).max())
-    # print(inv(C_two).max())
+    neq_indices = np.where(C_one != C_two)
+    neq_indices_arr = np.concatenate((np.expand_dims(neq_indices[0],1), np.expand_dims(neq_indices[1], 1)), 1)
+    if save_path is not None:
+        np.savetxt(os.path.join(save_path, 'changed_indx.csv'), neq_indices_arr)
     print("Finished Simulation")
     return data_total
 
-def sim_changepoint_mv_normal_ldlt(dim, N, path, num_coeffs_change=1, scale=0.8):
+def sim_changepoint_mv_normal_ldlt(dim, N, num_coeffs_change=1, scale=0.8, save_path=None):
     print("Simulating LDLT Decomp Data")
     L_one = make_spd_matrix(dim)
     L_one = np.tril(L_one)
+    L_one /= np.abs(L_one.max())
     np.fill_diagonal(L_one, 1.0)
     D = np.diag(np.ones(dim)*2.0)
     C_one = L_one@D@(L_one.T)
@@ -179,7 +210,7 @@ def sim_changepoint_mv_normal_ldlt(dim, N, path, num_coeffs_change=1, scale=0.8)
             val = L_two[i, j]
         else:
             val = L_two[j,i]
-        val += scale
+        val += get_scale_val(C_one, dim)
         # no need for symmetric change - it's a cholesky
         if i >= j:
             L_two[i, j] = val
@@ -207,10 +238,11 @@ def sim_changepoint_mv_normal_ldlt(dim, N, path, num_coeffs_change=1, scale=0.8)
     print("Finished Simulation")
     neq_indices = np.where(C_one != C_two)
     neq_indices_arr = np.concatenate((np.expand_dims(neq_indices[0],1), np.expand_dims(neq_indices[1], 1)), 1)
-    np.savetxt(os.path.join(path, 'ldlt_changed.csv'), neq_indices_arr, delimiter=',')
+    if save_path is not None:
+        np.savetxt(os.path.join(save_path, 'changed_indx.csv'), neq_indices_arr)
     return data_total
 
-def sim_changepoint_var_process(dim, N, num_coeffs_change, scale=0.5):
+def sim_changepoint_var_process(dim, N, num_coeffs_change, scale=0.5, save_path=None):
     # simulate this where we change the noise covariance via a LDLT decomposition on precision
     # VAR(1)
     print("Simulating VAR Data")
@@ -246,8 +278,11 @@ def sim_changepoint_var_process(dim, N, num_coeffs_change, scale=0.5):
     data_two = var_two.simulate_var(steps=N)
 
     data_total = np.concatenate((data_one, data_two), axis=0)
-
     print("Finished Simulation")
+    neq_indices = np.where(C_one != C_two)
+    neq_indices_arr = np.concatenate((np.expand_dims(neq_indices[0],1), np.expand_dims(neq_indices[1], 1)), 1)
+    if save_path is not None:
+        np.savetxt(os.path.join(save_path, 'changed_indx.csv'), neq_indices_arr)
     return data_total
 
 def sim_changepoint_cai_model_one(dim):
@@ -287,6 +322,7 @@ def sim_changepoint_cai_model_three(dim):
     return omega
 
 
+
 def create_U_cai(omega, dim, N):
     U = np.zeros((dim, dim))
     upper_indices = np.triu_indices(dim, k=1)
@@ -324,22 +360,30 @@ def simulate_changepoint_cai(omega, U, N=1000):
     data_one = np.random.multivariate_normal(np.zeros(dim), inv(precision_one), N)
     data_two = np.random.multivariate_normal(np.zeros(dim), inv(precision_two), N)
     data_full = np.concatenate((data_one, data_two), axis=0)
-    return data_full
+    return data_full, precision_one, precision_two
 
-def changepoint_cai_model_one(dim, N=100):
+def changepoint_cai_model_one(dim, N=100, save_path=None):
     print("Simulating Cai Model One")
     omega = sim_changepoint_cai_model_one(dim=dim)
     U = create_U_cai(omega, dim=dim, N=N)
-    data_full = simulate_changepoint_cai(omega, U)
+    data_full, precision_one, precision_two = simulate_changepoint_cai(omega, U, N=N)
+    neq_indices = np.where(precision_one != precision_two)
+    neq_indices_arr = np.concatenate((np.expand_dims(neq_indices[0],1), np.expand_dims(neq_indices[1], 1)), 1)
+    if save_path is not None:
+        np.savetxt(os.path.join(save_path, 'changed_indx.csv'), neq_indices_arr)
     print("Finished Simulation")
     return data_full
 
 
-def changepoint_cai_model_three(dim, N=100):
+def changepoint_cai_model_three(dim, N=100, save_path=None):
     print("Simulating Cai Model Three")
     omega = sim_changepoint_cai_model_three(dim=dim)
     U = create_U_cai(omega, dim=dim, N=N)
-    data_full = simulate_changepoint_cai(omega, U)
+    data_full, precision_one, precision_two = simulate_changepoint_cai(omega, U, N=N)
+    neq_indices = np.where(precision_one != precision_two)
+    neq_indices_arr = np.concatenate((np.expand_dims(neq_indices[0],1), np.expand_dims(neq_indices[1], 1)), 1)
+    if save_path is not None:
+        np.savetxt(os.path.join(save_path, 'changed_indx.csv'), neq_indices_arr)
     print("Finished Simulation")
     return data_full
 

@@ -40,6 +40,11 @@ def load_tohoku_data(args):
     data = np.loadtxt(os.path.join(args.data_path, 'dtec/tk_two.csv'), delimiter=',')
     return data
 
+def load_stock_market_data(args):
+    print('Loading Stock Market Data...')
+    data = np.loadtxt(os.path.join(args.data_path, 'logdiff_vals.csv'), delimiter=',')
+    return data
+
 def scale_data(data):
     scaler = StandardScaler()
     data_scaled = scaler.fit_transform(data)

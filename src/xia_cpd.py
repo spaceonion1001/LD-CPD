@@ -1,9 +1,11 @@
 from pickletools import read_string1
+from cvxpy import vec
 import numpy as np
 from numpy.linalg import inv as inv
 from scipy.optimize import least_squares, minimize
 from simulate import sim_changepoint_mv_normal_cholesky, sim_changepoint_mv_normal_ldlt, sim_changepoint_var_process, changepoint_cai_model_one, changepoint_cai_model_three
-from utils import scale_data, difference_data, vectorize_matrix
+from utils import scale_data, difference_data, vectorize_matrix, symmetrize_from_vector
+from statsmodels.stats.multitest import fdrcorrection
 from tqdm import tqdm
 from scipy.stats import norm
 
@@ -156,11 +158,23 @@ def indicator_global_stat(M, p, alpha=0.01):
 
     return threshold
 
+def G_func(t):
+    return 2-2*norm.cdf(t)
+
 def indicator_local_stat(W, p, alpha=0.01):
     # simplest t_hat
-    t_hat = 2*np.sqrt(np.log(p))
+    #t_hat = 2*np.sqrt(np.log(p))
     
-    return np.abs(W) >= t_hat
+    #return np.abs(W) >= t_hat
+
+    # BH FDR correction
+    upper_triangle = vectorize_matrix(W)
+    p_vals = np.array([G_func(np.abs(t)) for t in upper_triangle])
+    
+    p_vals = np.triu(symmetrize_from_vector(p_vals, p))
+    
+    return p_vals <= alpha
+    
 
 
 def main():
