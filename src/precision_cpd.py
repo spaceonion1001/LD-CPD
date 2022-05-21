@@ -47,7 +47,7 @@ class PrecisionCPD:
         self.dim = precision.shape[0]
         clust_dist_mat = np.abs(precision)
         np.fill_diagonal(clust_dist_mat, 0.0)
-        clust_dist_mat = clust_dist_mat.max() - clust_dist_mat
+        clust_dist_mat = (clust_dist_mat.max()+1e-5) - clust_dist_mat
         np.fill_diagonal(clust_dist_mat, 0.0)
         pairwise_distances = sch.distance.pdist(clust_dist_mat)
         Z = linkage(pairwise_distances, method='average')
@@ -60,10 +60,11 @@ class PrecisionCPD:
                 for idx2 in idxs: # loop over indexes
                     A[idx][idx2] = precision[idx][idx2].copy() # set i,j entry to be the entry from precision matrix for given cluster
             if self.split_variance:
+                self.basis_matrices.append(vectorize_matrix(np.diag(np.diag(A))))
                 np.fill_diagonal(A, 0)
             self.basis_matrices.append(vectorize_matrix(A))
-        if self.split_variance:
-            self.basis_matrices.append(vectorize_matrix(np.diag(np.diag(precision))))
+        # if self.split_variance:
+        #     self.basis_matrices.append(vectorize_matrix(np.diag(np.diag(precision))))
         self.basis_matrices = np.array(self.basis_matrices)
         
         leftover_basis_matrix = precision - symmetrize_from_vector(self.basis_matrices.sum(axis=0), dim=self.dim)
@@ -73,6 +74,7 @@ class PrecisionCPD:
         assert is_pos_def(symmetrize_from_vector(self.basis_matrices.sum(axis=0), dim=self.dim)), "Not PosDef"
         for mat in self.basis_matrices_full:
             assert is_symmetric(symmetrize_from_vector(mat, dim=self.dim)), "Not Symmetric"
+        print("H Matrices:", self.basis_matrices_full.shape[0])
 
     # # data_full assumed to be passed in shape: [dim, T]
     def perform_lrt_covariance(self, data_full):

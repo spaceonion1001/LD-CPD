@@ -61,6 +61,14 @@ def resolve_data(args, save_path=None):
             return scale_data(changepoint_cai_model_one(dim=args.dim, N=args.N, save_path=save_path))
         elif args.sim_type == 'cai_model_three':
             return scale_data(changepoint_cai_model_three(dim=args.dim, N=args.N, save_path=save_path))
+        elif args.sim_type == 'orthogonal_no_change':
+            return sim_changepoint_mv_normal_orthogonal_no_change(sim_scale=args.sim_scale, M=args.M, dim=args.dim, N=args.N, save_path=save_path)[1].T
+        elif args.sim_type == 'cholesky_no_change':
+            return scale_data(sim_changepoint_mv_normal_cholesky_no_change(dim=args.dim, N=args.N, num_coeffs_change=args.num_coeffs_change, scale=args.sim_scale, save_path=save_path))
+        elif args.sim_type == 'cai_model_one_no_change':
+            return scale_data(changepoint_cai_model_one_no_change(dim=args.dim, N=args.N, save_path=save_path))
+        elif args.sim_type == 'cai_model_three_no_change':
+            return scale_data(changepoint_cai_model_three_no_change(dim=args.dim, N=args.N, save_path=save_path))
         else:
             return sim_changepoint_mv_normal_no_decomp(dim=args.dim, N=args.N, num_coeffs_change=1, scale=args.sim_scale, save_path=save_path).T
     else:
@@ -71,11 +79,11 @@ def resolve_data(args, save_path=None):
         elif args.data == 'hjandrews':
             return load_hjandrews_data(args)
         elif args.data == 'holidayfarm':
-            return load_holiday_farm_data(args)
+            return scale_data(load_holiday_farm_data(args))
         elif args.data == 'stocks':
-            # python src/main.py --M 5 --lam 2e-5 --window_size 200 --step_size 1 --data stocks --local 1 --sim 0 --split_variance 0 --train_percent 0.6
-            # stocks need a low lambda value I think
-            return load_stock_market_data(args)
+            # python src/main.py --window_size 100 --sim 0 --data stocks --step 1 --window_size 100 --lam 5e-1 --full_basis 0 --M 6 --train_percent 0.4 --split_variance 0
+            # python src/main.py --window_size 100 --sim 0 --data stocks --step 1 --window_size 100 --lam 5e-1 --full_basis 0 --M 10 --train_percent 0.4 --split_variance 0
+            return scale_data(load_stock_market_data(args))
         else:
             print("Error: Dataset not understood")
             exit(0)
@@ -143,7 +151,7 @@ def perform_simulation_batch(args):
     sim_results_path = os.path.join(args.results_path, "simulation_results")
     if not os.path.isdir(sim_results_path):
         os.mkdir(sim_results_path)
-    sim_type_path = os.path.join(sim_results_path, args.sim_type)
+    sim_type_path = os.path.join(sim_results_path, args.sim_type+"_"+str(args.dim))
     print(sim_type_path)
     if not os.path.isdir(sim_type_path):
         os.mkdir(sim_type_path)
@@ -187,3 +195,50 @@ if __name__ == '__main__':
 # python src/main.py --sim 1 --sim_type orthogonal_mult_coeff --dim 50 --window_size 100 --step_size 1 --lam 1e-1 --single_test 0 --N 500 --M 10 --t 1.0 --train_percent 0.4 --full_basis 1 --beta 6e-3 --num_coeffs_change 2
 # python src/main.py --sim 1 --sim_type cai_model_three --dim 50 --window_size 100 --step_size 1 --lam 1e-1 --single_test 0 --N 500 --M 10 --t 1.0 --train_percent 0.4 --full_basis 1 --beta 6e-3
 # python src/main.py --sim 1 --sim_type cholesky --dim 50 --window_size 100 --step_size 1 --lam 3e-1 --single_test 0 --N 500 --M 10 --t 1.0 --train_percent 0.45 --full_basis 1 --beta 6e-3 --num_coeffs_change 2
+
+# python src/main.py --sim 0 --data stocks --lam 1e-2 --train_percent 0.4 --M 5 --beta 6e-3
+
+
+# sims
+# cai models
+# dim 6
+# python src/main.py --single_test 0 --num_coeffs_change 2 --train_percent 0.4 --window_size 100 --step_size 1 --sim 1 --lam 8e-2 --N 500 --M 2 --full_basis 0 --dim 6 --sim_type cai_model_three
+# python src/main.py --single_test 0 --num_coeffs_change 2 --train_percent 0.4 --window_size 100 --step_size 1 --sim 1 --lam 8e-2 --N 500 --M 2 --full_basis 0 --dim 6 --sim_type cai_model_one
+# dim 10
+# python src/main.py --single_test 0 --num_coeffs_change 2 --train_percent 0.4 --window_size 100 --step_size 1 --sim 1 --lam 8e-2 --N 500 --M 3 --full_basis 0 --dim 10 --sim_type cai_model_three
+# python src/main.py --single_test 0 --num_coeffs_change 2 --train_percent 0.4 --window_size 100 --step_size 1 --sim 1 --lam 8e-2 --N 500 --M 3 --full_basis 0 --dim 10 --sim_type cai_model_one
+# dim 15
+# python src/main.py --single_test 0 --num_coeffs_change 2 --train_percent 0.4 --window_size 100 --step_size 1 --sim 1 --lam 8e-2 --N 500 --M 4 --full_basis 0 --dim 15 --sim_type cai_model_three
+# python src/main.py --single_test 0 --num_coeffs_change 2 --train_percent 0.4 --window_size 100 --step_size 1 --sim 1 --lam 8e-2 --N 500 --M 4 --full_basis 0 --dim 15 --sim_type cai_model_one
+# dim 20
+# python src/main.py --single_test 0 --num_coeffs_change 2 --train_percent 0.4 --window_size 100 --step_size 1 --sim 1 --lam 8e-2 --N 500 --M 6 --full_basis 0 --dim 20 --sim_type cai_model_three
+# python src/main.py --single_test 0 --num_coeffs_change 2 --train_percent 0.4 --window_size 100 --step_size 1 --sim 1 --lam 8e-2 --N 500 --M 6 --full_basis 0 --dim 20 --sim_type cai_model_one
+# dim 30
+# python src/main.py --single_test 0 --num_coeffs_change 2 --train_percent 0.4 --window_size 100 --step_size 1 --sim 1 --lam 8e-2 --N 500 --M 8 --full_basis 0 --dim 30 --sim_type cai_model_three
+# python src/main.py --single_test 0 --num_coeffs_change 2 --train_percent 0.4 --window_size 100 --step_size 1 --sim 1 --lam 8e-2 --N 500 --M 8 --full_basis 0 --dim 30 --sim_type cai_model_one
+# dim 50
+# python src/main.py --sim 1 --sim_type cai_model_three --dim 50 --window_size 100 --step_size 1 --lam 1e-1 --single_test 0 --N 500 --M 10 --t 1.0 --train_percent 0.4 --full_basis 1 --beta 6e-3
+# python src/main.py --sim 1 --sim_type cai_model_one --dim 50 --window_size 100 --step_size 1 --lam 1e-1 --single_test 0 --N 500 --M 10 --t 1.0 --train_percent 0.4 --full_basis 1 --beta 6e-3
+
+
+# non cai models
+# dim 6
+# python src/main.py --single_test 0 --num_coeffs_change 2 --train_percent 0.4 --window_size 100 --step_size 1 --sim 1 --lam 1e-1 --N 500 --M 2 --full_basis 0 --dim 6 --sim_type ldlt
+# python src/main.py --single_test 0 --num_coeffs_change 2 --train_percent 0.4 --window_size 100 --step_size 1 --sim 1 --lam 1e-1 --N 500 --M 2 --full_basis 0 --dim 6 --sim_type cholesky
+# dim 10
+# python src/main.py --single_test 0 --num_coeffs_change 2 --train_percent 0.4 --window_size 100 --step_size 1 --sim 1 --lam 1e-1 --N 500 --M 3 --full_basis 0 --dim 10 --sim_type cholesky
+# python src/main.py --single_test 0 --num_coeffs_change 2 --train_percent 0.4 --window_size 100 --step_size 1 --sim 1 --lam 1e-1 --N 500 --M 2 --full_basis 0 --dim 10 --sim_type orthogonal
+# dim 15
+# python src/main.py --single_test 0 --num_coeffs_change 2 --train_percent 0.4 --window_size 100 --step_size 1 --sim 1 --lam 3e-1 --N 500 --M 4 --full_basis 0 --dim 15 --sim_type cholesky
+# python src/main.py --single_test 0 --num_coeffs_change 2 --train_percent 0.4 --window_size 100 --step_size 1 --sim 1 --lam 3e-1 --N 500 --M 3 --full_basis 0 --dim 15 --sim_type orthogonal
+# dim 20
+# python src/main.py --single_test 0 --num_coeffs_change 2 --train_percent 0.4 --window_size 100 --step_size 1 --sim 1 --lam 3e-1 --N 500 --M 6 --full_basis 0 --dim 20 --sim_type cholesky
+# python src/main.py --single_test 0 --num_coeffs_change 2 --train_percent 0.4 --window_size 100 --step_size 1 --sim 1 --lam 3e-1 --N 500 --M 4 --full_basis 0 --dim 20 --sim_type orthogonal
+# dim 30
+# python src/main.py --single_test 0 --num_coeffs_change 2 --train_percent 0.4 --window_size 100 --step_size 1 --sim 1 --lam 3e-1 --N 500 --M 8 --full_basis 0 --dim 30 --sim_type cholesky
+# python src/main.py --single_test 0 --num_coeffs_change 2 --train_percent 0.4 --window_size 100 --step_size 1 --sim 1 --lam 3e-1 --N 500 --M 5 --full_basis 0 --dim 30 --sim_type orthogonal
+# dim 50
+# python src/main.py --sim 1 --sim_type orthogonal_mult_coeff --dim 50 --window_size 100 --step_size 1 --lam 1e-1 --single_test 0 --N 500 --M 10 --t 1.0 --train_percent 0.4 --full_basis 1 --beta 6e-3 --num_coeffs_change 2
+# python src/main.py --sim 1 --sim_type cholesky --dim 50 --window_size 100 --step_size 1 --lam 3e-1 --single_test 0 --N 500 --M 10 --t 1.0 --train_percent 0.45 --full_basis 1 --beta 6e-3 --num_coeffs_change 2
+
+
