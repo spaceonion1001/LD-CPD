@@ -166,11 +166,11 @@ def perform_simulation_batch(args):
         data_train = data_full[0:int(args.train_percent*len(data_full)), :]
         model.fit_glasso(data_train)
         model.construct_basis_matrices()
-        lrt_vals_all, p_vals_all = model.perform_lrt_local(data_full.T)
+        lrt_vals_all = model.perform_lrt_local(data_full.T)
         model.save_matrices_simulations(save_path)
         print()
         np.savetxt(os.path.join(save_path, "lrt_vals.csv"), lrt_vals_all, delimiter=',')
-        np.savetxt(os.path.join(save_path, "p_vals.csv"), p_vals_all, delimiter=',')
+        #np.savetxt(os.path.join(save_path, "p_vals.csv"), p_vals_all, delimiter=',')
         model.print_clusters_rv()
     print("*******************************************************************************")
     print("Done!")

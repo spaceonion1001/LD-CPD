@@ -10,6 +10,7 @@ from tqdm import tqdm
 from scipy.stats import norm
 from simulate import *
 from utils import difference_data, load_alaska_data, scale_data, load_hjandrews_data, create_fig_dir, load_holiday_farm_data, load_tohoku_data, load_stock_market_data
+from numba import jit
 
 import argparse
 
@@ -17,7 +18,7 @@ def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--lam', type=float, default=1e-1)
     parser.add_argument('--dim', type=int, default=16)
-    parser.add_argument('--N', type=int, default=1000)
+    parser.add_argument('--N', type=int, default=500)
     parser.add_argument('--M', type=int, default=2)
     parser.add_argument('--sim', type=int, default=1)
     parser.add_argument('--sim_type', type=str, default='cai_model_three')
@@ -27,6 +28,7 @@ def get_args():
     parser.add_argument('--random_seed', type=int, default=42)
     parser.add_argument('--window_size', type=int, default=100)
     parser.add_argument('--step_size', type=int, default=1)
+    parser.add_argument('--num_coeffs_change', type=int, default=2)
     parser.add_argument('--results_path', type=str, default='/home/dink/Documents/Research/Correlation-Changepoint-Detection/results')
     args = parser.parse_args()
 
@@ -105,7 +107,8 @@ def perform_regression(data, kd=2):
         sig_i_i_x = np.var(X_i)
         x_lam = kd*np.power(sig_i_i_x*x_log_dim, 0.5)
         D_i_x = np.power(np.diag(np.cov(X_m_i.T, bias=False)), -0.5)
-        res_x_i = minimize(loss_func, x_0, method='BFGS', args=(X_data, i, x_lam)).x
+        #res_x_i = minimize(loss_func, x_0, method='BFGS', args=(X_data, i, x_lam)).x
+        res_x_i = least_squares(loss_func, x_0, args=(X_data, i, x_lam)).x
         beta_hat_x_i = D_i_x*res_x_i
 
         Y_m_i = np.delete(Y_data, i, axis=1)
@@ -113,7 +116,8 @@ def perform_regression(data, kd=2):
         sig_i_i_y = np.var(Y_i)
         y_lam = kd*np.power(sig_i_i_y*y_log_dim, 0.5)
         D_i_y = np.power(np.diag(np.cov(Y_m_i.T, bias=False)), -0.5)
-        res_y_i = minimize(loss_func, x_0, method='BFGS', args=(Y_data, i, y_lam)).x
+        #res_y_i = minimize(loss_func, x_0, method='BFGS', args=(Y_data, i, y_lam)).x
+        res_y_i = least_squares(loss_func, x_0, args=(Y_data, i, y_lam)).x
         beta_hat_y_i = D_i_y*res_y_i
 
         beta_hats_x.append(beta_hat_x_i)
@@ -123,6 +127,20 @@ def perform_regression(data, kd=2):
     # since we need one regression for each dim, and is vector size of dim-1
     return np.array(beta_hats_x), np.array(beta_hats_y)
 
+@jit(nopython=True)
+def numba_mean_col(X):
+    X_mean = []
+    tot = X.shape[1]
+    for col in range(X.shape[0]):
+        sum = 0
+        curr_data = X[:, col]
+        for val in curr_data:
+            sum = sum + val
+        X_mean.append(sum/tot)
+    X_mean = np.array(X_mean)
+    return X_mean
+
+@jit(nopython=True)
 def calculate_residuals(beta_hats, data):
     # this is for one half of the data
     N = data.shape[0]
@@ -130,10 +148,18 @@ def calculate_residuals(beta_hats, data):
     residuals = np.zeros((N, dim))
     for k in range(N):
         for i in range(dim):
-            X_m_i = np.delete(data, i, axis=1)
+            #X_m_i = np.delete(data, i, axis=1)
+            idxs = []
+            for j in range(dim):
+                if j != i:
+                    idxs.append(int(j))
+            idxs = np.array(idxs)
+            X_m_i = data[:, idxs]
             X_m_i_k = X_m_i[k, :]
             X_i_k = data[k, i]
-            X_m_i_k_min_mu = X_m_i_k - np.mean(X_m_i.T, 1)
+            # X_m_i_k_min_mu = X_m_i_k - np.mean(X_m_i.T, 1)
+            # X_i_k_min_mu = X_i_k - np.mean(data[:, i])
+            X_m_i_k_min_mu = X_m_i_k - numba_mean_col(X_m_i.T)
             X_i_k_min_mu = X_i_k - np.mean(data[:, i])
             pred = X_m_i_k_min_mu.dot(beta_hats[i])
             epsilon = X_i_k_min_mu - pred
@@ -141,6 +167,7 @@ def calculate_residuals(beta_hats, data):
     
     return residuals
 
+@jit(nopython=True)
 def bias_corrected_residual_covariance(residuals, beta_hats):
     residuals_cov = np.cov(residuals.T, bias=True)
     dim = residuals_cov.shape[0]
@@ -155,6 +182,7 @@ def bias_corrected_residual_covariance(residuals, beta_hats):
     
     return residuals_cov_corrected + np.diag(np.diag(residuals_cov))
 
+@jit(nopython=True)
 def calculate_T(residuals_cov_corrected):
     dim = residuals_cov_corrected.shape[0]
     T = np.zeros((dim, dim))
@@ -166,6 +194,7 @@ def calculate_T(residuals_cov_corrected):
     
     return T
 
+@jit(nopython=True)
 def calculate_theta(residuals_cov_corrected, beta_hats, N):
     dim = residuals_cov_corrected.shape[0]
     theta = np.zeros((dim, dim))
@@ -180,16 +209,19 @@ def calculate_theta(residuals_cov_corrected, beta_hats, N):
     np.fill_diagonal(theta, np.diag(residuals_cov_corrected))
     return theta
 
+@jit(nopython=True)
 def calculate_standardized_stat(T_x, T_y, theta_x, theta_y):
     W = (T_x - T_y)/np.sqrt(theta_x+theta_y)
 
     return W
 
+@jit(nopython=True)
 def calculate_global_stat(W):
     M = np.max(W**2)
 
     return M
 
+@jit(nopython=True)
 def indicator_global_stat(M, p, alpha=0.01):
     q_alpha = -np.log(8*np.pi)-2*np.log(np.log(np.power(1-alpha, -1)))
     threshold = q_alpha+4*np.log(p)-np.log(np.log(p))
@@ -245,6 +277,68 @@ def apply_cai_algorithm_windowed(args, data):
     
     return np.array(global_test_vals)
 
+@jit(nopython=True)
+def get_mean(data):
+    data_mean = np.zeros(data.shape[1])
+
+    for col in range(data.shape[1]):
+        mu = np.mean(data[:, col])
+        data_mean[col] = mu
+    
+    return data_mean
+
+@jit(nopython=True)
+def get_theta_variance(data, C):
+    dim = C.shape[0]
+    theta = np.zeros((dim, dim))
+    mu = get_mean(data)
+    for i in range(dim):
+        for j in range(dim):
+            summand = 0
+            for k in range(data.shape[0]):
+                first = (data[k, i] - mu[i])
+                second = (data[k,j] - mu[j])
+                third = C[i,j]
+                summand += np.power((first*second-third), 2)
+            summand /= data.shape[0]
+            theta[i,j] = summand
+    
+    return theta
+
+@jit(nopython=True)
+def get_T_variance(theta_one, theta_two, C_one, C_two, n1, n2):
+    dim = C_one.shape[0]
+    T = np.zeros((dim, dim))
+
+    for i in range(dim):
+        for j in range(i, dim):
+            top = np.power((C_one[i,j] - C_two[i,j]), 2)
+            bottom = (theta_one[i,j]*(1/n1)) + (theta_two[i,j]*(1/n2))
+            T[i,j] = top/bottom
+    
+    return T
+
+
+def apply_cai_variance_windowed(args, data):
+    global_test_vals = []
+
+    for i in tqdm(range(0, data.shape[0]-2*args.window_size, args.step_size)):
+        data_window = data[i:i+2*args.window_size, :]
+        middle = data_window.shape[0]//2
+        X_data = data_window[:middle, :]
+        Y_data = data_window[middle:, :]
+        X_cov = np.cov(X_data.T, bias=True)
+        Y_cov = np.cov(Y_data.T, bias=True)
+        X_theta = get_theta_variance(X_data, X_cov)
+        Y_theta = get_theta_variance(Y_data, Y_cov)
+        T = get_T_variance(X_theta, Y_theta, X_cov, Y_cov, n1=X_data.shape[0], n2=Y_data.shape[0])
+        M = np.max(T)
+        global_test_vals.append(M)
+        threshold = indicator_global_stat(M, p=data.shape[1], alpha=0.05)
+
+    
+    return np.array(global_test_vals)
+
     
 def perform_simulation_batch(args):
     # run a batch of 50 simulations/results with a specified simulation model
@@ -269,6 +363,34 @@ def perform_simulation_batch(args):
         data_full = resolve_data(args, save_path=save_path)
         print(data_full.shape)
         global_test_vals = apply_cai_algorithm_windowed(args, data_full)
+        print()
+        np.savetxt(os.path.join(save_path, "global_test_vals.csv"), global_test_vals, delimiter=',')
+    print("*******************************************************************************")
+    print("Done!")
+
+def perform_simulation_batch_variance(args):
+    # run a batch of 50 simulations/results with a specified simulation model
+    # only local test
+    # should do step_size = 1 because it's easier
+    # save everything to files - I guess
+    print("\n*******************************************************************************")
+    print("Performing Batch Simulation of {} with Dim = {}, Window = {}".format(args.sim_type, args.dim, args.window_size))
+    seeds_list = np.arange(50, 75)
+    sim_results_path = os.path.join(args.results_path, "simulation_results_cai")
+    if not os.path.isdir(sim_results_path):
+        os.mkdir(sim_results_path)
+    sim_type_path = os.path.join(sim_results_path, args.sim_type+"_"+str(args.dim))
+    print(sim_type_path)
+    if not os.path.isdir(sim_type_path):
+        os.mkdir(sim_type_path)
+    for seed in seeds_list:
+        np.random.seed(seed)
+        save_path = os.path.join(sim_type_path, str(seed))
+        if not os.path.isdir(save_path):
+            os.mkdir(save_path)
+        data_full = resolve_data(args, save_path=save_path)
+        print(data_full.shape)
+        global_test_vals = apply_cai_variance_windowed(args, data_full)
         print()
         np.savetxt(os.path.join(save_path, "global_test_vals.csv"), global_test_vals, delimiter=',')
     print("*******************************************************************************")
@@ -314,5 +436,7 @@ def main():
 if __name__ == '__main__':
     #main()
     args = get_args()
-    perform_simulation_batch(args)
+    #data = resolve_data(args)
+    #apply_cai_variance_windowed(args, data)
+    perform_simulation_batch_variance(args)
     #perform_single_run(args)

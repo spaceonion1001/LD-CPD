@@ -10,7 +10,7 @@ import pdb
 def likelihood_ratio_test(likelihood_null, likelihood_alternative, dof):
     delta_d = -2*(likelihood_null-likelihood_alternative)
     
-    return delta_d, chi2.pdf(delta_d, dof)
+    return delta_d#, chi2.pdf(delta_d, dof)
 
 def apply_fdr_correction(p_vals_all, alpha=0.05):
     corrected_p_vals_all = []
@@ -34,14 +34,21 @@ def lasso_likelihood(alphas, H_s, C, lam=1e-2, include_l1=False):
     else:
         return np.log(np.linalg.det(psi_hat)) - np.trace(psi_hat@C)
 
+@jit(nopython=True)
 def full_likelihood(alphas, H_s, C, N, lam=1e-2, include_l1=False):
     P = C.shape[0]
-    psi_hat = sum([alphas[i]*H_s[i] for i in range(H_s.shape[0])])
+    #psi_hat = sum([alphas[i]*H_s[i] for i in range(H_s.shape[0])])
+    psi_hat = np.sum(np.expand_dims(alphas, 1)*H_s, 0)
     psi_hat = symmetrize_from_vector(psi_hat, P)
-    assert is_pos_def(psi_hat), pdb.set_trace()
-    l1_penalty = sum([np.abs(psi_hat[i, j])
-                  for i in range(C.shape[0])
-                  for j in range(C.shape[1]) if i != j])
+    #assert is_pos_def(psi_hat)#, pdb.set_trace()
+    # l1_penalty = np.sum([np.abs(psi_hat[i, j])
+    #               for i in range(C.shape[0])
+    #               for j in range(C.shape[1]) if i != j])
+    l1_penalty = 0
+    for i in range(C.shape[0]):
+        for j in range(C.shape[1]):
+            if i != j:
+                l1_penalty += np.abs(psi_hat[i,j])
     
     if include_l1:
         likelihood = np.log(np.linalg.det(psi_hat)) - np.trace(psi_hat@C) - lam*l1_penalty - P*np.log(2*np.pi)
@@ -147,15 +154,14 @@ def LRT_individual_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=5
         test_stats_m = []
         p_vals_m = []
         # iterate over each coefficient
-        for i in range(M):
-
+        for k in range(M):
             ####################################
             # alpha_i_change_pre = optimize_single_coeff(coeffs_hat_total, H_s, C_one, coeff_idx=i,
             #                                            lam=lam)
             # alpha_i_change_post = optimize_single_coeff(coeffs_hat_total, H_s, C_two, coeff_idx=i,
             #                                             lam=lam)
-            alpha_i_change_pre = optimize_coeffs_first_order_single(coeffs_hat_total, H_s, C_one, lam=lam, beta=beta, iters=iters, optim_indx=i, t=t)
-            alpha_i_change_post = optimize_coeffs_first_order_single(coeffs_hat_total, H_s, C_two, lam=lam, beta=beta, iters=iters, optim_indx=i, t=t)
+            alpha_i_change_pre = optimize_coeffs_first_order_single(coeffs_hat_total, H_s, C_one, lam=lam, beta=beta, iters=iters, optim_indx=k, t=t)
+            alpha_i_change_post = optimize_coeffs_first_order_single(coeffs_hat_total, H_s, C_two, lam=lam, beta=beta, iters=iters, optim_indx=k, t=t)
             ####################################
             
             # likelihood on pre data, alpha_one change
@@ -167,16 +173,16 @@ def LRT_individual_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=5
             # total likelihood alt first coeff
             alt_likelihood_alpha_i = alt_likelihood_alpha_i_pre + alt_likelihood_alpha_i_post
             
-            test_stat_i, p_val_i = likelihood_ratio_test(null_likelihood, 
-                                                         alt_likelihood_alpha_i, 2)
+            test_stat_i = likelihood_ratio_test(null_likelihood, 
+                                                alt_likelihood_alpha_i, 2)
             test_stats_m.append(test_stat_i)
-            p_vals_m.append(p_val_i)
+           # p_vals_m.append(p_val_i)
             
         lrt_vals.append(test_stats_m)
-        p_vals.append(p_vals_m)
+        #p_vals.append(p_vals_m)
     
     # return arrays with shape (num_tests, M)
-    return np.array(lrt_vals), np.array(p_vals)
+    return np.array(lrt_vals)#, np.array(p_vals)
 
 
 def calc_likelihood_covariance(data, C):
