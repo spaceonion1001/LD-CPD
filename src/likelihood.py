@@ -10,7 +10,7 @@ import pdb
 def likelihood_ratio_test(likelihood_null, likelihood_alternative, dof):
     delta_d = -2*(likelihood_null-likelihood_alternative)
     
-    return delta_d#, chi2.pdf(delta_d, dof)
+    return delta_d, chi2.pdf(delta_d, dof)
 
 def apply_fdr_correction(p_vals_all, alpha=0.05):
     corrected_p_vals_all = []
@@ -173,16 +173,16 @@ def LRT_individual_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=5
             # total likelihood alt first coeff
             alt_likelihood_alpha_i = alt_likelihood_alpha_i_pre + alt_likelihood_alpha_i_post
             
-            test_stat_i = likelihood_ratio_test(null_likelihood, 
+            test_stat_i, p_val_i = likelihood_ratio_test(null_likelihood, 
                                                 alt_likelihood_alpha_i, 2)
             test_stats_m.append(test_stat_i)
-           # p_vals_m.append(p_val_i)
+            p_vals_m.append(p_val_i)
             
         lrt_vals.append(test_stats_m)
-        #p_vals.append(p_vals_m)
+        p_vals.append(p_vals_m)
     
     # return arrays with shape (num_tests, M)
-    return np.array(lrt_vals)#, np.array(p_vals)
+    return np.array(lrt_vals), np.array(p_vals)
 
 
 def calc_likelihood_covariance(data, C):

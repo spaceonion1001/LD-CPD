@@ -51,8 +51,25 @@ def resolve_data(args, save_path=None):
             return scale_data(changepoint_cai_model_one(dim=args.dim, N=args.N, save_path=save_path))
         elif args.sim_type == 'cai_model_three':
             return scale_data(changepoint_cai_model_three(dim=args.dim, N=args.N, save_path=save_path))
+        elif args.sim_type == 'orthogonal_no_change':
+            return sim_changepoint_mv_normal_orthogonal_no_change(sim_scale=args.sim_scale, M=args.M, dim=args.dim, N=args.N, save_path=save_path)[1].T
+        elif args.sim_type == 'cholesky_no_change':
+            return scale_data(sim_changepoint_mv_normal_cholesky_no_change(dim=args.dim, N=args.N, num_coeffs_change=args.num_coeffs_change, scale=args.sim_scale, save_path=save_path))
+        elif args.sim_type == 'cai_model_one_no_change':
+            return scale_data(changepoint_cai_model_one_no_change(dim=args.dim, N=args.N, save_path=save_path))
+        elif args.sim_type == 'cai_model_three_no_change':
+            return scale_data(changepoint_cai_model_three_no_change(dim=args.dim, N=args.N, save_path=save_path))
+        elif args.sim_type == 'sparse_cholesky':
+            return scale_data(sim_changepoint_mv_normal_cholesky(dim=args.dim, N=args.N, num_coeffs_change=args.num_coeffs_change, scale=args.sim_scale, save_path=save_path, sparse=True))
+        elif args.sim_type == 'sparse_cholesky_no_change':
+            return scale_data(sim_changepoint_mv_normal_cholesky_no_change(dim=args.dim, N=args.N, num_coeffs_change=args.num_coeffs_change, scale=args.sim_scale, save_path=save_path, sparse=True))
+        elif args.sim_type == 'cai_model_four':
+            return scale_data(changepoint_cai_model_four(dim=args.dim, N=args.N, save_path=save_path))
+        elif args.sim_type == 'cai_model_four_no_change':
+            return scale_data(changepoint_cai_model_four_no_change(dim=args.dim, N=args.N, save_path=save_path))
         else:
-            return sim_changepoint_mv_normal_no_decomp(dim=args.dim, N=args.N, num_coeffs_change=1, scale=args.sim_scale, save_path=save_path).T
+            print("Incorrect Simulation")
+            exit(0)
     else:
         if args.data == 'alaska':
             return load_alaska_data(args)
@@ -337,7 +354,7 @@ def apply_cai_variance_windowed(args, data):
         threshold = indicator_global_stat(M, p=data.shape[1], alpha=0.05)
 
     
-    return np.array(global_test_vals)
+    return np.array(global_test_vals), T
 
     
 def perform_simulation_batch(args):
@@ -403,6 +420,75 @@ def perform_single_run(args):
     plt.plot(global_test_vals)
     plt.show()
 
+def precision_recall_sims(args):
+    print("***************************")
+    print("Performing Prec/Recall Simulations")
+    args.N = 101
+    args.window_size = 100
+    args.step_size = 2
+    args.sim = 1
+    simulation_prefixes = ['cai_model_one', 'cai_model_three', 
+                        'orthogonal', 'cholesky', 'sparse_cholesky', 'cai_model_four']
+    no_change_prefixes = ['cai_model_one_no_change', 'cai_model_three_no_change', 
+                        'orthogonal_no_change', 'cholesky_no_change', 'sparse_cholesky_no_change', 'cai_model_four_no_change']
+    simulation_dims = ['_6', '_10', '_15', '_20', '_30', '_50', '_100']
+    M_s_non_orthog = [2, 3, 4, 6, 8, 10, 20]
+    M_s_orthog = [2, 2, 3, 4, 5, 10, 20]
+    sim_results_path = os.path.join(args.results_path, "simulation_results_precision_cai")
+    seeds = np.arange(50, 100)
+    if not os.path.isdir(sim_results_path):
+        os.mkdir(sim_results_path)
+    for sim_type in simulation_prefixes:
+        args.sim_type = sim_type
+        for k, dim in enumerate(simulation_dims):
+            if 'orthogonal' in args.sim_type:
+                args.M = M_s_orthog[k]
+            else:
+                args.M = M_s_non_orthog[k]
+            args.dim = int(dim[1:])
+            sim_type_path = os.path.join(sim_results_path, args.sim_type+str(dim))
+            if not os.path.isdir(sim_type_path):
+                os.mkdir(sim_type_path)
+            print(sim_type_path)
+            for seed in seeds:
+                np.random.seed(seed)
+                save_path = os.path.join(sim_type_path, str(seed))
+                if not os.path.isdir(save_path):
+                    os.mkdir(save_path)
+                data_full = resolve_data(args, save_path=save_path)
+                print(data_full.shape)
+                global_test_vals, T = apply_cai_variance_windowed(args, data_full)
+                print()
+                np.savetxt(os.path.join(save_path, "global_test_vals.csv"), global_test_vals, delimiter=',')
+                np.savetxt(os.path.join(save_path, "local_test_vals.csv"), T, delimiter=',')
+
+    for sim_type in no_change_prefixes:
+        args.sim_type = sim_type
+        for k, dim in enumerate(simulation_dims):
+            if 'orthogonal' in args.sim_type:
+                args.M = M_s_orthog[k]
+            else:
+                args.M = M_s_non_orthog[k]
+            args.dim = int(dim[1:])
+            sim_type_path = os.path.join(sim_results_path, args.sim_type+str(dim))
+            if not os.path.isdir(sim_type_path):
+                os.mkdir(sim_type_path)
+            print(sim_type_path)
+            for seed in seeds:
+                np.random.seed(seed)
+                save_path = os.path.join(sim_type_path, str(seed))
+                if not os.path.isdir(save_path):
+                    os.mkdir(save_path)
+                data_full = resolve_data(args, save_path=save_path)
+                print(data_full.shape)
+                global_test_vals, T = apply_cai_variance_windowed(args, data_full)
+                print()
+                np.savetxt(os.path.join(save_path, "global_test_vals.csv"), global_test_vals, delimiter=',')
+                np.savetxt(os.path.join(save_path, "local_test_vals.csv"), T, delimiter=',')
+    
+    print("***************************")
+    print("Done!")
+
 
 def main():
     args = get_args()
@@ -438,5 +524,6 @@ if __name__ == '__main__':
     args = get_args()
     #data = resolve_data(args)
     #apply_cai_variance_windowed(args, data)
-    perform_simulation_batch_variance(args)
+    #perform_simulation_batch_variance(args)
+    precision_recall_sims(args)
     #perform_single_run(args)
