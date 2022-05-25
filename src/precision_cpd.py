@@ -5,6 +5,7 @@ import glob
 import os
 import matplotlib.pyplot as plt
 import seaborn as sns
+from torch import zero_
 sns.set()
 
 from sklearn.covariance import graphical_lasso, GraphicalLasso, GraphicalLassoCV
@@ -37,13 +38,26 @@ class PrecisionCPD:
         self.iters = args.iters
         self.beta = args.beta
         self.t = args.t
+        self.eps_matrices = args.eps_matrices
+        self.num_eps_matrices = args.num_eps_mats
 
     # data assumed to be cleaned and normalized, passed in shape: [T, dim]
     def fit_glasso(self, data):
         self.glasso = GraphicalLasso(max_iter=100, alpha=self.lam, tol=1e-5, verbose=False).fit(data)
+        #self.inv_cov = inv(np.cov(data.T, bias=True))
+        #self.inv_cov += np.eye(self.inv_cov.shape[0])*np.abs(np.linalg.eig(self.inv_cov)[0].min()) + 0.05
+        #assert(is_pos_def(self.inv_cov))
 
     def construct_basis_matrices(self):
         precision = self.glasso.precision_.copy()
+        #precision = self.inv_cov
+
+        #####################
+        zero_indices_prec = np.where(precision == 0.0)
+        zero_indices_prec_tuples = [(zero_indices_prec[0][i], zero_indices_prec[1][i]) for i in range(len(zero_indices_prec[0]))]
+        zero_indices_prec_tuples = list({*map(tuple, map(sorted, zero_indices_prec_tuples))})
+        #####################
+
         self.dim = precision.shape[0]
         clust_dist_mat = np.abs(precision)
         np.fill_diagonal(clust_dist_mat, 0.0)
@@ -60,15 +74,38 @@ class PrecisionCPD:
                 for idx2 in idxs: # loop over indexes
                     A[idx][idx2] = precision[idx][idx2].copy() # set i,j entry to be the entry from precision matrix for given cluster
             if self.split_variance:
-                self.basis_matrices.append(vectorize_matrix(np.diag(np.diag(A))))
                 np.fill_diagonal(A, 0)
             self.basis_matrices.append(vectorize_matrix(A))
-        # if self.split_variance:
-        #     self.basis_matrices.append(vectorize_matrix(np.diag(np.diag(precision))))
-        self.basis_matrices = np.array(self.basis_matrices)
+        if self.split_variance:
+            self.basis_matrices.append(vectorize_matrix(np.diag(np.diag(precision))))
         
-        leftover_basis_matrix = precision - symmetrize_from_vector(self.basis_matrices.sum(axis=0), dim=self.dim)
+        basis_mats_backup = np.array(self.basis_matrices).copy()
+        #################
+        if bool(self.eps_matrices):
+            A = np.zeros(precision.shape)
+            counter = 0
+            for tup in zero_indices_prec_tuples:
+                i,j = tup
+                if counter < len(zero_indices_prec_tuples)//self.num_eps_matrices:
+                    A[i,j] = 1e-1
+                    A[j,i] = 1e-1
+                    counter += 1
+                else:
+                    A[i,j] = 1e-1
+                    A[j,i] = 1e-1
+                    self.basis_matrices.append(vectorize_matrix(A.copy()))
+                    A = np.zeros(precision.shape)
+                    counter = 0
+            if len(np.nonzero(A)[0]) > 0:
+                self.basis_matrices.append(vectorize_matrix(A.copy()))
+        #################
+
+        self.basis_matrices = np.array(self.basis_matrices)
+
+        #leftover_basis_matrix = precision - symmetrize_from_vector(self.basis_matrices.sum(axis=0), dim=self.dim)
+        leftover_basis_matrix = precision - symmetrize_from_vector(basis_mats_backup.sum(axis=0), dim=self.dim)
         self.basis_matrices_full = np.concatenate((self.basis_matrices, np.expand_dims(vectorize_matrix(leftover_basis_matrix), 0)), 0)
+
 
         assert is_pos_def(symmetrize_from_vector(self.basis_matrices_full.sum(axis=0), dim=self.dim)), "Not PosDef"
         assert is_pos_def(symmetrize_from_vector(self.basis_matrices.sum(axis=0), dim=self.dim)), "Not PosDef"

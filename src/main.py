@@ -27,7 +27,7 @@ def get_args():
     parser.add_argument('--results_path', type=str, default='/home/dink/Documents/Research/Correlation-Changepoint-Detection/results')
     parser.add_argument('--results_filename', type=str, default="lrt_results.csv")
     parser.add_argument('--basic_test', type=int, default=0)
-    parser.add_argument('--full_basis', type=int, default=1)
+    parser.add_argument('--full_basis', type=int, default=0)
     parser.add_argument('--local', type=int, default=1)
     parser.add_argument('--sim_type', type=str, default='cholesky')
     parser.add_argument('--sim_scale', type=float, default=1.5)
@@ -42,6 +42,8 @@ def get_args():
     parser.add_argument('--single_test', type=int, default=1)
     parser.add_argument('--num_coeffs_change', type=int, default=1)
     parser.add_argument('--prec_recall', type=int, default=0)
+    parser.add_argument('--eps_matrices', type=int, default=0)
+    parser.add_argument('--num_eps_mats', type=int, default=4)
     args = parser.parse_args()
 
     return args
@@ -90,7 +92,8 @@ def resolve_data(args, save_path=None):
         elif args.data == 'hjandrews':
             return load_hjandrews_data(args)
         elif args.data == 'holidayfarm':
-            return scale_data(load_holiday_farm_data(args))
+            # python src/main.py --sim 0 --data holidayfarm --eps_matrices 0 --lam 5e-2 --M 8 --full_basis 0 --single_test 1 --train_percent 0.2 --step_size 2 --num_eps_mats 2 --window_size 200 --save_test_stat 1
+            return scale_data(load_holiday_farm_data(args))[22000:-10000, :]
         elif args.data == 'stocks':
             # python src/main.py --window_size 100 --sim 0 --data stocks --step 1 --window_size 100 --lam 5e-1 --full_basis 0 --M 6 --train_percent 0.4 --split_variance 0
             # python src/main.py --window_size 100 --sim 0 --data stocks --step 1 --window_size 100 --lam 5e-1 --full_basis 0 --M 10 --train_percent 0.4 --split_variance 0
@@ -135,6 +138,7 @@ def perform_single_test(args):
             if bool(args.save_test_stat):
                 test_results = np.hstack([lrt_vals_all, p_vals_all])
                 np.savetxt(os.path.join(results_dir_path, args.results_filename), test_results, delimiter=',')
+                model.save_matrices_simulations(results_dir_path)
         # global test
         else:
             print("Global Test")
@@ -158,7 +162,7 @@ def perform_simulation_batch(args):
     # save everything to files - I guess
     print("\n*******************************************************************************")
     print("Performing Batch Simulation of {} with Dim = {}, M = {}, Scale = {}, Window = {}, Lam = {}".format(args.sim_type, args.dim, args.M, args.sim_scale, args.window_size, args.lam))
-    seeds_list = np.arange(50, 75)
+    seeds_list = np.arange(50, 60)
     sim_results_path = os.path.join(args.results_path, "simulation_results")
     if not os.path.isdir(sim_results_path):
         os.mkdir(sim_results_path)
@@ -177,7 +181,7 @@ def perform_simulation_batch(args):
         data_train = data_full[0:int(args.train_percent*len(data_full)), :]
         model.fit_glasso(data_train)
         model.construct_basis_matrices()
-        lrt_vals_all = model.perform_lrt_local(data_full.T)
+        lrt_vals_all, _ = model.perform_lrt_local(data_full.T)
         model.save_matrices_simulations(save_path)
         print()
         np.savetxt(os.path.join(save_path, "lrt_vals.csv"), lrt_vals_all, delimiter=',')
@@ -205,7 +209,7 @@ def precision_recall_sims(args):
     no_change_prefixes = ['cai_model_four_no_change']
     simulation_dims = ['_6', '_10', '_15', '_20', '_30', '_50', '_100']
     #M_s_non_orthog = [2, 3, 4, 6, 8, 10, 20]
-    M_s_non_orthog = [3, 4, 5, 8, 10, 14, 24]
+    M_s_non_orthog = [3, 4, 5, 8, 10, 15, 25]
     M_s_orthog = [2, 2, 3, 4, 5, 10, 20]
     sim_results_path = os.path.join(args.results_path, "simulation_results_precision")
     seeds = np.arange(50, 100)
@@ -226,10 +230,10 @@ def precision_recall_sims(args):
                 args.M = M_s_non_orthog[k]
             args.dim = int(dim[1:])
             if args.dim >= 50:
-                args.iters = 180
-                args.beta = 6e-3
+                args.iters = 200
+                args.beta = 5e-3
             else:
-                args.iters = 110
+                args.iters = 115
                 args.beta = 8e-3
             sim_type_path = os.path.join(sim_results_path, args.sim_type+str(dim))
             if not os.path.isdir(sim_type_path):
@@ -327,6 +331,9 @@ if __name__ == '__main__':
 # dim 50
 # python src/main.py --sim 1 --sim_type cai_model_three --dim 50 --window_size 100 --step_size 1 --lam 1e-1 --single_test 0 --N 500 --M 10 --t 1.0 --train_percent 0.4 --full_basis 1 --beta 6e-3
 # python src/main.py --sim 1 --sim_type cai_model_one --dim 50 --window_size 100 --step_size 1 --lam 1e-1 --single_test 0 --N 500 --M 10 --t 1.0 --train_percent 0.4 --full_basis 1 --beta 6e-3
+# dim 100
+# python src/main.py --single_test 0 --num_coeffs_change 2 --train_percent 0.4 --window_size 100 --step_size 1 --sim 1 --lam 8e-2 --N 200 --M 20 --full_basis 0 --dim 100 --sim_type cai_model_three
+# python src/main.py --single_test 0 --num_coeffs_change 2 --train_percent 0.4 --window_size 100 --step_size 1 --sim 1 --lam 8e-2 --N 200 --M 20 --full_basis 0 --dim 100 --sim_type cai_model_one
 
 
 # non cai models
@@ -348,5 +355,8 @@ if __name__ == '__main__':
 # dim 50
 # python src/main.py --sim 1 --sim_type orthogonal_mult_coeff --dim 50 --window_size 100 --step_size 1 --lam 1e-1 --single_test 0 --N 500 --M 10 --t 1.0 --train_percent 0.4 --full_basis 1 --beta 6e-3 --num_coeffs_change 2
 # python src/main.py --sim 1 --sim_type cholesky --dim 50 --window_size 100 --step_size 1 --lam 3e-1 --single_test 0 --N 500 --M 10 --t 1.0 --train_percent 0.45 --full_basis 1 --beta 6e-3 --num_coeffs_change 2
+# dim 100
+# python src/main.py --single_test 0 --num_coeffs_change 2 --train_percent 0.4 --window_size 100 --step_size 1 --sim 1 --lam 3e-1 --N 200 --M 15 --full_basis 0 --dim 100 --sim_type cholesky
+# python src/main.py --single_test 0 --num_coeffs_change 2 --train_percent 0.4 --window_size 100 --step_size 1 --sim 1 --lam 3e-1 --N 200 --M 10 --full_basis 0 --dim 100 --sim_type orthogonal
 
 

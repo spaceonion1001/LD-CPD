@@ -392,7 +392,7 @@ def perform_simulation_batch_variance(args):
     # save everything to files - I guess
     print("\n*******************************************************************************")
     print("Performing Batch Simulation of {} with Dim = {}, Window = {}".format(args.sim_type, args.dim, args.window_size))
-    seeds_list = np.arange(50, 75)
+    seeds_list = np.arange(50, 60)
     sim_results_path = os.path.join(args.results_path, "simulation_results_cai")
     if not os.path.isdir(sim_results_path):
         os.mkdir(sim_results_path)
@@ -407,8 +407,7 @@ def perform_simulation_batch_variance(args):
             os.mkdir(save_path)
         data_full = resolve_data(args, save_path=save_path)
         print(data_full.shape)
-        global_test_vals = apply_cai_variance_windowed(args, data_full)
-        print()
+        global_test_vals, local_test_vals = apply_cai_variance_windowed(args, data_full)
         np.savetxt(os.path.join(save_path, "global_test_vals.csv"), global_test_vals, delimiter=',')
     print("*******************************************************************************")
     print("Done!")
@@ -524,6 +523,6 @@ if __name__ == '__main__':
     args = get_args()
     #data = resolve_data(args)
     #apply_cai_variance_windowed(args, data)
-    #perform_simulation_batch_variance(args)
-    precision_recall_sims(args)
+    perform_simulation_batch_variance(args)
+    #precision_recall_sims(args)
     #perform_single_run(args)
