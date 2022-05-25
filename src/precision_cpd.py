@@ -61,8 +61,10 @@ class PrecisionCPD:
         self.dim = precision.shape[0]
         clust_dist_mat = np.abs(precision)
         np.fill_diagonal(clust_dist_mat, 0.0)
+        ###########
         clust_dist_mat = (clust_dist_mat.max()+1e-5) - clust_dist_mat
         np.fill_diagonal(clust_dist_mat, 0.0)
+        ###########
         pairwise_distances = sch.distance.pdist(clust_dist_mat)
         Z = linkage(pairwise_distances, method='average')
         cutree1 = hierarchy.cut_tree(Z, n_clusters=self.M).squeeze()

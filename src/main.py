@@ -332,8 +332,8 @@ if __name__ == '__main__':
 # python src/main.py --sim 1 --sim_type cai_model_three --dim 50 --window_size 100 --step_size 1 --lam 1e-1 --single_test 0 --N 500 --M 10 --t 1.0 --train_percent 0.4 --full_basis 1 --beta 6e-3
 # python src/main.py --sim 1 --sim_type cai_model_one --dim 50 --window_size 100 --step_size 1 --lam 1e-1 --single_test 0 --N 500 --M 10 --t 1.0 --train_percent 0.4 --full_basis 1 --beta 6e-3
 # dim 100
-# python src/main.py --single_test 0 --num_coeffs_change 2 --train_percent 0.4 --window_size 100 --step_size 1 --sim 1 --lam 8e-2 --N 200 --M 20 --full_basis 0 --dim 100 --sim_type cai_model_three
-# python src/main.py --single_test 0 --num_coeffs_change 2 --train_percent 0.4 --window_size 100 --step_size 1 --sim 1 --lam 8e-2 --N 200 --M 20 --full_basis 0 --dim 100 --sim_type cai_model_one
+# python src/main.py --single_test 0 --num_coeffs_change 2 --train_percent 0.4 --window_size 100 --step_size 1 --sim 1 --lam 8e-2 --N 300 --M 20 --full_basis 0 --dim 100 --sim_type cai_model_three
+# python src/main.py --single_test 0 --num_coeffs_change 2 --train_percent 0.4 --window_size 100 --step_size 1 --sim 1 --lam 8e-2 --N 300 --M 20 --full_basis 0 --dim 100 --sim_type cai_model_one
 
 
 # non cai models
@@ -356,7 +356,9 @@ if __name__ == '__main__':
 # python src/main.py --sim 1 --sim_type orthogonal_mult_coeff --dim 50 --window_size 100 --step_size 1 --lam 1e-1 --single_test 0 --N 500 --M 10 --t 1.0 --train_percent 0.4 --full_basis 1 --beta 6e-3 --num_coeffs_change 2
 # python src/main.py --sim 1 --sim_type cholesky --dim 50 --window_size 100 --step_size 1 --lam 3e-1 --single_test 0 --N 500 --M 10 --t 1.0 --train_percent 0.45 --full_basis 1 --beta 6e-3 --num_coeffs_change 2
 # dim 100
-# python src/main.py --single_test 0 --num_coeffs_change 2 --train_percent 0.4 --window_size 100 --step_size 1 --sim 1 --lam 3e-1 --N 200 --M 15 --full_basis 0 --dim 100 --sim_type cholesky
-# python src/main.py --single_test 0 --num_coeffs_change 2 --train_percent 0.4 --window_size 100 --step_size 1 --sim 1 --lam 3e-1 --N 200 --M 10 --full_basis 0 --dim 100 --sim_type orthogonal
+# python src/main.py --single_test 0 --num_coeffs_change 2 --train_percent 0.4 --window_size 100 --step_size 1 --sim 1 --lam 3e-1 --N 300 --M 15 --full_basis 0 --dim 100 --sim_type cholesky
+# python src/main.py --single_test 0 --num_coeffs_change 2 --train_percent 0.4 --window_size 100 --step_size 1 --sim 1 --lam 3e-1 --N 300 --M 10 --full_basis 0 --dim 100 --sim_type orthogonal
+# --results_path /nfs/hpc/share/dinkinst/Correlation-Changepoint-Detection/results
+
 
 
