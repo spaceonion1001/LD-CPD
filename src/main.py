@@ -10,6 +10,9 @@ sns.set()
 from precision_cpd import PrecisionCPD
 from simulate import *
 from utils import difference_data, load_alaska_data, scale_data, load_hjandrews_data, create_fig_dir, load_holiday_farm_data, load_tohoku_data, load_stock_market_data
+import time
+from datetime import timedelta
+
 
 def get_args():
     parser = argparse.ArgumentParser()
@@ -44,6 +47,7 @@ def get_args():
     parser.add_argument('--prec_recall', type=int, default=0)
     parser.add_argument('--eps_matrices', type=int, default=0)
     parser.add_argument('--num_eps_mats', type=int, default=4)
+    parser.add_argument('--runtimes', type=int, default=0)
     args = parser.parse_args()
 
     return args
@@ -205,13 +209,13 @@ def precision_recall_sims(args):
     #                     'orthogonal', 'cholesky']
     # no_change_prefixes = ['cai_model_one_no_change', 'cai_model_three_no_change', 
     #                     'orthogonal_no_change', 'cholesky_no_change']
-    simulation_prefixes = ['cai_model_four']
-    no_change_prefixes = ['cai_model_four_no_change']
+    simulation_prefixes = ['cholesky']
+    no_change_prefixes = ['cholesky_no_change']
     simulation_dims = ['_6', '_10', '_15', '_20', '_30', '_50', '_100']
     #M_s_non_orthog = [2, 3, 4, 6, 8, 10, 20]
     M_s_non_orthog = [3, 4, 5, 8, 10, 15, 25]
     M_s_orthog = [2, 2, 3, 4, 5, 10, 20]
-    sim_results_path = os.path.join(args.results_path, "simulation_results_precision")
+    sim_results_path = os.path.join(args.results_path, "simulation_results_precision_cholesky")
     seeds = np.arange(50, 100)
     if not os.path.isdir(sim_results_path):
         os.mkdir(sim_results_path)
@@ -285,12 +289,118 @@ def precision_recall_sims(args):
     print("***************************")
     print("Done!")
 
+def precision_recall_sims_runtimes(args):
+    print("***************************")
+    print("Performing Runtime Calculation")
+    args.full_basis = 0
+    args.split_variance = 0
+    args.N = 101
+    args.window_size = 100
+    args.step_size = 2
+    args.sim = 1
+    args.lam = 1e-1
+    args.train_percent = 0.4
+    # simulation_prefixes = ['cai_model_one', 'cai_model_three', 
+    #                     'orthogonal', 'cholesky']
+    # no_change_prefixes = ['cai_model_one_no_change', 'cai_model_three_no_change', 
+    #                     'orthogonal_no_change', 'cholesky_no_change']
+    simulation_prefixes = ['cai_model_four']
+    #no_change_prefixes = ['cai_model_four_no_change']
+    no_change_prefixes = []
+    simulation_dims = ['_6', '_10', '_15', '_20', '_30', '_50', '_100']
+    #M_s_non_orthog = [2, 3, 4, 6, 8, 10, 20]
+    M_s_non_orthog = [3, 4, 5, 8, 10, 15, 25]
+    M_s_orthog = [2, 2, 3, 4, 5, 10, 20]
+    sim_results_path = os.path.join(args.results_path, "simulation_results_precision")
+    seeds = np.arange(50, 60)
+    if not os.path.isdir(sim_results_path):
+        os.mkdir(sim_results_path)
+    runtimes = []
+    for sim_type in simulation_prefixes:
+        args.sim_type = sim_type
+        for k, dim in enumerate(simulation_dims):
+            if 'orthogonal' in args.sim_type:
+                args.M = M_s_orthog[k]
+                args.split_variance = 0
+                args.full_basis = 0
+            # elif 'cholesky' in args.sim_type:
+            #     args.split_variance = 1
+            #     args.full_basis = 1
+            #     args.M = M_s_non_orthog[k]
+            else:
+                args.M = M_s_non_orthog[k]
+            args.dim = int(dim[1:])
+            if args.dim >= 50:
+                args.iters = 200
+                args.beta = 5e-3
+            else:
+                args.iters = 115
+                args.beta = 8e-3
+            sim_type_path = os.path.join(sim_results_path, args.sim_type+str(dim))
+            if not os.path.isdir(sim_type_path):
+                os.mkdir(sim_type_path)
+            print(sim_type_path)
+            curr_runtimes = []
+            for seed in seeds:
+                np.random.seed(seed)
+                save_path = os.path.join(sim_type_path, str(seed))
+                if not os.path.isdir(save_path):
+                    os.mkdir(save_path)
+                data_full = resolve_data(args, save_path=None)
+                print(data_full.shape)
+                start_time = time.time()
+                model = PrecisionCPD(args)
+                data_train = data_full[0:int(args.train_percent*len(data_full)), :]
+                model.fit_glasso(data_train)
+                model.construct_basis_matrices()
+                lrt_vals_all, _ = model.perform_lrt_local(data_full.T)
+                end_time = time.time()
+                curr_runtimes.append(end_time-start_time)
+                #model.save_matrices_simulations(save_path)
+                print()
+                #np.savetxt(os.path.join(save_path, "lrt_vals.csv"), lrt_vals_all, delimiter=',')
+            runtimes.append(np.mean(curr_runtimes))
+    for sim_type in no_change_prefixes:
+        args.sim_type = sim_type
+        for k, dim in enumerate(simulation_dims):
+            if 'orthogonal' in args.sim_type:
+                args.M = M_s_orthog[k]
+            else:
+                args.M = M_s_non_orthog[k]
+            args.dim = int(dim[1:])
+            sim_type_path = os.path.join(sim_results_path, args.sim_type+str(dim))
+            if not os.path.isdir(sim_type_path):
+                os.mkdir(sim_type_path)
+            print(sim_type_path)
+            for seed in seeds:
+                np.random.seed(seed)
+                save_path = os.path.join(sim_type_path, str(seed))
+                if not os.path.isdir(save_path):
+                    os.mkdir(save_path)
+                data_full = resolve_data(args, save_path=save_path)
+                print(data_full.shape)
+                start_time = time.monotonic()
+                model = PrecisionCPD(args)
+                data_train = data_full[0:int(args.train_percent*len(data_full)), :]
+                model.fit_glasso(data_train)
+                model.construct_basis_matrices()
+                lrt_vals_all, _ = model.perform_lrt_local(data_full.T)
+                #model.save_matrices_simulations(save_path)
+                print()
+                #np.savetxt(os.path.join(save_path, "lrt_vals.csv"), lrt_vals_all, delimiter=',')
+    np.savetxt(os.path.join(args.results_path, 'runtimes/runtimes_ours.csv'), np.array(runtimes), delimiter=',')
+    print("***************************")
+    print("Done!")
+
+
 if __name__ == '__main__':
     args = get_args()
     if bool(args.single_test):
         perform_single_test(args)
     elif bool(args.prec_recall):
         precision_recall_sims(args)
+    elif bool(args.runtimes):
+        precision_recall_sims_runtimes(args)
     else:
         perform_simulation_batch(args)
 

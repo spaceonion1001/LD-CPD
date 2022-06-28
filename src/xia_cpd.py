@@ -11,6 +11,32 @@ from scipy.stats import norm
 from simulate import *
 from utils import difference_data, load_alaska_data, scale_data, load_hjandrews_data, create_fig_dir, load_holiday_farm_data, load_tohoku_data, load_stock_market_data
 from numba import jit
+import time
+from datetime import timedelta
+from scipy.optimize import linprog
+import rpy2
+import rpy2.robjects as robjects
+import rpy2.robjects.numpy2ri
+from rpy2.robjects.packages import importr
+import rpy2.robjects.packages as rpackages
+
+r = robjects.r
+rpy2.robjects.numpy2ri.activate()
+utils = importr('utils')
+utils.chooseCRANmirror(ind=1)
+# R package names
+packnames = ('fastclime', 'scalreg')
+
+# R vector of strings
+from rpy2.robjects.vectors import StrVector
+
+# Selectively install what needs to be install.
+# We are fancy, just because we can.
+names_to_install = [x for x in packnames if not rpackages.isinstalled(x)]
+if len(names_to_install) > 0:
+    utils.install_packages(StrVector(names_to_install))
+clime = importr('fastclime')
+scalreg = importr('scalreg')
 
 import argparse
 
@@ -87,7 +113,6 @@ def resolve_data(args, save_path=None):
             print("Error: Dataset not understood")
             exit(0)
 
-
 def loss_func(x, data, i=0, lam=1e-4):
     N = data.shape[0]
     X_m_i = np.delete(data, i, axis=1)
@@ -118,31 +143,67 @@ def perform_regression(data, kd=2):
     y_log_dim = np.log(dim)/Y_data.shape[0]
     beta_hats_x = []
     beta_hats_y = []
+    residuals_x = np.zeros((X_data.shape[0], dim))
+    residuals_y = np.zeros((Y_data.shape[0], dim))
+    beta_hats_x = np.zeros((dim, dim-1))
+    beta_hats_y = np.zeros((dim, dim-1))
     for i in range(dim):
         X_m_i = np.delete(X_data, i, axis=1)
-        X_i = X_data[:, i]
-        sig_i_i_x = np.var(X_i)
+        y_i = X_data[:, i]
+        sig_i_i_x = np.var(y_i)
         x_lam = kd*np.power(sig_i_i_x*x_log_dim, 0.5)
-        D_i_x = np.power(np.diag(np.cov(X_m_i.T, bias=False)), -0.5)
-        #res_x_i = minimize(loss_func, x_0, method='BFGS', args=(X_data, i, x_lam)).x
-        res_x_i = least_squares(loss_func, x_0, args=(X_data, i, x_lam)).x
-        beta_hat_x_i = D_i_x*res_x_i
+        nrow, ncol = X_m_i.shape
+        X = r.matrix(X_m_i, nrow=nrow, ncol=ncol)
+        y_i = robjects.FloatVector(X_data[:, i])
+        reg_soln = scalreg.scalreg(X, y_i, lam0=x_lam)
+        reg_soln_dict = dict(zip(reg_soln.names, list(reg_soln)))
+        residuals_x[:, i] = np.array(reg_soln_dict['residuals'])
+        beta_hats_x_curr = np.array(reg_soln_dict['coefficients'])
+        beta_hats_x[i, :] = beta_hats_x_curr
 
         Y_m_i = np.delete(Y_data, i, axis=1)
-        Y_i = Y_data[:, i]
-        sig_i_i_y = np.var(Y_i)
+        yy_i = Y_data[:, i]
+        sig_i_i_y = np.var(yy_i)
         y_lam = kd*np.power(sig_i_i_y*y_log_dim, 0.5)
-        D_i_y = np.power(np.diag(np.cov(Y_m_i.T, bias=False)), -0.5)
-        #res_y_i = minimize(loss_func, x_0, method='BFGS', args=(Y_data, i, y_lam)).x
-        res_y_i = least_squares(loss_func, x_0, args=(Y_data, i, y_lam)).x
-        beta_hat_y_i = D_i_y*res_y_i
+        nrow, ncol = Y_m_i.shape
+        Y = r.matrix(Y_m_i, nrow=nrow, ncol=ncol)
+        yy_i = robjects.FloatVector(Y_data[:, i])
+        reg_soln = scalreg.scalreg(Y, yy_i, lam0=y_lam)
+        reg_soln_dict = dict(zip(reg_soln.names, list(reg_soln)))
+        residuals_y[:, i] = np.array(reg_soln_dict['residuals'])
+        beta_hats_y_curr = np.array(reg_soln_dict['coefficients'])
+        beta_hats_y[i, :] = beta_hats_y_curr
 
-        beta_hats_x.append(beta_hat_x_i)
-        beta_hats_y.append(beta_hat_y_i)
+    return residuals_x, residuals_y, beta_hats_x, beta_hats_y
+
+
+    #print(X_data.shape, r.dim(X))
+    #print(scalreg.scalreg(X))
+    # for i in range(dim):
+    #     X_m_i = np.delete(X_data, i, axis=1)
+    #     X_i = X_data[:, i]
+    #     sig_i_i_x = np.var(X_i)
+    #     x_lam = kd*np.power(sig_i_i_x*x_log_dim, 0.5)
+    #     D_i_x = np.power(np.diag(np.cov(X_m_i.T, bias=False)), -0.5)
+    #     res_x_i = minimize(loss_func, x_0, method='Nelder-Mead', args=(X_data, i, x_lam)).x
+    #     #res_x_i = least_squares(loss_func, x_0, args=(X_data, i, x_lam)).x
+    #     beta_hat_x_i = D_i_x*res_x_i
+
+    #     Y_m_i = np.delete(Y_data, i, axis=1)
+    #     Y_i = Y_data[:, i]
+    #     sig_i_i_y = np.var(Y_i)
+    #     y_lam = kd*np.power(sig_i_i_y*y_log_dim, 0.5)
+    #     D_i_y = np.power(np.diag(np.cov(Y_m_i.T, bias=False)), -0.5)
+    #     #res_y_i = minimize(loss_func, x_0, method='BFGS', args=(Y_data, i, y_lam)).x
+    #     res_y_i = least_squares(loss_func, x_0, args=(Y_data, i, y_lam)).x
+    #     beta_hat_y_i = D_i_y*res_y_i
+
+    #     beta_hats_x.append(beta_hat_x_i)
+    #     beta_hats_y.append(beta_hat_y_i)
     
     # return should be (dim, dim-1) shape
     # since we need one regression for each dim, and is vector size of dim-1
-    return np.array(beta_hats_x), np.array(beta_hats_y)
+    #return np.array(beta_hats_x), np.array(beta_hats_y)
 
 @jit(nopython=True)
 def numba_mean_col(X):
@@ -267,9 +328,10 @@ def apply_cai_algorithm_windowed(args, data):
     global_test_vals = []
     for i in tqdm(range(0, data.shape[0]-2*args.window_size, args.step_size)):
         data_window = data[i:i+2*args.window_size, :]
-        beta_hats_x, beta_hats_y = perform_regression(data)
+        #beta_hats_x, beta_hats_y = perform_regression(data)
+        residuals_x, residuals_y, beta_hats_x, beta_hats_y  = perform_regression(data)
         middle = data_window.shape[0]//2
-        residuals_x = calculate_residuals(beta_hats_x, data_window[:middle, :])
+        #residuals_x = calculate_residuals(beta_hats_x, data_window[:middle, :])
         residuals_x_cov_corrected = bias_corrected_residual_covariance(residuals_x, beta_hats_x)
         T_x = calculate_T(residuals_x_cov_corrected)
         theta_x = calculate_theta(residuals_x_cov_corrected, beta_hats_x, N=data_window[:middle, :].shape[0])
@@ -282,6 +344,7 @@ def apply_cai_algorithm_windowed(args, data):
         W = calculate_standardized_stat(T_x, T_y, theta_x, theta_y)
         M = calculate_global_stat(W)
         threshold = indicator_global_stat(M, p=data.shape[1], alpha=0.01)
+        print(M)
 
         # print(M)
         # print(threshold)
@@ -415,7 +478,7 @@ def perform_simulation_batch_variance(args):
 def perform_single_run(args):
     data_full = resolve_data(args, save_path=None)
     print(data_full.shape)
-    global_test_vals = apply_cai_algorithm_windowed(args, data_full)
+    global_test_vals, _ = apply_cai_algorithm_windowed(args, data_full)
     plt.plot(global_test_vals)
     plt.show()
 
@@ -558,6 +621,85 @@ def precision_recall_sims_precision(args):
     print("Done!")
 
 
+def precision_recall_sims_precision_runtimes(args):
+    print("***************************")
+    print("Performing Runtime Simulations")
+    args.N = 101
+    args.window_size = 100
+    args.step_size = 2
+    args.sim = 1
+    # simulation_prefixes = ['cai_model_one', 'cai_model_three', 
+    #                     'orthogonal', 'cholesky']
+    # no_change_prefixes = ['cai_model_one_no_change', 'cai_model_three_no_change', 
+    #                     'orthogonal_no_change', 'cholesky_no_change']
+    simulation_prefixes = ['cai_model_four']
+    no_change_prefixes = []
+    simulation_dims = ['_6', '_10', '_15', '_20', '_30', '_50', '_100']
+    #simulation_dims = ['_100']
+    M_s_non_orthog = [2, 3, 4, 6, 8, 10, 20]
+    M_s_orthog = [2, 2, 3, 4, 5, 10, 20]
+    sim_results_path = os.path.join(args.results_path, "simulation_results_precision_cai")
+    seeds = np.arange(50, 60)
+    if not os.path.isdir(sim_results_path):
+        os.mkdir(sim_results_path)
+    runtimes = []
+    for sim_type in simulation_prefixes:
+        args.sim_type = sim_type
+        for k, dim in enumerate(simulation_dims):
+            if 'orthogonal' in args.sim_type:
+                args.M = M_s_orthog[k]
+            else:
+                args.M = M_s_non_orthog[k]
+            args.dim = int(dim[1:])
+            sim_type_path = os.path.join(sim_results_path, args.sim_type+str(dim))
+            if not os.path.isdir(sim_type_path):
+                os.mkdir(sim_type_path)
+            print(sim_type_path)
+            curr_runtimes = []
+            for seed in seeds:
+                np.random.seed(seed)
+                save_path = os.path.join(sim_type_path, str(seed))
+                if not os.path.isdir(save_path):
+                    os.mkdir(save_path)
+                data_full = resolve_data(args, save_path=save_path)
+                print(data_full.shape)
+                start_time = time.time()
+                global_test_vals, T = apply_cai_algorithm_windowed(args, data_full)
+                end_time = time.time()
+                curr_runtimes.append(end_time-start_time)
+                print()
+                #np.savetxt(os.path.join(save_path, "global_test_vals.csv"), global_test_vals, delimiter=',')
+                #np.savetxt(os.path.join(save_path, "local_test_vals.csv"), T, delimiter=',')
+            runtimes.append(np.mean(curr_runtimes))
+
+    for sim_type in no_change_prefixes:
+        args.sim_type = sim_type
+        for k, dim in enumerate(simulation_dims):
+            if 'orthogonal' in args.sim_type:
+                args.M = M_s_orthog[k]
+            else:
+                args.M = M_s_non_orthog[k]
+            args.dim = int(dim[1:])
+            sim_type_path = os.path.join(sim_results_path, args.sim_type+str(dim))
+            if not os.path.isdir(sim_type_path):
+                os.mkdir(sim_type_path)
+            print(sim_type_path)
+            for seed in seeds:
+                np.random.seed(seed)
+                save_path = os.path.join(sim_type_path, str(seed))
+                if not os.path.isdir(save_path):
+                    os.mkdir(save_path)
+                data_full = resolve_data(args, save_path=save_path)
+                print(data_full.shape)
+                global_test_vals, T = apply_cai_algorithm_windowed(args, data_full)
+                print()
+                #np.savetxt(os.path.join(save_path, "global_test_vals.csv"), global_test_vals, delimiter=',')
+                #np.savetxt(os.path.join(save_path, "local_test_vals.csv"), T, delimiter=',')
+    np.savetxt(os.path.join(args.results_path, 'runtimes/runtimes_cai.csv'), np.array(runtimes), delimiter=',')
+    print("***************************")
+    print("Done!")
+
+
 def main():
     args = get_args()
     np.random.seed(args.random_seed)
@@ -594,5 +736,6 @@ if __name__ == '__main__':
     #apply_cai_variance_windowed(args, data)
     #perform_simulation_batch_variance(args)
     #precision_recall_sims(args)
-    precision_recall_sims_precision(args)
-    #perform_single_run(args)
+    #precision_recall_sims_precision(args)
+    #precision_recall_sims_precision_runtimes(args)
+    perform_single_run(args)
