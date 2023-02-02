@@ -114,6 +114,10 @@ class PrecisionCPD:
         for mat in self.basis_matrices_full:
             assert is_symmetric(symmetrize_from_vector(mat, dim=self.dim)), "Not Symmetric"
         print("H Matrices:", self.basis_matrices_full.shape[0])
+        print("Sum {}".format((self.basis_matrices[0] == 0).sum()))
+        print("Sum {}".format((self.basis_matrices[1] == 0).sum()))
+        print("Shape {}".format(self.basis_matrices[0].shape))
+        print("Shape {}".format(self.basis_matrices[1].shape))
 
     # # data_full assumed to be passed in shape: [dim, T]
     def perform_lrt_covariance(self, data_full):
@@ -169,6 +173,26 @@ class PrecisionCPD:
             os.mkdir(save_path)
         for i in range(basis_mats.shape[0]):
             np.savetxt(os.path.join(save_path, "matrix_{}.csv".format(i)), basis_mats[i], delimiter=',')
+
+    def permute_blocks(self):
+        self.permuted_mats = []
+        self.min_eigvals = []
+        for i,mat in enumerate(self.basis_matrices):
+            curr_mat = symmetrize_from_vector(mat, self.dim)
+            zero_cols = np.where(~curr_mat.any(axis=0))[0]
+            new_mat = np.delete(curr_mat, zero_cols, axis=0)
+            new_mat = np.delete(new_mat, zero_cols, axis=1)
+            #print(new_mat.shape)
+            #print(new_mat)
+            #sns.heatmap(new_mat)
+            #plt.show()
+            self.permuted_mats.append(new_mat)
+            min_eigval_curr = np.min(np.linalg.eig(new_mat)[0])
+            self.min_eigvals.append(min_eigval_curr)
+            print(np.linalg.eig(new_mat)[0])
+            print(min_eigval_curr)
+        self.min_eigvals = np.array(self.min_eigvals)
+        exit()
         
         
 

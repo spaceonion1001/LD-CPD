@@ -1,3 +1,5 @@
+from re import L
+from venv import create
 import numpy as np
 from sklearn.datasets import make_spd_matrix
 from sklearn.preprocessing import scale
@@ -367,6 +369,32 @@ def sim_changepoint_var_process(dim, N, num_coeffs_change, scale=0.5, save_path=
         np.savetxt(os.path.join(save_path, 'changed_indx.csv'), neq_indices_arr)
     return data_total
 
+def create_matrix_kesh(p, d):
+    assert d < p, "Too many zero entries"
+    U = np.random.normal(size=(p, p))
+    for i in range(p):
+        arr = np.array([1]*d + [0]*(p-d))
+        np.random.shuffle(arr)
+        U[i, :] = U[i, :]*arr
+    
+    first = 1/np.linalg.norm(np.dot(U, U.T), ord=np.inf)
+    second = np.dot(U, U.T)
+    H = np.dot(first, second)
+
+    return H
+
+def changepoint_kesh_model(p, d, N, beta=0.2, lambda_0=0.1):
+    H = create_matrix_kesh(p=p, d=d)
+    omega_bc = H + lambda_0*np.eye(p)
+    omega_ac = (1+beta)*omega_bc
+
+    data_one = np.random.multivariate_normal(np.zeros(p), inv(omega_bc), N)
+    data_two = np.random.multivariate_normal(np.zeros(p), inv(omega_ac), N)
+
+    data_total = np.concatenate((data_one, data_two), axis=0)
+
+    return data_total, omega_bc
+
 def sim_changepoint_cai_model_one(dim):
     D_diag = np.random.uniform(0.5, 2.5, dim)
     D = np.diag(D_diag)
@@ -509,7 +537,7 @@ def changepoint_cai_model_one_no_change(dim, N=100, save_path=None):
     if save_path is not None:
         np.savetxt(os.path.join(save_path, 'changed_indx.csv'), neq_indices_arr)
     print("Finished Simulation")
-    return data_full
+    return data_full, precision_one
 
 
 def changepoint_cai_model_three(dim, N=100, save_path=None):

@@ -45,9 +45,11 @@ def load_stock_market_data(args):
     data = np.loadtxt(os.path.join(args.data_path, 'logdiff_vals.csv'), delimiter=',')
     return data
 
-def scale_data(data):
+def scale_data(data, percent=1.0):
     scaler = StandardScaler()
-    data_scaled = scaler.fit_transform(data)
+    end_idx = int(percent*data.shape[0])
+    scaler = scaler.fit(data[:end_idx])
+    data_scaled = scaler.transform(data)
 
     return data_scaled
 
