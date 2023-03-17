@@ -389,7 +389,7 @@ def changepoint_kesh_model(p, d, N, beta=0.2, lambda_0=0.1):
     omega_ac = (1+beta)*omega_bc
 
     data_one = np.random.multivariate_normal(np.zeros(p), inv(omega_bc), N)
-    data_two = np.random.multivariate_normal(np.zeros(p), inv(omega_ac), N)
+    data_two = np.random.multivariate_normal(np.zeros(p), inv(omega_bc), N)
 
     data_total = np.concatenate((data_one, data_two), axis=0)
 

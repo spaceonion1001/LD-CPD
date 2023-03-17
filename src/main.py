@@ -25,7 +25,7 @@ def get_args():
     parser.add_argument('--dim', type=int, default=16)
     parser.add_argument('--N', type=int, default=1000)
     parser.add_argument('--data', type=str, default='alaska')
-    parser.add_argument('--data_path', type=str, default='/home/dink/Documents/Research/data')
+    parser.add_argument('--data_path', type=str, default='/Users/taylordinkins/Documents/Research/data/')
     parser.add_argument('--fig_path', type=str, default='./figs')
     parser.add_argument('--results_path', type=str, default='./results')
     parser.add_argument('--results_filename', type=str, default="lrt_results.csv")
@@ -127,7 +127,7 @@ def perform_single_test(args):
         data_train = data_full[0:int(args.train_percent*len(data_full)), :]
         model.fit_glasso(data_train)
         model.construct_basis_matrices()
-        model.permute_blocks()
+        #model.permute_blocks()
 
         # local test
         if bool(args.local):

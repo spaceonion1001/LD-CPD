@@ -6,6 +6,74 @@ from numba import jit
 import pdb
 
 
+class CVXProblem(object):
+    def __init__(self, H_s, dim):
+        super().__init__()
+        self.H_s = H_s
+        self.dim = dim
+    
+    def create_single_optim_problem(self, optim_idx=0):
+        self.single_alpha = cp.Variable()
+        self.other_alphas = cp.Parameter(self.H_s.shape[0]-1)
+        y = cp.Variable((self.dim, self.dim))
+        psi_hat = cp.Variable((self.dim, self.dim))
+        temp_psi_hat = cp.Variable((self.dim, self.dim))
+        self.C = cp.Parameter((self.dim, self.dim))
+        list_vals = []
+        alph_counter = 0
+        for i in range(self.H_s.shape[0]):
+            if i != optim_idx:
+                list_vals.append(self.other_alphas[alph_counter]*symmetrize_from_vector(self.H_s[i], self.dim))
+        constr1 = (psi_hat >> 0)
+        constr2 = (psi_hat == psi_hat.T)
+        self.objective = cp.Maximize(cp.log_det(psi_hat) - cp.trace(psi_hat@self.C))
+        self.problem = cp.Problem(self.objective, 
+                                 [constr1, constr2, psi_hat==temp_psi_hat + y, 
+                                 y==self.single_alpha*symmetrize_from_vector(self.H_s[optim_idx], self.dim),  
+                                 temp_psi_hat==cp.sum(list_vals)])
+        
+    def create_global_optim_problem(self):
+        self.global_alphas = cp.Variable(shape=(self.H_s.shape[0], ))
+        psi_hat = cp.Variable((self.dim, self.dim))
+        self.C = cp.Parameter((self.dim, self.dim))
+        list_vals = [self.global_alphas[i]*symmetrize_from_vector(self.H_s[i], self.dim) for i in range(self.H_s.shape[0])]
+        constr1 = (psi_hat >> 0)
+        constr2 = (psi_hat == psi_hat.T)
+        self.objective = cp.Maximize(cp.log_det(psi_hat) - cp.trace(psi_hat@self.C))
+        self.problem = cp.Problem(self.objective, 
+                                 [constr1, constr2, psi_hat==cp.sum(list_vals)])
+        
+def create_all_optim_problems(H_s, dim):
+    prob_dict = {}
+    
+    for i in range(H_s.shape[0]):
+        curr_prob = CVXProblem(H_s, dim=dim)
+        curr_prob.create_single_optim_problem(optim_idx=i)
+        prob_dict[i] = curr_prob
+    return prob_dict
+
+def create_global_problem(H_s, dim):
+    g_prob = CVXProblem(H_s, dim=dim)
+    g_prob.create_global_optim_problem()
+    
+    return g_prob
+
+def solve_optim_single(curr_alphas, curr_C, prob_dict, optim_idx=0):
+    other_alphas = np.delete(curr_alphas, optim_idx)
+    curr_prob = prob_dict[optim_idx]
+    curr_prob.other_alphas.value = other_alphas
+    curr_prob.C.value = curr_C
+    curr_prob.problem.solve(solver=cp.MOSEK, verbose=False)
+    new_alphas = curr_alphas.copy()
+    new_alphas[optim_idx] = curr_prob.single_alpha.value
+    return new_alphas
+
+def solve_optim_global(curr_C, g_prob):
+    g_prob.C.value = curr_C
+    g_prob.problem.solve(solver=cp.MOSEK, verbose=False)
+    
+    return g_prob.global_alphas.value
+
 def optimize_coeffs(H_s, C, lam=1e-2):
     M = H_s.shape[0]
     dim = C.shape[0]
@@ -14,7 +82,7 @@ def optimize_coeffs(H_s, C, lam=1e-2):
     l1_penalty = sum([cp.abs(psi_hat[i, j])
                 for i in range(dim)
                 for j in range(dim) if i != j])
-    objective = cp.Maximize(cp.log_det(psi_hat) - cp.trace(psi_hat@C) - lam*l1_penalty)
+    objective = cp.Maximize(cp.log_det(psi_hat) - cp.trace(psi_hat@C)) #- lam*l1_penalty)
     constr1 = (psi_hat >> 0)
     constr2 = (psi_hat == psi_hat.T)
     constraints = [constr1, constr2]
@@ -30,22 +98,32 @@ def optimize_single_coeff(alphas, H_s, C, coeff_idx=0, lam=1e-2):
     dim = C.shape[0]
     single_alpha = cp.Variable()
     psi_hat = np.zeros((dim, dim))
+    temp_psi_hat = np.zeros((dim, dim))
     for i in range(M):
-        if i == coeff_idx:
-            psi_hat += single_alpha*symmetrize_from_vector_alt(H_s[i], dim)
-        else:
-            psi_hat += alphas[i]*symmetrize_from_vector_alt(H_s[i], dim)
+        if i != coeff_idx:
+            temp_psi_hat += alphas[i]*symmetrize_from_vector_alt(H_s[i], dim)
+    psi_hat = single_alpha * symmetrize_from_vector_alt(H_s[coeff_idx], dim) + temp_psi_hat
+#     for i in range(M):
+#         if i == coeff_idx:
+#             psi_hat += cp.multiply(single_alpha, symmetrize_from_vector_alt(H_s[i], dim))
+#         else:
+#             psi_hat += alphas[i]*symmetrize_from_vector_alt(H_s[i], dim)
     l1_penalty = sum([cp.abs(psi_hat[i, j])
                 for i in range(dim)
                 for j in range(dim) if i != j])
-    objective = cp.Maximize(cp.log_det(psi_hat) - cp.trace(psi_hat@C) - lam*l1_penalty)
+    objective = cp.Maximize(cp.log_det(psi_hat) - cp.trace(psi_hat@C))# - lam*l1_penalty)
     constr1 = (psi_hat >> 0)
     constr2 = (psi_hat == psi_hat.T)
     constraints = [constr1, constr2]
     problem = cp.Problem(objective, constraints)
-    problem.solve(solver=cp.SCS)
-    if problem.status != cp.OPTIMAL:
-        raise Exception('CVXPY Error')
+    problem.solve(solver=cp.SCS, 
+                  verbose=False, 
+                  eps_rel=1e-5, 
+                  eps_infeas=1e-7,
+                  alpha=1.0
+                 )
+#     if problem.status != cp.OPTIMAL:
+#         raise Exception('CVXPY Error')
     
     new_alphas = alphas.copy()
     new_alphas[coeff_idx] = single_alpha.value

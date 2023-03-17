@@ -76,10 +76,9 @@ class PrecisionCPD:
                 for idx2 in idxs: # loop over indexes
                     A[idx][idx2] = precision[idx][idx2].copy() # set i,j entry to be the entry from precision matrix for given cluster
             if self.split_variance:
+                self.basis_matrices.append(vectorize_matrix(np.diag(np.diag(A.copy()))))
                 np.fill_diagonal(A, 0)
             self.basis_matrices.append(vectorize_matrix(A))
-        if self.split_variance:
-            self.basis_matrices.append(vectorize_matrix(np.diag(np.diag(precision))))
         
         basis_mats_backup = np.array(self.basis_matrices).copy()
         #################
@@ -130,7 +129,7 @@ class PrecisionCPD:
         basis_mats = self.basis_matrices
         if bool(self.full_basis):
             basis_mats = self.basis_matrices_full
-        lrt_vals, p_vals = LRT_all_coeffs_full_likelihood(data_full, M=basis_mats.shape[0], dim=data_full.shape[1], H_s=basis_mats, 
+        lrt_vals, p_vals = LRT_all_coeffs_full_likelihood(data_full, M=basis_mats.shape[0], dim=data_full.shape[0], H_s=basis_mats, 
                                                           window_size=self.window_size, lam=self.lam, step_size=self.step_size, include_l1=self.include_l1, 
                                                           iters=self.iters, beta=self.beta)
         
@@ -140,7 +139,7 @@ class PrecisionCPD:
         basis_mats = self.basis_matrices
         if bool(self.full_basis):
             basis_mats = self.basis_matrices_full
-        lrt_vals_all, p_vals_all = LRT_individual_coeffs_full_likelihood(data_full, M=basis_mats.shape[0], dim=data_full.shape[1], H_s=basis_mats, 
+        lrt_vals_all, p_vals_all = LRT_individual_coeffs_full_likelihood(data_full, M=basis_mats.shape[0], dim=data_full.shape[0], H_s=basis_mats, 
                                                                          window_size=self.window_size, lam=self.lam, step_size=self.step_size, include_l1=self.include_l1, 
                                                                          iters=self.iters, beta=self.beta, t=self.t)
 
@@ -192,7 +191,6 @@ class PrecisionCPD:
             print(np.linalg.eig(new_mat)[0])
             print(min_eigval_curr)
         self.min_eigvals = np.array(self.min_eigvals)
-        exit()
         
         
 

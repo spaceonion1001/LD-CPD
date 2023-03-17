@@ -4,7 +4,8 @@ import numpy as np
 from numpy.linalg import inv as inv
 import scipy
 from scipy.optimize import least_squares, minimize
-from simulate import sim_changepoint_mv_normal_cholesky, sim_changepoint_mv_normal_ldlt, sim_changepoint_var_process, changepoint_cai_model_one, changepoint_cai_model_three#, create_matrix_kesh, changepoint_kesh_model
+from scipy.stats import chi2
+from simulate import sim_changepoint_mv_normal_cholesky, sim_changepoint_mv_normal_ldlt, sim_changepoint_var_process, changepoint_cai_model_one, changepoint_cai_model_three, create_matrix_kesh, changepoint_kesh_model
 from utils import scale_data, difference_data, vectorize_matrix, symmetrize_from_vector
 from statsmodels.stats.multitest import fdrcorrection
 from tqdm import tqdm
@@ -144,7 +145,7 @@ class KeshOnline:
         self.D_hat = []
 
         self.data = self.data_full[self.N:, :]
-        #self.prec_mat = args.prec_mat
+        self.prec_mat = args.prec_mat
 
         self.clime_init = self.clime_init_fn(self.data_full[0:self.N, :])
         #self.prec_est = self.clime_init_fn(self.data_full)
@@ -152,10 +153,14 @@ class KeshOnline:
         #print(self.prec_mat, end='\n\n')
         #print(self.prec_est, end='\n\n')
         #print(self.glasso_est.precision_)
-        #self.glasso = GraphicalLasso(max_iter=100, alpha=self.lam, tol=1e-5, verbose=False).fit(self.data_full[0:self.N, :])
+        self.glasso = GraphicalLasso(max_iter=100, alpha=self.lam, tol=1e-5, verbose=False).fit(self.data_full[0:self.N, :])
+        self.clime_init = self.glasso.precision_
         self.g1 = calc_g1(self.w)
+        print("G1 {}".format(self.g1))
         self.g2 = calc_g2(self.w)
+        print("G2 {}".format(self.g2))
         self.rhat0 = calc_rhat(self.clime_init, self.p)
+        #self.rhat0 = calc_rhat(self.prec_mat, self.p)
         self.T0 = calc_T_t(X=self.data, omega_hat=self.clime_init, r_hat=self.rhat0, w=self.w, p=self.p, t=0, g1=self.g1, g2=self.g2)
         self.critical_value = inv_Q_func(self.pi_0)
 
@@ -221,19 +226,22 @@ class KeshOnline:
         t = 0
         while t+self.w <= data.shape[0]:
             T_t = calc_T_t(X=data, omega_hat=curr_clime, r_hat=curr_rhat, w=self.w, p=self.p, t=t, g1=self.g1, g2=self.g2)
+            #T_t = calc_T_t(X=data, omega_hat=self.prec_mat, r_hat=self.rhat0, w=self.w, p=self.p, t=t, g1=self.g1, g2=self.g2)
             print("Test Stat {} Critical Val {}".format(T_t, self.critical_value))
             indicator_fn = (T_t >= self.critical_value)
             if not indicator_fn:
                 curr_b += 1
                 t += 1
                 if curr_b == self.buffer:
-                    curr_clime = self.clime_init_fn(data[that_last:t, :])
+                    #curr_clime = self.clime_init_fn(data[that_last:t, :])
+                    curr_clime = GraphicalLasso(max_iter=100, alpha=self.lam, tol=1e-5, verbose=False).fit(data[that_last:t, :]).precision_
                     curr_rhat = calc_rhat(curr_clime, self.p)
                     curr_b = 0
             else:
                 that_last = t
                 self.D_hat.append(t)
-                curr_clime = self.clime_init_fn(data[t:t+self.N, :])
+                #curr_clime = self.clime_init_fn(data[t:t+self.N, :])
+                curr_clime = GraphicalLasso(max_iter=100, alpha=self.lam, tol=1e-5, verbose=False).fit(data[t:t+self.N, :]).precision_
                 curr_rhat = calc_rhat(curr_clime, self.p)
                 curr_b = 0
                 t = t + self.N
@@ -312,12 +320,32 @@ def calc_l4_norm(mat):
 
 def calc_T_t(X, omega_hat, r_hat, w, p, t, g1, g2):
     top = 0
+    w_s = []
     for s in range(p):
         curr_y = calc_y_s_t_w(X, omega_hat, w=w, s=s, t=t)
+        print("Curr y {}".format(curr_y))
         curr_f = calc_f(curr_y)
+        print("Curr F {}".format(curr_f))
         top += (curr_f - g1)
+        print("Diff {}".format(curr_f-g1))
+        print("W*Y {} (this is Chi-square W dof)".format(w*curr_y))
+        w_s.append(w*curr_y)
+        print("Top {}".format(top),end='\n\n')
     
+
+    #plt.hist(w_s)
+    # x = np.arange(0, 300, 0.01)
+    # fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+    # axes[0].plot(x, chi2.pdf(x, df=w))
+    # axes[1].hist(w_s, density=True, bins=40)
+    # axes[0].set_xlim(0.0, 300.0)
+    # axes[1].set_xlim(0.0, 300.0)
+    # axes[0].set_ylim(0.0, 0.06)
+    # axes[1].set_ylim(0.0, 0.06)
+    # plt.show()
     bot = g2 * calc_hw(r_hat)
+    print("Bot {}".format(bot))
+    print("Rhat {}".format(calc_hw(r_hat)))
 
     return top/bot
 
