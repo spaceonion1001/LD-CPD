@@ -5,6 +5,45 @@ from utils import lasso_likelihood, vectorize_matrix, symmetrize_from_vector, sy
 from numba import jit
 import pdb
 
+def calc_matrices_precision(psi_hat, H_s, C):
+    dim = C.shape[0]
+    H_dim = H_s.shape[0]
+    A = np.zeros((H_dim, H_dim))
+    B = np.zeros((H_dim,))
+    inv_psi_hat = inv(psi_hat) # calculate psi_hat inverse
+    for g in range(H_dim):
+        H_g = symmetrize_from_vector(H_s[g], dim)
+        for h in range(H_dim):
+            H_h = symmetrize_from_vector(H_s[h], dim)
+            mult = ((inv_psi_hat.dot(H_g)).dot(inv_psi_hat)).dot(H_h)
+            lhs = np.trace(mult)
+            A[g, h] = lhs
+        rhs = np.trace(inv_psi_hat.dot(H_g)) - np.trace(C.dot(H_g))
+        B[g] = rhs
+        
+    return A, B
+
+"""
+Single likelihood ratio tests
+
+Modify the iterative solution function
+"""
+def iterative_soln_precision_single(coeffs_zero, H_s, C, dim, modify_index=0, iters=5):
+    s_imo = coeffs_zero
+    s_i = s_imo.copy()
+    H_dim = H_s.shape[0]
+    for it in range(iters):
+        #psi_hat = (s_imo.reshape(-1, 1, 1)*H_s).sum(0) # calculate psi_hat
+        psi_hat = np.zeros(int((dim*(dim+1))/2))
+        for i in range(H_s.shape[0]):
+            psi_hat = psi_hat + s_imo[i]*H_s[i]
+        psi_hat = symmetrize_from_vector(psi_hat, dim)
+        A, B = calc_matrices_precision(psi_hat, H_s, C)
+        t_i = inv(A).dot(B)
+        s_i[modify_index] = s_imo[modify_index] + t_i[modify_index]
+        s_imo = s_i
+        
+    return s_imo
 
 class CVXProblem(object):
     def __init__(self, H_s, dim):
@@ -58,19 +97,19 @@ def create_global_problem(H_s, dim):
     
     return g_prob
 
-def solve_optim_single(curr_alphas, curr_C, prob_dict, optim_idx=0):
+def solve_optim_single(optim_idx, curr_alphas, curr_C, prob_dict):
     other_alphas = np.delete(curr_alphas, optim_idx)
     curr_prob = prob_dict[optim_idx]
     curr_prob.other_alphas.value = other_alphas
     curr_prob.C.value = curr_C
-    curr_prob.problem.solve(solver=cp.MOSEK, verbose=False)
+    curr_prob.problem.solve(solver=cp.SCS, verbose=False, warm_start=True)
     new_alphas = curr_alphas.copy()
     new_alphas[optim_idx] = curr_prob.single_alpha.value
     return new_alphas
 
-def solve_optim_global(curr_C, g_prob):
+def solve_optim_global(g_prob, curr_C):
     g_prob.C.value = curr_C
-    g_prob.problem.solve(solver=cp.MOSEK, verbose=False)
+    g_prob.problem.solve(solver=cp.SCS, verbose=False, warm_start=True)
     
     return g_prob.global_alphas.value
 
