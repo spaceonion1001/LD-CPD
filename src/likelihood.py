@@ -21,6 +21,7 @@ from functools import partial
 import copy
 
 import dask
+from joblib import Parallel, delayed
 
 def likelihood_ratio_test(likelihood_null, likelihood_alternative, dof):
     delta_d = -2*(likelihood_null-likelihood_alternative)
@@ -167,28 +168,30 @@ def LRT_individual_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=5
         ##############################
         # null likelihood
         # TODO
-        null_first = full_likelihood(coeffs_hat_total, H_s, C_one, N=data_one.shape[1], 
-                                     lam=lam, include_l1=include_l1)
-        null_second = full_likelihood(coeffs_hat_total, H_s, C_two, N=data_two.shape[1], 
-                                     lam=lam, include_l1=include_l1)
-        null_likelihood = null_first + null_second
-        # null_likelihood = full_likelihood(coeffs_hat_total, H_s, C_full, N=data_full.shape[1], 
-        #                                   lam=lam, include_l1=include_l1)
+        # null_first = full_likelihood(coeffs_hat_total, H_s, C_one, N=data_one.shape[1], 
+        #                              lam=lam, include_l1=include_l1)
+        # null_second = full_likelihood(coeffs_hat_total, H_s, C_two, N=data_two.shape[1], 
+        #                              lam=lam, include_l1=include_l1)
+        #null_likelihood = null_first + null_second
+        null_likelihood = full_likelihood(coeffs_hat_total, H_s, C_full, N=data_full.shape[1], 
+                                          lam=lam, include_l1=include_l1)
         # TODO
 
         test_stats_m = []
         p_vals_m = []
         # parallel optimization
-        N_cpus = mp.cpu_count()
+        #N_cpus = 4
         k_vals = np.arange(0, M)
         #TODO
         dask_list_pre = []
         dask_list_post = []
-        for val in k_vals:
-            dask_list_pre.append(dask.delayed(solve_optim_single)(val, coeffs_hat_total, C_one, prob_dict))
-            dask_list_post.append(dask.delayed(solve_optim_single)(val, coeffs_hat_total, C_two, prob_dict))
-        pre_results = dask.compute(*dask_list_pre, scheduler='threads', num_workers=N_cpus)
-        post_results = dask.compute(*dask_list_post, scheduler='threads', num_workers=N_cpus)
+        pre_results = Parallel(n_jobs=2, prefer='threads')(delayed(solve_optim_single)(val, coeffs_hat_total, C_one, prob_dict) for val in k_vals)
+        post_results = Parallel(n_jobs=2, prefer='threads')(delayed(solve_optim_single)(val, coeffs_hat_total, C_two, prob_dict) for val in k_vals)
+        # for val in k_vals:
+        #     dask_list_pre.append(dask.delayed(solve_optim_single)(val, coeffs_hat_total, C_one, copy.copy(prob_dict)))
+        #     dask_list_post.append(dask.delayed(solve_optim_single)(val, coeffs_hat_total, C_two, copy.copy(prob_dict)))
+        # pre_results = dask.compute(*dask_list_pre, scheduler='processes')#, num_workers=N_cpus)
+        # post_results = dask.compute(*dask_list_post, scheduler='processes')#, num_workers=N_cpus)
         #TODO
         # iterate over each coefficient
         for k in range(M):
@@ -199,6 +202,7 @@ def LRT_individual_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=5
             #                                             lam=lam)
             #alpha_i_change_pre = optimize_coeffs_first_order_single(coeffs_hat_total, H_s, C_one, lam=lam, beta=beta, iters=iters, optim_indx=k, t=t)
             #alpha_i_change_post = optimize_coeffs_first_order_single(coeffs_hat_total, H_s, C_two, lam=lam, beta=beta, iters=iters, optim_indx=k, t=t)
+            #TODO
             # alpha_i_change_pre = solve_optim_single(curr_alphas=coeffs_hat_total, 
             #                                                 curr_C=C_one,
             #                                                 prob_dict=prob_dict,
@@ -207,6 +211,7 @@ def LRT_individual_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=5
             #                                                 curr_C=C_two,
             #                                                 prob_dict=prob_dict,
             #                                                 optim_idx=k)
+            #TODO
 
             # alpha_i_change_pre = iterative_soln_precision_single(
             #                         coeffs_zero=coeffs_hat_total,
@@ -223,13 +228,16 @@ def LRT_individual_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=5
             #                         dim=data_full.shape[0],
             #                         modify_index=k,
             #                         iters=10
-            #                     )
+            #              
+            #       )
+            #TODO
             # likelihood on pre data, alpha_one change
             # alt_likelihood_alpha_i_pre = full_likelihood(alpha_i_change_pre, H_s, C_one, N=data_one.shape[1], 
             #                                              lam=lam, include_l1=include_l1)
             # # likelihood on post data, alpha_one change
             # alt_likelihood_alpha_i_post = full_likelihood(alpha_i_change_post, H_s, C_two, N=data_two.shape[1], 
             #                                               lam=lam, include_l1=include_l1)
+            #TODO
             # likelihood on pre data, alpha_one change
             alt_likelihood_alpha_i_pre = full_likelihood(pre_results[k], H_s, C_one, N=data_one.shape[1], 
                                                          lam=lam, include_l1=include_l1)
