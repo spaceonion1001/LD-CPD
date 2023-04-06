@@ -180,18 +180,18 @@ def LRT_individual_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=5
         test_stats_m = []
         p_vals_m = []
         # parallel optimization
-        #N_cpus = 4
+        N_cpus = 12
         k_vals = np.arange(0, M)
         #TODO
         dask_list_pre = []
         dask_list_post = []
-        pre_results = Parallel(n_jobs=2, prefer='threads')(delayed(solve_optim_single)(val, coeffs_hat_total, C_one, prob_dict) for val in k_vals)
-        post_results = Parallel(n_jobs=2, prefer='threads')(delayed(solve_optim_single)(val, coeffs_hat_total, C_two, prob_dict) for val in k_vals)
+        pre_results = Parallel(n_jobs=6, prefer='threads')(delayed(solve_optim_single)(val, coeffs_hat_total, C_one, prob_dict) for val in k_vals)
+        post_results = Parallel(n_jobs=6, prefer='threads')(delayed(solve_optim_single)(val, coeffs_hat_total, C_two, prob_dict) for val in k_vals)
         # for val in k_vals:
         #     dask_list_pre.append(dask.delayed(solve_optim_single)(val, coeffs_hat_total, C_one, copy.copy(prob_dict)))
         #     dask_list_post.append(dask.delayed(solve_optim_single)(val, coeffs_hat_total, C_two, copy.copy(prob_dict)))
-        # pre_results = dask.compute(*dask_list_pre, scheduler='processes')#, num_workers=N_cpus)
-        # post_results = dask.compute(*dask_list_post, scheduler='processes')#, num_workers=N_cpus)
+        # pre_results = dask.compute(*dask_list_pre, scheduler='threads', num_workers=N_cpus)
+        # post_results = dask.compute(*dask_list_post, scheduler='threads', num_workers=N_cpus)
         #TODO
         # iterate over each coefficient
         for k in range(M):

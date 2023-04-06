@@ -63,7 +63,8 @@ class CVXProblem(object):
         for i in range(self.H_s.shape[0]):
             if i != optim_idx:
                 list_vals.append(self.other_alphas[alph_counter]*symmetrize_from_vector(self.H_s[i], self.dim))
-        constr1 = (psi_hat >> 0)
+                alph_counter += 1
+        constr1 = ((psi_hat - np.eye(self.dim)*1e-6) >> 0)
         constr2 = (psi_hat == psi_hat.T)
         self.objective = cp.Maximize(cp.log_det(psi_hat) - cp.trace(psi_hat@self.C))
         self.problem = cp.Problem(self.objective, 

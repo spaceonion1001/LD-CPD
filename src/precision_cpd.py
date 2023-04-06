@@ -137,6 +137,7 @@ class PrecisionCPD:
 
     def perform_lrt_local(self, data_full):
         basis_mats = self.basis_matrices
+        print(basis_mats.shape[0])
         if bool(self.full_basis):
             basis_mats = self.basis_matrices_full
         lrt_vals_all, p_vals_all = LRT_individual_coeffs_full_likelihood(data_full, M=basis_mats.shape[0], dim=data_full.shape[0], H_s=basis_mats, 
