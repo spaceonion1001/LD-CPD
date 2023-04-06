@@ -45,38 +45,38 @@ def iterative_soln_precision_single(coeffs_zero, H_s, C, dim, modify_index=0, it
         
     return s_imo
 
+    
 class CVXProblem(object):
-    def __init__(self, H_s, dim):
+    def __init__(self, dim):
         super().__init__()
-        self.H_s = H_s
         self.dim = dim
     
-    def create_single_optim_problem(self, optim_idx=0):
+    def create_single_optim_problem(self, H_s, optim_idx=0):
         self.single_alpha = cp.Variable()
-        self.other_alphas = cp.Parameter(self.H_s.shape[0]-1)
+        self.other_alphas = cp.Parameter(H_s.shape[0]-1)
         y = cp.Variable((self.dim, self.dim))
         psi_hat = cp.Variable((self.dim, self.dim))
         temp_psi_hat = cp.Variable((self.dim, self.dim))
         self.C = cp.Parameter((self.dim, self.dim))
         list_vals = []
         alph_counter = 0
-        for i in range(self.H_s.shape[0]):
+        for i in range(H_s.shape[0]):
             if i != optim_idx:
-                list_vals.append(self.other_alphas[alph_counter]*symmetrize_from_vector(self.H_s[i], self.dim))
+                list_vals.append(self.other_alphas[alph_counter]*symmetrize_from_vector(H_s[i], self.dim))
                 alph_counter += 1
         constr1 = ((psi_hat - np.eye(self.dim)*1e-6) >> 0)
         constr2 = (psi_hat == psi_hat.T)
         self.objective = cp.Maximize(cp.log_det(psi_hat) - cp.trace(psi_hat@self.C))
         self.problem = cp.Problem(self.objective, 
                                  [constr1, constr2, psi_hat==temp_psi_hat + y, 
-                                 y==self.single_alpha*symmetrize_from_vector(self.H_s[optim_idx], self.dim),  
+                                 y==self.single_alpha*symmetrize_from_vector(H_s[optim_idx], self.dim),  
                                  temp_psi_hat==cp.sum(list_vals)])
         
-    def create_global_optim_problem(self):
-        self.global_alphas = cp.Variable(shape=(self.H_s.shape[0], ))
+    def create_global_optim_problem(self, H_s):
+        self.global_alphas = cp.Variable(shape=(H_s.shape[0], ))
         psi_hat = cp.Variable((self.dim, self.dim))
         self.C = cp.Parameter((self.dim, self.dim))
-        list_vals = [self.global_alphas[i]*symmetrize_from_vector(self.H_s[i], self.dim) for i in range(self.H_s.shape[0])]
+        list_vals = [self.global_alphas[i]*symmetrize_from_vector(H_s[i], self.dim) for i in range(H_s.shape[0])]
         constr1 = (psi_hat >> 0)
         constr2 = (psi_hat == psi_hat.T)
         self.objective = cp.Maximize(cp.log_det(psi_hat) - cp.trace(psi_hat@self.C))
@@ -87,14 +87,14 @@ def create_all_optim_problems(H_s, dim):
     prob_dict = {}
     
     for i in range(H_s.shape[0]):
-        curr_prob = CVXProblem(H_s, dim=dim)
-        curr_prob.create_single_optim_problem(optim_idx=i)
+        curr_prob = CVXProblem(dim=dim)
+        curr_prob.create_single_optim_problem(H_s=H_s, optim_idx=i)
         prob_dict[i] = curr_prob
     return prob_dict
 
 def create_global_problem(H_s, dim):
-    g_prob = CVXProblem(H_s, dim=dim)
-    g_prob.create_global_optim_problem()
+    g_prob = CVXProblem(dim=dim)
+    g_prob.create_global_optim_problem(H_s=H_s)
     
     return g_prob
 

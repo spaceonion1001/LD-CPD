@@ -4,7 +4,7 @@ from optim import optimize_coeffs, optimize_single_coeff, optimize_coeffs_first_
 from optim import create_all_optim_problems, create_global_problem
 from optim import solve_optim_single, solve_optim_global
 from optim import iterative_soln_precision_single
-from statsmodels.stats.multitest import fdrcorrection
+from statsmodels.stats.multitest import fdrcorrection, multipletests
 from scipy.stats import chi2, multivariate_normal
 from utils import is_pos_def, is_symmetric, vectorize_matrix, symmetrize_from_vector
 from numba import jit
@@ -32,6 +32,13 @@ def apply_fdr_correction(p_vals_all, alpha=0.05):
     corrected_p_vals_all = []
     for i in range(p_vals_all.shape[0]):
         rejected, corrected_p_vals_i = fdrcorrection(p_vals_all[i], alpha=alpha)
+        corrected_p_vals_all.append(corrected_p_vals_i)
+    return np.array(corrected_p_vals_all)
+
+def apply_bonferroni_correction(p_vals_all, alpha=0.05):
+    corrected_p_vals_all = []
+    for i in range(p_vals_all.shape[0]):
+        rejected, corrected_p_vals_i, _, _ = multipletests(p_vals_all[i], alpha=alpha, method='bonferroni')
         corrected_p_vals_all.append(corrected_p_vals_i)
     return np.array(corrected_p_vals_all)
 
@@ -185,8 +192,8 @@ def LRT_individual_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=5
         #TODO
         dask_list_pre = []
         dask_list_post = []
-        pre_results = Parallel(n_jobs=6, prefer='threads')(delayed(solve_optim_single)(val, coeffs_hat_total, C_one, prob_dict) for val in k_vals)
-        post_results = Parallel(n_jobs=6, prefer='threads')(delayed(solve_optim_single)(val, coeffs_hat_total, C_two, prob_dict) for val in k_vals)
+        pre_results = Parallel(n_jobs=4, prefer='threads')(delayed(solve_optim_single)(val, coeffs_hat_total, C_one, prob_dict) for val in k_vals)
+        post_results = Parallel(n_jobs=4, prefer='threads')(delayed(solve_optim_single)(val, coeffs_hat_total, C_two, prob_dict) for val in k_vals)
         # for val in k_vals:
         #     dask_list_pre.append(dask.delayed(solve_optim_single)(val, coeffs_hat_total, C_one, copy.copy(prob_dict)))
         #     dask_list_post.append(dask.delayed(solve_optim_single)(val, coeffs_hat_total, C_two, copy.copy(prob_dict)))

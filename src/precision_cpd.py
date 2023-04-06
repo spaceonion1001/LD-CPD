@@ -21,7 +21,7 @@ from statsmodels.tsa.seasonal import STL
 
 from utils import is_symmetric, is_pos_def, vectorize_matrix, symmetrize_from_vector
 from likelihood import LRT_all_coeffs, LRT_all_coeffs_full_likelihood, LRT_individual_coeffs_full_likelihood, apply_fdr_correction, LRT_covariance
-
+from likelihood import apply_bonferroni_correction
 import warnings
 warnings.filterwarnings('ignore')  # <- remember to comment this if something breaks and you get confused
 
@@ -144,7 +144,8 @@ class PrecisionCPD:
                                                                          window_size=self.window_size, lam=self.lam, step_size=self.step_size, include_l1=self.include_l1, 
                                                                          iters=self.iters, beta=self.beta, t=self.t)
 
-        return np.array(lrt_vals_all), np.array(apply_fdr_correction(p_vals_all))
+        #return np.array(lrt_vals_all), np.array(apply_fdr_correction(p_vals_all))
+        return np.array(lrt_vals_all), np.array(apply_bonferroni_correction(p_vals_all))
 
     def print_clusters_rv(self):
         basis_mats = self.basis_matrices
