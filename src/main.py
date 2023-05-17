@@ -101,7 +101,7 @@ def resolve_data(args, save_path=None):
         elif args.data == 'stocks':
             # python src/main.py --window_size 100 --sim 0 --data stocks --step 1 --window_size 100 --lam 5e-1 --full_basis 0 --M 6 --train_percent 0.4 --split_variance 0
             # python src/main.py --window_size 100 --sim 0 --data stocks --step 1 --window_size 100 --lam 5e-1 --full_basis 0 --M 10 --train_percent 0.4 --split_variance 0
-            return scale_data(load_stock_market_data(args))
+            return scale_data(load_stock_market_data(args), args.train_percent)
         else:
             print("Error: Dataset not understood")
             exit(0)
@@ -109,6 +109,7 @@ def resolve_data(args, save_path=None):
 def perform_single_test(args):
     np.random.seed(args.random_seed)
     fig_dir_path = create_fig_dir(args.fig_path)
+    args.fig_dir_path = fig_dir_path
     results_dir_path = create_fig_dir(args.results_path)
     data_full = resolve_data(args, results_dir_path)
     print(data_full.shape)
@@ -133,11 +134,20 @@ def perform_single_test(args):
         if bool(args.local):
             print("Local Test")
             lrt_vals_all, p_vals_all = model.perform_lrt_local(data_full.T)
+            #print("P VALS", p_vals_all.shape)
             for i in range(lrt_vals_all.shape[1]):
                 plt.plot(lrt_vals_all[:, i])
                 plt.xlabel('Time')
                 plt.ylabel('Test Statistic {}'.format(i))
                 plt.savefig(os.path.join(fig_dir_path, 'lrt_local_i{}_M{}_win{}_step{}_lam{}_full{}_sim{}.png'.format(i, args.M, args.window_size, 
+                                                                                                                    args.step_size, args.lam, 
+                                                                                                                    args.full_basis, args.sim)))
+                plt.close()
+
+                plt.plot(np.log(p_vals_all[:, i]))
+                plt.xlabel('Time')
+                plt.ylabel('P Vals {}'.format(i))
+                plt.savefig(os.path.join(fig_dir_path, 'pvals_local_i{}_M{}_win{}_step{}_lam{}_full{}_sim{}.png'.format(i, args.M, args.window_size, 
                                                                                                                     args.step_size, args.lam, 
                                                                                                                     args.full_basis, args.sim)))
                 plt.close()

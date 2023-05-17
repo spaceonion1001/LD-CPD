@@ -1,0 +1,18 @@
+import numpy as np
+from utils import is_symmetric, is_pos_def, vectorize_matrix, symmetrize_from_vector
+
+def meinshausen_correction(H_s, p_vals_all, dim):
+    t, M = p_vals_all.shape
+    print(t, M, dim)
+    p_vals_corrected = np.zeros_like(p_vals_all)
+    for i in range(M):
+        curr_mat = symmetrize_from_vector(H_s[i], dim)
+        nonzero_cols = np.nonzero(np.any(curr_mat != 0, axis=0))[0]
+        C_val = len(nonzero_cols)
+        correction_factor = dim/C_val
+        print(correction_factor)
+        # correct p_vals for cluster at all time points independently
+        p_vals_corrected[:, i] = p_vals_all[:, i]*correction_factor
+    
+    return p_vals_corrected
+    

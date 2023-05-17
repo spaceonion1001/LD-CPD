@@ -50,7 +50,7 @@ class CVXProblem(object):
     def __init__(self, dim):
         super().__init__()
         self.dim = dim
-    
+        
     def create_single_optim_problem(self, H_s, optim_idx=0):
         self.single_alpha = cp.Variable()
         self.other_alphas = cp.Parameter(H_s.shape[0]-1)
@@ -71,6 +71,8 @@ class CVXProblem(object):
                                  [constr1, constr2, psi_hat==temp_psi_hat + y, 
                                  y==self.single_alpha*symmetrize_from_vector(H_s[optim_idx], self.dim),  
                                  temp_psi_hat==cp.sum(list_vals)])
+        assert self.problem.is_dcp(), "Not DCP"
+        assert self.problem.is_dpp(), "Not DPP"
         
     def create_global_optim_problem(self, H_s):
         self.global_alphas = cp.Variable(shape=(H_s.shape[0], ))

@@ -52,6 +52,7 @@ def get_args():
     parser.add_argument('--data_path', type=str, default='/home/dink/Documents/Research/data')
     parser.add_argument('--sim_scale', type=float, default=0.8)
     parser.add_argument('--random_seed', type=int, default=42)
+    parser.add_argument('--train_percent', type=float, default=0.25)
     parser.add_argument('--window_size', type=int, default=100)
     parser.add_argument('--step_size', type=int, default=1)
     parser.add_argument('--num_coeffs_change', type=int, default=2)
@@ -108,7 +109,7 @@ def resolve_data(args, save_path=None):
         elif args.data == 'stocks':
             # python src/main.py --M 5 --lam 2e-5 --window_size 200 --step_size 1 --data stocks --local 1 --sim 0 --split_variance 0 --train_percent 0.6
             # stocks need a low lambda value I think
-            return load_stock_market_data(args)
+            return scale_data(load_stock_market_data(args), args.train_percent)
         else:
             print("Error: Dataset not understood")
             exit(0)
