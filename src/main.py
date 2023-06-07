@@ -65,9 +65,9 @@ def resolve_data(args, save_path=None):
         elif args.sim_type == 'var_process':
             return scale_data(difference_data(sim_changepoint_var_process(dim=args.dim, N=args.N, num_coeffs_change=args.num_coeffs_change, scale=args.sim_scale, save_path=save_path)))
         elif args.sim_type == 'cai_model_one':
-            return scale_data(changepoint_cai_model_one(dim=args.dim, N=args.N, save_path=save_path))
+            return scale_data(changepoint_cai_model_one(dim=args.dim, N=args.N, save_path=save_path), args.train_percent)
         elif args.sim_type == 'cai_model_three':
-            return scale_data(changepoint_cai_model_three(dim=args.dim, N=args.N, save_path=save_path))
+            return scale_data(changepoint_cai_model_three(dim=args.dim, N=args.N, save_path=save_path), args.train_percent)
         elif args.sim_type == 'orthogonal_no_change':
             return sim_changepoint_mv_normal_orthogonal_no_change(sim_scale=args.sim_scale, M=args.M, dim=args.dim, N=args.N, save_path=save_path)[1].T
         elif args.sim_type == 'cholesky_no_change':
@@ -176,6 +176,8 @@ def perform_simulation_batch(args):
     # only local test
     # should do step_size = 1 because it's easier
     # save everything to files - I guess
+    fig_dir_path = create_fig_dir(args.fig_path)
+    args.fig_dir_path = fig_dir_path
     print("\n*******************************************************************************")
     print("Performing Batch Simulation of {} with Dim = {}, M = {}, Scale = {}, Window = {}, Lam = {}".format(args.sim_type, args.dim, args.M, args.sim_scale, args.window_size, args.lam))
     seeds_list = np.arange(50, 60)
@@ -197,10 +199,11 @@ def perform_simulation_batch(args):
         data_train = data_full[0:int(args.train_percent*len(data_full)), :]
         model.fit_glasso(data_train)
         model.construct_basis_matrices()
-        lrt_vals_all, _ = model.perform_lrt_local(data_full.T)
+        lrt_vals_all, p_vals_all = model.perform_lrt_local(data_full.T)
+        test_results = np.hstack([lrt_vals_all, p_vals_all])
         model.save_matrices_simulations(save_path)
         print()
-        np.savetxt(os.path.join(save_path, "lrt_vals.csv"), lrt_vals_all, delimiter=',')
+        np.savetxt(os.path.join(save_path, "lrt_vals.csv"), test_results, delimiter=',')
         #np.savetxt(os.path.join(save_path, "p_vals.csv"), p_vals_all, delimiter=',')
         model.print_clusters_rv()
     print("*******************************************************************************")

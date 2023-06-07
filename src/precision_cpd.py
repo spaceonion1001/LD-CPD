@@ -5,7 +5,7 @@ import glob
 import os
 import matplotlib.pyplot as plt
 import seaborn as sns
-from torch import zero_
+#from torch import zero_
 sns.set()
 
 from sklearn.covariance import graphical_lasso, GraphicalLasso, GraphicalLassoCV
@@ -163,8 +163,8 @@ class PrecisionCPD:
         p_vals_all = np.array(p_vals_all)
         #p_vals_corrected = np.array(apply_bonferroni_correction(p_vals_all))
         #p_vals_corrected = np.array(apply_fdr_correction(p_vals_all))
-        #p_vals_corrected = meinshausen_correction(basis_mats, p_vals_all, dim=data_full.shape[0])
-        p_vals_corrected = p_vals_all
+        p_vals_corrected = meinshausen_correction(basis_mats, p_vals_all, dim=data_full.shape[0])
+        #p_vals_corrected = p_vals_all
         #return np.array(lrt_vals_all), np.array(apply_bonferroni_correction(p_vals_all))
         #print(p_vals_all)
         #print(p_vals_corrected)
