@@ -5,6 +5,16 @@ from utils import lasso_likelihood, vectorize_matrix, symmetrize_from_vector, sy
 from numba import jit
 import pdb
 
+
+@jit(nopython=True)
+def calc_psi_hat(alphas, H_s, dim):
+    P = dim
+    #psi_hat = sum([alphas[i]*H_s[i] for i in range(H_s.shape[0])])
+    psi_hat = np.sum(np.expand_dims(alphas, 1)*H_s, 0)
+    psi_hat = symmetrize_from_vector(psi_hat, P)
+
+    return psi_hat
+
 def calc_matrices_precision(psi_hat, H_s, C):
     dim = C.shape[0]
     H_dim = H_s.shape[0]
@@ -105,7 +115,14 @@ def solve_optim_single(optim_idx, curr_alphas, curr_C, prob_dict):
     curr_prob = prob_dict[optim_idx]
     curr_prob.other_alphas.value = other_alphas
     curr_prob.C.value = curr_C
-    curr_prob.problem.solve(solver=cp.SCS, verbose=False, warm_start=True)
+    curr_prob.problem.solve(
+        solver=cp.SCS, 
+        verbose=False, 
+        warm_start=True,
+        scale=1.0,
+        adaptive_scale=True,
+        max_iters=int(1e4)
+        )
     new_alphas = curr_alphas.copy()
     new_alphas[optim_idx] = curr_prob.single_alpha.value
     return new_alphas
@@ -200,7 +217,7 @@ def gradient_step(alphas, H_s, C, lam=1e-2, beta=1e-2, t=2.0):
         second = np.trace(inv_psi_hat@symmetrize_from_vector(H_s[i], dim))
         log_barrier = (1/t)*second
         l1_penalty = l1_penalty_subderiv(alphas, symmetrize_from_vector(H_s[i], dim), i)
-        deriv = first - second - log_barrier + lam*l1_penalty
+        deriv = first - second #- log_barrier #+ lam*l1_penalty
         alphas_new[i] = alphas[i] - beta*deriv
 
     return alphas_new
@@ -219,7 +236,7 @@ def gradient_step_single(alphas, H_s, C, lam=1e-2, beta=1e-2, t=2.0, optim_indx=
     second = np.trace(inv_psi_hat@symmetrize_from_vector(H_s[optim_indx], dim))
     log_barrier = (1/t)*second
     l1_penalty = l1_penalty_subderiv(alphas, symmetrize_from_vector(H_s[optim_indx], dim), optim_indx)
-    deriv = first - second - log_barrier + lam*l1_penalty
+    deriv = first - second #- log_barrier #+ lam*l1_penalty
     alphas_new[optim_indx] = alphas[optim_indx] - beta*deriv
 
     return alphas_new
@@ -240,7 +257,6 @@ def optimize_coeffs_first_order(H_s, C, lam=1e-2, beta=1e-2, iters=200, include_
         # schedule t
         t = t*1.4
 
-    
     #best_coeffs = alphas_imo.copy()
     return best_coeffs
 

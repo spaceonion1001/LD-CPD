@@ -25,17 +25,18 @@ rpy2.robjects.numpy2ri.activate()
 utils = importr('utils')
 utils.chooseCRANmirror(ind=1)
 # R package names
-packnames = ('fastclime', 'scalreg')
+#packnames = ('fastclime', 'scalreg')
+#packnames = ('scalreg', 'hexbin')
 
 # R vector of strings
 from rpy2.robjects.vectors import StrVector
 
 # Selectively install what needs to be install.
 # We are fancy, just because we can.
-names_to_install = [x for x in packnames if not rpackages.isinstalled(x)]
-if len(names_to_install) > 0:
-    utils.install_packages(StrVector(names_to_install))
-clime = importr('fastclime')
+#names_to_install = [x for x in packnames if not rpackages.isinstalled(x)]
+# if len(names_to_install) > 0:
+#     utils.install_packages(StrVector(names_to_install))
+#clime = importr('fastclime')
 scalreg = importr('scalreg')
 
 import argparse
@@ -456,7 +457,7 @@ def perform_simulation_batch_variance(args):
     # save everything to files - I guess
     print("\n*******************************************************************************")
     print("Performing Batch Simulation of {} with Dim = {}, Window = {}".format(args.sim_type, args.dim, args.window_size))
-    seeds_list = np.arange(50, 60)
+    seeds_list = np.arange(50, 70)
     sim_results_path = os.path.join(args.results_path, "simulation_results_cai")
     if not os.path.isdir(sim_results_path):
         os.mkdir(sim_results_path)
@@ -470,7 +471,7 @@ def perform_simulation_batch_variance(args):
         if not os.path.isdir(save_path):
             os.mkdir(save_path)
         data_full = resolve_data(args, save_path=save_path)
-        print(data_full.shape)
+        print("DATA SHAPE {}".format(data_full.shape))
         global_test_vals, local_test_vals = apply_cai_variance_windowed(args, data_full)
         np.savetxt(os.path.join(save_path, "global_test_vals.csv"), global_test_vals, delimiter=',')
     print("*******************************************************************************")

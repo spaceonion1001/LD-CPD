@@ -71,13 +71,13 @@ class PrecisionCPD:
         Z = linkage(pairwise_distances, method='average')
         ######
         # plot the dendrogram 
-        plt.figure()
-        dn = hierarchy.dendrogram(Z)
-        plt.savefig(os.path.join(self.fig_dir_path, "dendrogram.png"))
-        plt.close()
+        # plt.figure()
+        # dn = hierarchy.dendrogram(Z)
+        # plt.savefig(os.path.join(self.fig_dir_path, "dendrogram.png"))
+        # plt.close()
         ######
         cutree1 = hierarchy.cut_tree(Z, n_clusters=self.M).squeeze()
-        self.dendrogram = dn
+        #self.dendrogram = dn
         self.Z = Z
         self.cutree = cutree1
 

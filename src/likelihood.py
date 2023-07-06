@@ -58,7 +58,7 @@ def lasso_likelihood(alphas, H_s, C, lam=1e-2, include_l1=False):
         return np.log(np.linalg.det(psi_hat)) - np.trace(psi_hat@C)
 
 #@jit(nopython=True)
-def full_likelihood(alphas, H_s, C, N, lam=1e-2, include_l1=False):
+def full_likelihood(alphas, H_s, C, N, lam=1e-2, include_l1=False, debug_title='global'):
     P = C.shape[0]
     #psi_hat = sum([alphas[i]*H_s[i] for i in range(H_s.shape[0])])
     psi_hat = np.sum(np.expand_dims(alphas, 1)*H_s, 0)
@@ -83,6 +83,9 @@ def full_likelihood(alphas, H_s, C, N, lam=1e-2, include_l1=False):
         _, first_term = np.linalg.slogdet(psi_hat)
         #likelihood = np.log(np.linalg.det(psi_hat)) - np.trace(psi_hat@C) - P*np.log(2*np.pi)
         likelihood = first_term - np.trace(psi_hat@C) - P*np.log(2*np.pi)
+        # if not is_pos_def(psi_hat):
+        #     pdb.set_trace()
+        #assert is_pos_def(psi_hat), debug_title+str(alphas)
         return likelihood*(N/2)
 
 def LRT_all_coeffs(data_total, M, dim, H_s, window_size=500, lam=1e-2, step_size=1):
@@ -149,7 +152,7 @@ def LRT_all_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=500, lam
         p_vals.append(p_val)
     return lrt_vals, p_vals
 
-def LRT_individual_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=500, lam=1e-2, step_size=1, beta=5e-3, iters=100, include_l1=True, t=2.0):
+def LRT_individual_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=500, lam=1e-2, step_size=1, beta=5e-3, iters=150, include_l1=False, t=2.0):
     lrt_vals = []
     p_vals = []
     prob_dict = create_all_optim_problems(H_s, dim=dim)
@@ -170,8 +173,11 @@ def LRT_individual_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=5
 
         #############################
         #coeffs_hat_total = optimize_coeffs(H_s, C_full, lam=lam)
-        #coeffs_hat_total = optimize_coeffs_first_order(H_s, C_full, lam=lam, beta=beta, iters=iters, t=t)
-        coeffs_hat_total = solve_optim_global(curr_C=C_full, g_prob=g_prob)
+        coeffs_hat_total = optimize_coeffs_first_order(H_s, C_full, lam=lam, beta=beta, iters=iters, t=t)
+        psi_hat_temp = np.sum(np.expand_dims(coeffs_hat_total, 1)*H_s, 0)
+        psi_hat_temp = symmetrize_from_vector(psi_hat_temp, dim)
+        if not is_pos_def(psi_hat_temp):
+            coeffs_hat_total = solve_optim_global(curr_C=C_full, g_prob=g_prob)
         ##############################
         # null likelihood
         # TODO
@@ -181,7 +187,7 @@ def LRT_individual_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=5
         #                              lam=lam, include_l1=include_l1)
         #null_likelihood = null_first + null_second
         null_likelihood = full_likelihood(coeffs_hat_total, H_s, C_full, N=data_full.shape[1], 
-                                          lam=lam, include_l1=include_l1)
+                                          lam=lam, include_l1=include_l1, debug_title='global')
         # TODO
 
         test_stats_m = []
@@ -207,18 +213,55 @@ def LRT_individual_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=5
             #                                            lam=lam)
             # alpha_i_change_post = optimize_single_coeff(coeffs_hat_total, H_s, C_two, coeff_idx=i,
             #                                             lam=lam)
-            #alpha_i_change_pre = optimize_coeffs_first_order_single(coeffs_hat_total, H_s, C_one, lam=lam, beta=beta, iters=iters, optim_indx=k, t=t)
-            #alpha_i_change_post = optimize_coeffs_first_order_single(coeffs_hat_total, H_s, C_two, lam=lam, beta=beta, iters=iters, optim_indx=k, t=t)
+            alpha_i_change_pre = optimize_coeffs_first_order_single(coeffs_hat_total, H_s, C_one, lam=lam, beta=beta, iters=iters, optim_indx=k, t=t)
+            alpha_i_change_post = optimize_coeffs_first_order_single(coeffs_hat_total, H_s, C_two, lam=lam, beta=beta, iters=iters, optim_indx=k, t=t)
             #TODO
-            alpha_i_change_pre = solve_optim_single(curr_alphas=coeffs_hat_total, 
+            psi_hat_temp = np.sum(np.expand_dims(alpha_i_change_pre, 1)*H_s, 0)
+            psi_hat_temp = symmetrize_from_vector(psi_hat_temp, dim)
+            if not is_pos_def(psi_hat_temp):
+                alpha_i_change_pre = solve_optim_single(curr_alphas=coeffs_hat_total, 
                                                             curr_C=C_one,
                                                             prob_dict=prob_dict,
                                                             optim_idx=k)
-            alpha_i_change_post = solve_optim_single(curr_alphas=coeffs_hat_total, 
+            psi_hat_temp = np.sum(np.expand_dims(alpha_i_change_post, 1)*H_s, 0)
+            psi_hat_temp = symmetrize_from_vector(psi_hat_temp, dim)
+            if not is_pos_def(psi_hat_temp):
+                alpha_i_change_post = solve_optim_single(curr_alphas=coeffs_hat_total, 
                                                             curr_C=C_two,
                                                             prob_dict=prob_dict,
                                                             optim_idx=k)
+            # alpha_i_change_pre_alt = solve_optim_single(curr_alphas=coeffs_hat_total, 
+            #                                                 curr_C=C_one,
+            #                                                 prob_dict=prob_dict,
+            #                                                 optim_idx=k)
+            # alpha_i_change_post_alt = solve_optim_single(curr_alphas=coeffs_hat_total, 
+            #                                                 curr_C=C_two,
+            #                                                 prob_dict=prob_dict,
+            #                                                 optim_idx=k)
+            
             #TODO
+            # print("*** GLOBAL ***")
+            # print(np.around(coeffs_hat_total, decimals=3))
+            # print("**************")
+            # print("\n*** PRE ***")
+            # print("Ours", np.around(alpha_i_change_pre, decimals=3))
+            # print("Solver", np.around(alpha_i_change_pre_alt, decimals=3))
+            # print("Dist {}".format(np.around(np.linalg.norm(alpha_i_change_pre-alpha_i_change_pre_alt, ord=1), decimals=3)))
+            # dist_global_ours_pre = np.around(np.linalg.norm(coeffs_hat_total-alpha_i_change_pre, ord=1), decimals=3)
+            # dist_global_solver_pre = np.around(np.linalg.norm(coeffs_hat_total-alpha_i_change_pre_alt, ord=1), decimals=3)
+            # print("Dist Global Ours {}".format(dist_global_ours_pre))
+            # print("Dist Global Solver {}".format(dist_global_solver_pre))
+            # print("***********")
+            # print("\n*** Post ***")
+            # print("Ours", np.around(alpha_i_change_post, decimals=3))
+            # print("Solver", np.around(alpha_i_change_post_alt, decimals=3))
+            # print("Dist {}".format(np.around(np.linalg.norm(alpha_i_change_post-alpha_i_change_post_alt, ord=1), decimals=3)))
+            # dist_global_ours_post = np.around(np.linalg.norm(coeffs_hat_total-alpha_i_change_post, ord=1), decimals=3)
+            # dist_global_solver_post = np.around(np.linalg.norm(coeffs_hat_total-alpha_i_change_post_alt, ord=1), decimals=3)
+            # print("Dist Global Ours {}".format(dist_global_ours_post))
+            # print("Dist Global Solver {}".format(dist_global_solver_post))
+            # print("***********\n\n")
+
 
             # alpha_i_change_pre = iterative_soln_precision_single(
             #                         coeffs_zero=coeffs_hat_total,
@@ -238,12 +281,24 @@ def LRT_individual_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=5
             #              
             #       )
             #TODO
+
+            # correct for PSD
+            #alpha_i_change_pre[alpha_i_change_pre <= 0.0] = 0.01
+            #alpha_i_change_post[alpha_i_change_post <= 0.0] = 0.01
+            
             # likelihood on pre data, alpha_one change
             alt_likelihood_alpha_i_pre = full_likelihood(alpha_i_change_pre, H_s, C_one, N=data_one.shape[1], 
-                                                         lam=lam, include_l1=include_l1)
+                                                         lam=lam, include_l1=include_l1, debug_title='Pre')
             # likelihood on post data, alpha_one change
             alt_likelihood_alpha_i_post = full_likelihood(alpha_i_change_post, H_s, C_two, N=data_two.shape[1], 
-                                                          lam=lam, include_l1=include_l1)
+                                                          lam=lam, include_l1=include_l1, debug_title='Post')
+            # alt_likelihood_alpha_i_pre_alt = full_likelihood(alpha_i_change_pre_alt, H_s, C_one, N=data_one.shape[1], 
+            #                                              lam=lam, include_l1=include_l1, debug_title='Pre')
+            # # likelihood on post data, alpha_one change
+            # alt_likelihood_alpha_i_post_alt = full_likelihood(alpha_i_change_post_alt, H_s, C_two, N=data_two.shape[1], 
+            #                                               lam=lam, include_l1=include_l1, debug_title='Post')
+            #print("Likelihood Diff Pre {}".format(alt_likelihood_alpha_i_pre-alt_likelihood_alpha_i_pre_alt))
+            #print("Likelihood Diff Post {}".format(alt_likelihood_alpha_i_post-alt_likelihood_alpha_i_post_alt))
             #TODO
             # likelihood on pre data, alpha_one change
             # alt_likelihood_alpha_i_pre = full_likelihood(pre_results[k], H_s, C_one, N=data_one.shape[1], 
@@ -254,9 +309,15 @@ def LRT_individual_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=5
 
             # total likelihood alt first coeff
             alt_likelihood_alpha_i = alt_likelihood_alpha_i_pre + alt_likelihood_alpha_i_post
+            #alt_likelihood_alpha_i_alt = alt_likelihood_alpha_i_pre_alt + alt_likelihood_alpha_i_post_alt
+            #print("Likelihood Diff Total {}".format(alt_likelihood_alpha_i - alt_likelihood_alpha_i_alt))
             
             test_stat_i, p_val_i = likelihood_ratio_test(null_likelihood, 
                                                 alt_likelihood_alpha_i, 2)
+            # test_stat_i_alt, p_val_i_alt = likelihood_ratio_test(null_likelihood, 
+            #                                     alt_likelihood_alpha_i_alt, 2)
+            #print("\n\n")
+            
             test_stats_m.append(test_stat_i)
             p_vals_m.append(p_val_i)
             
