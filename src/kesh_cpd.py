@@ -5,7 +5,7 @@ from numpy.linalg import inv as inv
 import scipy
 from scipy.optimize import least_squares, minimize
 from scipy.stats import chi2
-from simulate import sim_changepoint_mv_normal_cholesky, sim_changepoint_mv_normal_ldlt, sim_changepoint_var_process, changepoint_cai_model_one, changepoint_cai_model_three, create_matrix_kesh, changepoint_kesh_model
+from simulate import sim_changepoint_mv_normal_cholesky, sim_changepoint_mv_normal_ldlt, sim_changepoint_var_process, changepoint_cai_model_one, changepoint_cai_model_three
 from utils import scale_data, difference_data, vectorize_matrix, symmetrize_from_vector
 from statsmodels.stats.multitest import fdrcorrection
 from tqdm import tqdm
@@ -45,7 +45,7 @@ from rpy2.robjects.vectors import StrVector
 names_to_install = [x for x in packnames if not rpackages.isinstalled(x)]
 if len(names_to_install) > 0:
     utils.install_packages(StrVector(names_to_install))
-clime = importr('fastclime')
+clime = importr('clime')
 scalreg = importr('scalreg')
 
 import argparse
@@ -134,6 +134,7 @@ def resolve_data(args, save_path=None):
 class KeshOnline:
 
     def __init__(self, args, data):
+        self.args = args
         self.data_full = data
         self.N = args.burn_in
         self.w = args.window_size
@@ -145,26 +146,25 @@ class KeshOnline:
         self.D_hat = []
 
         self.data = self.data_full[self.N:, :]
-        self.prec_mat = args.prec_mat
 
-        self.clime_init = self.clime_init_fn(self.data_full[0:self.N, :])
+        self.clime_init = self.clime_init_fn(args, self.data_full[0:self.N, :])
         #self.prec_est = self.clime_init_fn(self.data_full)
         #self.glasso_est = GraphicalLasso(max_iter=100, alpha=self.lam, tol=1e-5, verbose=False).fit(self.data_full)
         #print(self.prec_mat, end='\n\n')
         #print(self.prec_est, end='\n\n')
         #print(self.glasso_est.precision_)
         self.glasso = GraphicalLasso(max_iter=100, alpha=self.lam, tol=1e-5, verbose=False).fit(self.data_full[0:self.N, :])
-        self.clime_init = self.glasso.precision_
+        #self.clime_init = self.glasso.precision_
         self.g1 = calc_g1(self.w)
-        print("G1 {}".format(self.g1))
+        #print("G1 {}".format(self.g1))
         self.g2 = calc_g2(self.w)
-        print("G2 {}".format(self.g2))
+        #print("G2 {}".format(self.g2))
         self.rhat0 = calc_rhat(self.clime_init, self.p)
         #self.rhat0 = calc_rhat(self.prec_mat, self.p)
         self.T0 = calc_T_t(X=self.data, omega_hat=self.clime_init, r_hat=self.rhat0, w=self.w, p=self.p, t=0, g1=self.g1, g2=self.g2)
         self.critical_value = inv_Q_func(self.pi_0)
 
-        self.D_hat = self.iterate(self.data)
+        self.test_stats = self.iterate(self.data)
         # self.rhat0 = calc_rhat(self.glasso.precision_, self.p)
         # self.T0 = calc_T_t(X=self.data, omega_hat=self.glasso.precision_, r_hat=self.rhat0, w=self.w, p=self.p, t=0, g1=self.g1, g2=self.g2)
         # print(self.T0)
@@ -188,17 +188,22 @@ class KeshOnline:
         #print(scipy.linalg.norm(calc_E_hat(self.data, self.glasso.precision_, t=0, p=self.p, w=self.w, prec_mat=self.prec_mat), ord=np.inf))
         #print(self.critical_value)
 
-    def clime_init_fn(self, data_minimal):
+    def clime_init_fn(self, args, data_minimal):
         nrow, ncol = data_minimal.shape
         X = r.matrix(data_minimal, nrow=nrow, ncol=ncol)
-        clime_out = clime.fastclime(X, self.lam, 100)
-        clime_soln = dict(zip(clime_out.names, list(clime_out)))
-        lambdamtx = clime_soln['lambdamtx']
-        icovlist = clime_soln['icovlist']
-        select_out = clime.fastclime_selector(lambdamtx, icovlist, self.lam)
-        select_soln = dict(zip(select_out.names, list(select_out)))
+        reg_soln = scalreg.scalreg(X, lam0=args.lam)
+        reg_soln_dict = dict(zip(reg_soln.names, list(reg_soln)))
+        clime_est = reg_soln_dict['precision']
+        # nrow, ncol = data_minimal.shape
+        # X = r.matrix(data_minimal, nrow=nrow, ncol=ncol)
+        # clime_out = clime.fastclime(X, self.lam, 100)
+        # clime_soln = dict(zip(clime_out.names, list(clime_out)))
+        # lambdamtx = clime_soln['lambdamtx']
+        # icovlist = clime_soln['icovlist']
+        # select_out = clime.fastclime_selector(lambdamtx, icovlist, self.lam)
+        # select_soln = dict(zip(select_out.names, list(select_out)))
         
-        clime_est = np.array(select_soln['icov'])
+        # clime_est = np.array(select_soln['icov'])
         return clime_est
 
     def critical_value_init(self, pi_0, p, w):
@@ -223,34 +228,44 @@ class KeshOnline:
         that_last = 0
 
         #for t in range(data.shape[0]):
+        test_stats = []
         t = 0
-        while t+self.w <= data.shape[0]:
+        #while t+self.w <= data.shape[0]:
+        for t in tqdm(range(0, data.shape[0]-self.w, self.args.step_size)):
             T_t = calc_T_t(X=data, omega_hat=curr_clime, r_hat=curr_rhat, w=self.w, p=self.p, t=t, g1=self.g1, g2=self.g2)
+            test_stats.append(T_t)
             #T_t = calc_T_t(X=data, omega_hat=self.prec_mat, r_hat=self.rhat0, w=self.w, p=self.p, t=t, g1=self.g1, g2=self.g2)
-            print("Test Stat {} Critical Val {}".format(T_t, self.critical_value))
+            #print("Test Stat {} Critical Val {}".format(T_t, self.critical_value))
             indicator_fn = (T_t >= self.critical_value)
-            if not indicator_fn:
-                curr_b += 1
-                t += 1
-                if curr_b == self.buffer:
-                    #curr_clime = self.clime_init_fn(data[that_last:t, :])
-                    curr_clime = GraphicalLasso(max_iter=100, alpha=self.lam, tol=1e-5, verbose=False).fit(data[that_last:t, :]).precision_
-                    curr_rhat = calc_rhat(curr_clime, self.p)
-                    curr_b = 0
-            else:
-                that_last = t
-                self.D_hat.append(t)
-                #curr_clime = self.clime_init_fn(data[t:t+self.N, :])
-                curr_clime = GraphicalLasso(max_iter=100, alpha=self.lam, tol=1e-5, verbose=False).fit(data[t:t+self.N, :]).precision_
-                curr_rhat = calc_rhat(curr_clime, self.p)
-                curr_b = 0
-                t = t + self.N
+            #curr_b += 1
+            #t += 1
+            # if curr_b == self.buffer:
+            #     curr_clime = self.clime_init_fn(self.args, data[that_last:t, :])
+            #     #curr_clime = GraphicalLasso(max_iter=100, alpha=self.lam, tol=1e-5, verbose=False).fit(data[that_last:t, :]).precision_
+            #     curr_rhat = calc_rhat(curr_clime, self.p)
+            #     curr_b = 0
+            # if not indicator_fn:
+            #     curr_b += 1
+            #     t += 1
+            #     if curr_b == self.buffer:
+            #         curr_clime = self.clime_init_fn(self.args, data[that_last:t, :])
+            #         #curr_clime = GraphicalLasso(max_iter=100, alpha=self.lam, tol=1e-5, verbose=False).fit(data[that_last:t, :]).precision_
+            #         curr_rhat = calc_rhat(curr_clime, self.p)
+            #         curr_b = 0
+            # else:
+            #     that_last = t
+            #     self.D_hat.append(t)
+            #     curr_clime = self.clime_init_fn(self.args, data[t:t+self.N, :])
+            #     #curr_clime = GraphicalLasso(max_iter=100, alpha=self.lam, tol=1e-5, verbose=False).fit(data[t:t+self.N, :]).precision_
+            #     curr_rhat = calc_rhat(curr_clime, self.p)
+            #     curr_b = 0
+            #     t = t + self.N
         
-        return self.D_hat
+        return np.array(test_stats)
         
 
 #@jit(nopython=True)
-def calc_E_hat(data, omega_hat, t, p, w, prec_mat):
+def calc_E_hat(data, omega_hat, t, p, w):
     #prec_mat = inv(np.eye(p))
     summand_mat = np.zeros((p, p))
     for r in range(1, w):
@@ -323,14 +338,14 @@ def calc_T_t(X, omega_hat, r_hat, w, p, t, g1, g2):
     w_s = []
     for s in range(p):
         curr_y = calc_y_s_t_w(X, omega_hat, w=w, s=s, t=t)
-        print("Curr y {}".format(curr_y))
+        #print("Curr y {}".format(curr_y))
         curr_f = calc_f(curr_y)
-        print("Curr F {}".format(curr_f))
+        #print("Curr F {}".format(curr_f))
         top += (curr_f - g1)
-        print("Diff {}".format(curr_f-g1))
-        print("W*Y {} (this is Chi-square W dof)".format(w*curr_y))
+        #print("Diff {}".format(curr_f-g1))
+        #print("W*Y {} (this is Chi-square W dof)".format(w*curr_y))
         w_s.append(w*curr_y)
-        print("Top {}".format(top),end='\n\n')
+        #print("Top {}".format(top),end='\n\n')
     
 
     #plt.hist(w_s)
@@ -344,8 +359,8 @@ def calc_T_t(X, omega_hat, r_hat, w, p, t, g1, g2):
     # axes[1].set_ylim(0.0, 0.06)
     # plt.show()
     bot = g2 * calc_hw(r_hat)
-    print("Bot {}".format(bot))
-    print("Rhat {}".format(calc_hw(r_hat)))
+    #print("Bot {}".format(bot))
+    #print("Rhat {}".format(calc_hw(r_hat)))
 
     return top/bot
 
@@ -355,11 +370,12 @@ def inv_Q_func(pi_0):
 
 
 def perform_single_run(args):
-    data_full, prec_mat = resolve_data(args, save_path=None)
-    print(data_full.shape, prec_mat.shape)
-    args.prec_mat = prec_mat
+    data_full = resolve_data(args, save_path=None)
+    print(data_full.shape)
     model = KeshOnline(args, data_full)
-    print(model.D_hat)
+    print(model.test_stats)
+    print(model.test_stats.shape)
+    #print(model.D_hat)
     #global_test_vals, _ = apply_cai_algorithm_windowed(args, data_full)
     #plt.plot(global_test_vals)
     #plt.show()
