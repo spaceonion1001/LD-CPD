@@ -238,7 +238,7 @@ class KeshOnline:
             #print("Test Stat {} Critical Val {}".format(T_t, self.critical_value))
             indicator_fn = (T_t >= self.critical_value)
             #curr_b += 1
-            #t += 1
+            # t += 1
             # if curr_b == self.buffer:
             #     curr_clime = self.clime_init_fn(self.args, data[that_last:t, :])
             #     #curr_clime = GraphicalLasso(max_iter=100, alpha=self.lam, tol=1e-5, verbose=False).fit(data[that_last:t, :]).precision_
