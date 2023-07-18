@@ -35,7 +35,7 @@ rpy2.robjects.numpy2ri.activate()
 utils = importr('utils')
 utils.chooseCRANmirror(ind=1)
 # R package names
-packnames = ('fastclime', 'scalreg')
+packnames = ('scalreg')
 
 # R vector of strings
 from rpy2.robjects.vectors import StrVector
@@ -45,7 +45,7 @@ from rpy2.robjects.vectors import StrVector
 names_to_install = [x for x in packnames if not rpackages.isinstalled(x)]
 if len(names_to_install) > 0:
     utils.install_packages(StrVector(names_to_install))
-clime = importr('clime')
+#clime = importr('clime')
 scalreg = importr('scalreg')
 
 import argparse
@@ -380,10 +380,40 @@ def perform_single_run(args):
     #plt.plot(global_test_vals)
     #plt.show()
 
+def perform_simulation_batch(args):
+    # run a batch of 50 simulations/results with a specified simulation model
+    # only local test
+    # should do step_size = 1 because it's easier
+    # save everything to files - I guess
+    print("\n*******************************************************************************")
+    print("Performing Batch Simulation of {} with Dim = {}, Window = {}".format(args.sim_type, args.dim, args.window_size))
+    seeds_list = np.arange(50, 75)
+    sim_results_path = os.path.join(args.results_path, "simulation_results_kesh")
+    if not os.path.isdir(sim_results_path):
+        os.mkdir(sim_results_path)
+    sim_type_path = os.path.join(sim_results_path, args.sim_type+"_"+str(args.dim))
+    print(sim_type_path)
+    if not os.path.isdir(sim_type_path):
+        os.mkdir(sim_type_path)
+    for seed in seeds_list:
+        np.random.seed(seed)
+        save_path = os.path.join(sim_type_path, str(seed))
+        if not os.path.isdir(save_path):
+            os.mkdir(save_path)
+        data_full = resolve_data(args, save_path=save_path)
+        print(data_full.shape)
+        model = KeshOnline(args, data_full)
+        global_test_vals = model.test_stats
+        print()
+        np.savetxt(os.path.join(save_path, "global_test_vals.csv"), global_test_vals, delimiter=',')
+    print("*******************************************************************************")
+    print("Done!")
+
 def main():
     np.random.seed(24)
     args = get_args()
-    perform_single_run(args)
+    #perform_single_run(args)
+    perform_simulation_batch(args)
 
 
 

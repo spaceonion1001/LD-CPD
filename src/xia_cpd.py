@@ -58,6 +58,7 @@ def get_args():
     parser.add_argument('--step_size', type=int, default=1)
     parser.add_argument('--num_coeffs_change', type=int, default=2)
     parser.add_argument('--results_path', type=str, default='/home/dink/Documents/Research/Correlation-Changepoint-Detection/results')
+    parser.add_argument('--fix_pre', type=int, default=0)
     args = parser.parse_args()
 
     return args
@@ -330,8 +331,12 @@ def apply_cai_algorithm_windowed(args, data):
     global_test_vals = []
     for i in tqdm(range(0, data.shape[0]-2*args.window_size, args.step_size)):
         data_window = data[i:i+2*args.window_size, :]
+        if args.fix_pre:
+            first_data_window = data[0:args.window_size, :]
+            second_data_window = data[i+args.window_size:i+2*args.window_size, :]
+            data_window = np.concatenate((first_data_window, second_data_window), axis=0)
         #beta_hats_x, beta_hats_y = perform_regression(data)
-        residuals_x, residuals_y, beta_hats_x, beta_hats_y  = perform_regression(data)
+        residuals_x, residuals_y, beta_hats_x, beta_hats_y  = perform_regression(data_window)
         middle = data_window.shape[0]//2
         #residuals_x = calculate_residuals(beta_hats_x, data_window[:middle, :])
         residuals_x_cov_corrected = bias_corrected_residual_covariance(residuals_x, beta_hats_x)
@@ -346,7 +351,6 @@ def apply_cai_algorithm_windowed(args, data):
         W = calculate_standardized_stat(T_x, T_y, theta_x, theta_y)
         M = calculate_global_stat(W)
         threshold = indicator_global_stat(M, p=data.shape[1], alpha=0.01)
-        print(M)
 
         # print(M)
         # print(threshold)
@@ -444,7 +448,7 @@ def perform_simulation_batch(args):
             os.mkdir(save_path)
         data_full = resolve_data(args, save_path=save_path)
         print(data_full.shape)
-        global_test_vals = apply_cai_algorithm_windowed(args, data_full)
+        global_test_vals, _ = apply_cai_algorithm_windowed(args, data_full)
         print()
         np.savetxt(os.path.join(save_path, "global_test_vals.csv"), global_test_vals, delimiter=',')
     print("*******************************************************************************")
@@ -736,7 +740,8 @@ if __name__ == '__main__':
     args = get_args()
     #data = resolve_data(args)
     #apply_cai_variance_windowed(args, data)
-    perform_simulation_batch_variance(args)
+    perform_simulation_batch(args)
+    #perform_simulation_batch_variance(args)
     #precision_recall_sims(args)
     #precision_recall_sims_precision(args)
     #precision_recall_sims_precision_runtimes(args)
