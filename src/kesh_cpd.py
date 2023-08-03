@@ -387,7 +387,7 @@ def perform_simulation_batch(args):
     # save everything to files - I guess
     print("\n*******************************************************************************")
     print("Performing Batch Simulation of {} with Dim = {}, Window = {}".format(args.sim_type, args.dim, args.window_size))
-    seeds_list = np.arange(50, 75)
+    seeds_list = np.arange(50, 60)
     sim_results_path = os.path.join(args.results_path, "simulation_results_kesh")
     if not os.path.isdir(sim_results_path):
         os.mkdir(sim_results_path)

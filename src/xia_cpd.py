@@ -58,7 +58,7 @@ def get_args():
     parser.add_argument('--step_size', type=int, default=1)
     parser.add_argument('--num_coeffs_change', type=int, default=2)
     parser.add_argument('--results_path', type=str, default='/home/dink/Documents/Research/Correlation-Changepoint-Detection/results')
-    parser.add_argument('--fix_pre', type=int, default=0)
+    parser.add_argument('--fix_pre', type=int, default=1)
     args = parser.parse_args()
 
     return args
@@ -433,7 +433,7 @@ def perform_simulation_batch(args):
     # save everything to files - I guess
     print("\n*******************************************************************************")
     print("Performing Batch Simulation of {} with Dim = {}, Window = {}".format(args.sim_type, args.dim, args.window_size))
-    seeds_list = np.arange(50, 75)
+    seeds_list = np.arange(50, 60)
     sim_results_path = os.path.join(args.results_path, "simulation_results_cai")
     if not os.path.isdir(sim_results_path):
         os.mkdir(sim_results_path)

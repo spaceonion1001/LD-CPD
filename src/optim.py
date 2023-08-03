@@ -28,9 +28,15 @@ def calc_matrices_precision(psi_hat, H_s, C):
             mult = ((inv_psi_hat.dot(H_g)).dot(inv_psi_hat)).dot(H_h)
             lhs = np.trace(mult)
             A[g, h] = lhs
+        #print("PSI_HAT PROJ", np.trace(inv_psi_hat.dot(H_g)))
+        #print()
+        #print("C PROJ", np.trace(C.dot(H_g)))
+        #print()
         rhs = np.trace(inv_psi_hat.dot(H_g)) - np.trace(C.dot(H_g))
         B[g] = rhs
-        
+        #print("H_g", H_s[g])
+        #print()
+    #exit()
     return A, B
 
 """
@@ -49,11 +55,53 @@ def iterative_soln_precision_single(coeffs_zero, H_s, C, dim, modify_index=0, it
             psi_hat = psi_hat + s_imo[i]*H_s[i]
         psi_hat = symmetrize_from_vector(psi_hat, dim)
         A, B = calc_matrices_precision(psi_hat, H_s, C)
+        #print("DIAG", np.diag(A))
+        #print("A", A)
+        #print("EV", np.linalg.eig(A)[0])
         t_i = inv(A).dot(B)
         s_i[modify_index] = s_imo[modify_index] + t_i[modify_index]
         s_imo = s_i
         
     return s_imo
+
+def iterative_soln_precision(coeffs_zero, H_s, C, iters=5):
+    s_imo = coeffs_zero
+    s_i = s_imo.copy()
+    H_dim = H_s.shape[0]
+    dim = C.shape[0]
+    for it in range(iters):
+        #psi_hat = (s_imo.reshape(-1, 1, 1)*H_s).sum(0) # calculate psi_hat
+        psi_hat = np.zeros(int((dim*(dim+1))/2))
+        for i in range(H_s.shape[0]):
+            psi_hat = psi_hat + s_imo[i]*H_s[i]
+        psi_hat = symmetrize_from_vector(psi_hat, dim)
+        A, B = calc_matrices_precision(psi_hat, H_s, C)
+        # try:
+        #     
+        # except:
+        #     pdb.set_trace()
+        #t_i = inv(A).dot(B)
+        t_i = np.linalg.solve(A, B)
+        #print("STEP SIZE", t_i)
+        #print("ALPHAS", s_imo)
+        #print()
+        s_i = s_imo + t_i
+        s_imo = s_i
+        
+    return s_imo
+
+def unbiased_init_precision(C, H_s):
+    H_dim = H_s.shape[0]
+    A = np.zeros((H_dim, H_dim))
+    B = np.zeros((H_dim, ))
+    C_dim = C.shape[0]
+    for g in range(H_dim):
+        for h in range(H_dim):
+            H_g = symmetrize_from_vector(H_s[g], C_dim)
+            H_h = symmetrize_from_vector(H_s[h], C_dim)
+            A[g, h] = np.trace(H_g.dot(H_h))
+        B[g] = np.trace(inv(C).dot(H_g))
+    return np.linalg.solve(A, B)
 
     
 class CVXProblem(object):

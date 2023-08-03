@@ -3,7 +3,7 @@ from tqdm import tqdm
 from optim import optimize_coeffs, optimize_single_coeff, optimize_coeffs_first_order, optimize_coeffs_first_order_single
 from optim import create_all_optim_problems, create_global_problem
 from optim import solve_optim_single, solve_optim_global
-from optim import iterative_soln_precision_single
+from optim import iterative_soln_precision_single, iterative_soln_precision, unbiased_init_precision
 from statsmodels.stats.multitest import fdrcorrection, multipletests
 from scipy.stats import chi2, multivariate_normal
 from utils import is_pos_def, is_symmetric, vectorize_matrix, symmetrize_from_vector
@@ -83,8 +83,9 @@ def full_likelihood(alphas, H_s, C, N, lam=1e-2, include_l1=False, debug_title='
         _, first_term = np.linalg.slogdet(psi_hat)
         #likelihood = np.log(np.linalg.det(psi_hat)) - np.trace(psi_hat@C) - P*np.log(2*np.pi)
         likelihood = first_term - np.trace(psi_hat@C) - P*np.log(2*np.pi)
-        # if not is_pos_def(psi_hat):
-        #     pdb.set_trace()
+        if not is_pos_def(psi_hat):
+            print(debug_title)
+            #pdb.set_trace()
         #assert is_pos_def(psi_hat), debug_title+str(alphas)
         return likelihood*(N/2)
 
@@ -152,7 +153,7 @@ def LRT_all_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=500, lam
         p_vals.append(p_val)
     return lrt_vals, p_vals
 
-def LRT_individual_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=500, lam=1e-2, step_size=1, beta=5e-3, iters=150, include_l1=False, t=2.0):
+def LRT_individual_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=500, lam=1e-2, step_size=1, beta=5e-3, iters=150, include_l1=False, t=2.0, optim_type='unbiased'):
     lrt_vals = []
     p_vals = []
     prob_dict = create_all_optim_problems(H_s, dim=dim)
@@ -173,17 +174,22 @@ def LRT_individual_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=5
         #C_one = np.cov(data_one, bias=True)
         C_two = np.cov(data_two, bias=True)
         C_full = np.cov(data_full, bias=True)
-        # C_one = np.corrcoef(data_one)
-        # C_two = np.corrcoef(data_two)
-        # C_full = np.corrcoef(data_full)
+        
 
         #############################
+        if optim_type == 'CVX':
+            coeffs_hat_total = solve_optim_global(curr_C=C_full, g_prob=g_prob)
+        elif optim_type == 'unbiased':
+            coeffs_hat_total = unbiased_init_precision(C=C_full, H_s=H_s)
+        elif optim_type == 'Anderson':
+            coeffs_hat_total = iterative_soln_precision(coeffs_zero=np.ones(H_s.shape[0]), H_s=H_s, C=C_full, iters=15)
+        elif optim_type == 'first-order':
+            coeffs_hat_total = optimize_coeffs_first_order(H_s, C_full, lam=lam, beta=beta, iters=iters, t=t)
         #coeffs_hat_total = optimize_coeffs(H_s, C_full, lam=lam)
-        # coeffs_hat_total = optimize_coeffs_first_order(H_s, C_full, lam=lam, beta=beta, iters=iters, t=t)
         # psi_hat_temp = np.sum(np.expand_dims(coeffs_hat_total, 1)*H_s, 0)
         # psi_hat_temp = symmetrize_from_vector(psi_hat_temp, dim)
-        # if not is_pos_def(psi_hat_temp):
-        coeffs_hat_total = solve_optim_global(curr_C=C_full, g_prob=g_prob)
+        
+        #print("COEFFS HAT TOTAL", coeffs_hat_total)
         ##############################
         # null likelihood
         # TODO
@@ -215,12 +221,57 @@ def LRT_individual_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=5
         # iterate over each coefficient
         for k in range(M):
             ####################################
+            if optim_type == 'CVX':
+                alpha_i_change_pre = solve_optim_single(curr_alphas=coeffs_hat_total, 
+                                                            curr_C=C_one,
+                                                            prob_dict=prob_dict,
+                                                            optim_idx=k)
+                alpha_i_change_post = solve_optim_single(curr_alphas=coeffs_hat_total, 
+                                                                curr_C=C_two,
+                                                                prob_dict=prob_dict,
+                                                                optim_idx=k)
+            elif optim_type == 'unbiased':
+                """
+                THIS ONE PROBABLY ISN'T COMPLETE YET
+
+                NEED CONVINCING THAT THIS IS OKAY TO THROW OUT INFO FROM OTHER CLUSTERS
+
+                ADDITIONALLY, THIS CURRENTLY GIVES NEGATIVES IN THE LIKELIHOOD RATIO TEST
+                WHICH IS A CONSEQUENCE OF SOLVING ALL COEFFICIENTS TOGETHER, BUT TOSSING OUT THE OTHERS
+                (FIXING THEM TO BE THE VALUES FROM THE TOTAL, SINCE UNBIASED ASSUMES THEY ALL FLEX TOGETHER)
+                """
+                temp_alph_pre = unbiased_init_precision(C=C_one, H_s=H_s)
+                temp_alph_post = unbiased_init_precision(C=C_two, H_s=H_s)
+                alpha_i_change_pre = coeffs_hat_total.copy()
+                alpha_i_change_post = coeffs_hat_total.copy()
+                alpha_i_change_pre[k] = temp_alph_pre[k]
+                alpha_i_change_post[k] = temp_alph_post[k]
+            elif optim_type == 'Anderson':
+                alpha_i_change_pre = iterative_soln_precision_single(
+                                    coeffs_zero=coeffs_hat_total,
+                                    H_s=H_s,
+                                    C=C_one,
+                                    dim=data_full.shape[0],
+                                    modify_index=k,
+                                    iters=10
+                                )
+                alpha_i_change_post = iterative_soln_precision_single(
+                                        coeffs_zero=coeffs_hat_total,
+                                        H_s=H_s,
+                                        C=C_two,
+                                        dim=data_full.shape[0],
+                                        modify_index=k,
+                                        iters=10
+                            
+                    )
+            elif optim_type == 'first-order':
+                alpha_i_change_pre = optimize_coeffs_first_order_single(coeffs_hat_total, H_s, C_one, lam=lam, beta=beta, iters=iters, optim_indx=k, t=t)
+                alpha_i_change_post = optimize_coeffs_first_order_single(coeffs_hat_total, H_s, C_two, lam=lam, beta=beta, iters=iters, optim_indx=k, t=t)
             # alpha_i_change_pre = optimize_single_coeff(coeffs_hat_total, H_s, C_one, coeff_idx=i,
             #                                            lam=lam)
             # alpha_i_change_post = optimize_single_coeff(coeffs_hat_total, H_s, C_two, coeff_idx=i,
             #                                             lam=lam)
-            # alpha_i_change_pre = optimize_coeffs_first_order_single(coeffs_hat_total, H_s, C_one, lam=lam, beta=beta, iters=iters, optim_indx=k, t=t)
-            # alpha_i_change_post = optimize_coeffs_first_order_single(coeffs_hat_total, H_s, C_two, lam=lam, beta=beta, iters=iters, optim_indx=k, t=t)
+            
             # #TODO
             # psi_hat_temp = np.sum(np.expand_dims(alpha_i_change_pre, 1)*H_s, 0)
             # psi_hat_temp = symmetrize_from_vector(psi_hat_temp, dim)
@@ -236,14 +287,7 @@ def LRT_individual_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=5
             #                                                 curr_C=C_two,
             #                                                 prob_dict=prob_dict,
             #                                                 optim_idx=k)
-            alpha_i_change_pre = solve_optim_single(curr_alphas=coeffs_hat_total, 
-                                                            curr_C=C_one,
-                                                            prob_dict=prob_dict,
-                                                            optim_idx=k)
-            alpha_i_change_post = solve_optim_single(curr_alphas=coeffs_hat_total, 
-                                                            curr_C=C_two,
-                                                            prob_dict=prob_dict,
-                                                            optim_idx=k)
+            
             
             #TODO
             # print("*** GLOBAL ***")
@@ -269,28 +313,8 @@ def LRT_individual_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=5
             # print("***********\n\n")
 
 
-            # alpha_i_change_pre = iterative_soln_precision_single(
-            #                         coeffs_zero=coeffs_hat_total,
-            #                         H_s=H_s,
-            #                         C=C_one,
-            #                         dim=data_full.shape[0],
-            #                         modify_index=k,
-            #                         iters=10
-            #                     )
-            # alpha_i_change_post = iterative_soln_precision_single(
-            #                         coeffs_zero=coeffs_hat_total,
-            #                         H_s=H_s,
-            #                         C=C_two,
-            #                         dim=data_full.shape[0],
-            #                         modify_index=k,
-            #                         iters=10
-            #              
-            #       )
+            
             #TODO
-
-            # correct for PSD
-            #alpha_i_change_pre[alpha_i_change_pre <= 0.0] = 0.01
-            #alpha_i_change_post[alpha_i_change_post <= 0.0] = 0.01
             
             # # likelihood on pre data, alpha_one change
             alt_likelihood_alpha_i_pre = full_likelihood(alpha_i_change_pre, H_s, C_one, N=data_one.shape[1], 

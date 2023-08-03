@@ -29,6 +29,7 @@ warnings.filterwarnings('ignore')  # <- remember to comment this if something br
 
 class PrecisionCPD:
     def __init__(self, args):
+        self.optim_type = args.optim_type
         self.lam = args.lam
         self.M = args.M
         self.window_size = args.window_size
@@ -90,9 +91,11 @@ class PrecisionCPD:
                 for idx2 in idxs: # loop over indexes
                     A[idx][idx2] = precision[idx][idx2].copy() # set i,j entry to be the entry from precision matrix for given cluster
             if self.split_variance:
-                self.basis_matrices.append(vectorize_matrix(np.diag(np.diag(A.copy()))))
+                if len(np.nonzero(A)[0]) > 0:
+                    self.basis_matrices.append(vectorize_matrix(np.diag(np.diag(A.copy()))))
                 np.fill_diagonal(A, 0)
-            self.basis_matrices.append(vectorize_matrix(A))
+            if len(np.nonzero(A)[0]) > 0:
+                self.basis_matrices.append(vectorize_matrix(A))
         
         basis_mats_backup = np.array(self.basis_matrices).copy()
         #################
@@ -126,9 +129,9 @@ class PrecisionCPD:
         assert is_pos_def(symmetrize_from_vector(self.basis_matrices.sum(axis=0), dim=self.dim)), "Not PosDef"
         for mat in self.basis_matrices_full:
             assert is_symmetric(symmetrize_from_vector(mat, dim=self.dim)), "Not Symmetric"
-        print("H Matrices:", self.basis_matrices_full.shape[0])
-        print("Sum {}".format((self.basis_matrices[0] == 0).sum()))
-        print("Sum {}".format((self.basis_matrices[1] == 0).sum()))
+        print("H Matrices:", self.basis_matrices.shape[0])
+        #print("Sum {}".format((self.basis_matrices[0] == 0).sum()))
+        #print("Sum {}".format((self.basis_matrices[1] == 0).sum()))
         print("Shape {}".format(self.basis_matrices[0].shape))
         print("Shape {}".format(self.basis_matrices[1].shape))
 
@@ -156,7 +159,7 @@ class PrecisionCPD:
             basis_mats = self.basis_matrices_full
         lrt_vals_all, p_vals_all = LRT_individual_coeffs_full_likelihood(data_full, M=basis_mats.shape[0], dim=data_full.shape[0], H_s=basis_mats, 
                                                                          window_size=self.window_size, lam=self.lam, step_size=self.step_size, include_l1=self.include_l1, 
-                                                                         iters=self.iters, beta=self.beta, t=self.t)
+                                                                         iters=self.iters, beta=self.beta, t=self.t, optim_type=self.optim_type)
 
         #return np.array(lrt_vals_all), np.array(apply_fdr_correction(p_vals_all))
         lrt_vals_all = np.array(lrt_vals_all)
