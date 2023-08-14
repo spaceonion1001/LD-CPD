@@ -2,6 +2,7 @@ import numpy as np
 from tqdm import tqdm
 from optim import optimize_coeffs, optimize_single_coeff, optimize_coeffs_first_order, optimize_coeffs_first_order_single
 from optim import create_all_optim_problems, create_global_problem
+from optim import create_all_optim_problems_cluster, solve_optim_single_cluster
 from optim import solve_optim_single, solve_optim_global, coord_ascent
 from optim import iterative_soln_precision_single, iterative_soln_precision, unbiased_init_precision, unbiased_init_precision_single, unbiased_init_precision_single_alt
 from statsmodels.stats.multitest import fdrcorrection, multipletests
@@ -157,6 +158,7 @@ def LRT_individual_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=5
     lrt_vals = []
     p_vals = []
     prob_dict = create_all_optim_problems(H_s, dim=dim)
+    prob_dict_clust = create_all_optim_problems_cluster(H_s, dim=dim)
     g_prob = create_global_problem(H_s, dim=dim)
     data_one = data_total[:, 0:2*window_size]
     C_one = np.cov(data_one, bias=True)
@@ -177,7 +179,7 @@ def LRT_individual_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=5
         
 
         #############################
-        if optim_type == 'CVX':
+        if optim_type == 'CVX' or optim_type == 'CVXCLUST':
             coeffs_hat_total = solve_optim_global(curr_C=C_full, g_prob=g_prob)
         elif optim_type == 'unbiased':
             coeffs_hat_total = unbiased_init_precision(C=C_full, H_s=H_s)
@@ -229,6 +231,20 @@ def LRT_individual_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=5
                 alpha_i_change_post = solve_optim_single(curr_alphas=coeffs_hat_total, 
                                                                 curr_C=C_two,
                                                                 prob_dict=prob_dict,
+                                                                optim_idx=k)
+            elif optim_type == 'CVXCLUST':
+                curr_H = H_s[k]
+                curr_H = symmetrize_from_vector(curr_H, dim=dim)
+                curr_C_pre = C_one[~np.all(curr_H==0, axis=1), :][:, ~np.all(curr_H==0, axis=0)]
+                curr_C_post = C_two[~np.all(curr_H==0, axis=1), :][:, ~np.all(curr_H==0, axis=0)]
+                print("C SHAPES", curr_C_pre.shape, curr_C_post.shape)
+                alpha_i_change_pre = solve_optim_single(curr_alphas=coeffs_hat_total, 
+                                                            curr_C=curr_C_pre,
+                                                            prob_dict=prob_dict_clust,
+                                                            optim_idx=k)
+                alpha_i_change_post = solve_optim_single(curr_alphas=coeffs_hat_total, 
+                                                                curr_C=curr_C_post,
+                                                                prob_dict=prob_dict_clust,
                                                                 optim_idx=k)
             elif optim_type == 'unbiased':
                 """

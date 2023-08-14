@@ -178,6 +178,55 @@ def unbiased_init_precision_single_alt(coeffs_zero, C, H_s, modify_index=0):
     return new_alphas
 
 
+class CVXProblemCluster(object):
+    def __init__(self, dim):
+        super().__init__()
+        self.dim = dim
+
+    def create_single_optim_problem(self, H_s, optim_idx=0):
+        self.single_alpha = cp.Variable()
+        self.C = cp.Parameter((self.dim, self.dim))
+        psi_hat = cp.Variable((self.dim, self.dim))
+        self.H_i = symmetrize_from_vector(H_s[optim_idx], self.dim)
+        self.H_i_reduced = self.H_i[:, ~np.all(self.H_i == 0, axis=0)]
+        self.H_i_reduced = self.H_i_reduced[~np.all(self.H_i_reduced == 0, axis=1), :]
+        
+        constr1 = ((psi_hat - np.eye(self.dim)*1e-6) >> 0)
+        constr2 = (psi_hat == psi_hat.T)
+        self.objective = cp.Maximize(cp.log_det(psi_hat) - cp.trace(psi_hat@self.C))
+        self.problem = cp.Problem(self.objective, 
+                                 [constr1, constr2, psi_hat==self.H_i_reduced*self.single_alpha])
+        assert self.problem.is_dcp(), "Not DCP"
+        assert self.problem.is_dpp(), "Not DPP"
+
+def create_all_optim_problems_cluster(H_s, dim):
+    prob_dict = {}
+    
+    for i in range(H_s.shape[0]):
+        curr_H = symmetrize_from_vector(H_s[i], dim)
+        curr_H = curr_H[:, ~np.all(curr_H == 0, axis=0)]
+        curr_H = curr_H[~np.all(curr_H == 0, axis=1), :]
+        assert curr_H.shape[0] == curr_H.shape[1]
+        curr_prob = CVXProblemCluster(dim=curr_H.shape[0])
+        curr_prob.create_single_optim_problem(H_s=H_s, optim_idx=i)
+        prob_dict[i] = curr_prob
+    return prob_dict
+
+def solve_optim_single_cluster(optim_idx, curr_alphas, curr_C, prob_dict):
+    curr_prob = prob_dict[optim_idx]
+    curr_prob.C.value = curr_C
+    curr_prob.problem.solve(
+        solver=cp.SCS, 
+        verbose=False, 
+        warm_start=True,
+        scale=1.0,
+        adaptive_scale=True,
+        max_iters=int(1e4)
+        )
+    new_alphas = curr_alphas.copy()
+    new_alphas[optim_idx] = curr_prob.single_alpha.value
+    return new_alphas
+
     
 class CVXProblem(object):
     def __init__(self, dim):

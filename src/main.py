@@ -50,7 +50,7 @@ def get_args():
     parser.add_argument('--eps_matrices', type=int, default=0)
     parser.add_argument('--num_eps_mats', type=int, default=4)
     parser.add_argument('--runtimes', type=int, default=0)
-    parser.add_argument('--optim_type', type=str, choices=['CVX', 'unbiased', 'Anderson', 'first-order'], default='CVX', help='Optimization Type')
+    parser.add_argument('--optim_type', type=str, choices=['CVX', 'unbiased', 'Anderson', 'first-order', 'CVXCLUST'], default='CVX', help='Optimization Type')
     args = parser.parse_args()
 
     return args
