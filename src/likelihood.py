@@ -157,7 +157,9 @@ def LRT_all_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=500, lam
 def LRT_individual_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=500, lam=1e-2, step_size=1, beta=5e-3, iters=150, include_l1=False, t=2.0, optim_type='unbiased'):
     lrt_vals = []
     p_vals = []
+    print("Creating CVX Problems...")
     prob_dict = create_all_optim_problems(H_s, dim=dim)
+    print("Creating Cluster Specific CVX Problems...")
     prob_dict_clust = create_all_optim_problems_cluster(H_s, dim=dim)
     g_prob = create_global_problem(H_s, dim=dim)
     data_one = data_total[:, 0:2*window_size]
@@ -237,15 +239,17 @@ def LRT_individual_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=5
                 curr_H = symmetrize_from_vector(curr_H, dim=dim)
                 curr_C_pre = C_one[~np.all(curr_H==0, axis=1), :][:, ~np.all(curr_H==0, axis=0)]
                 curr_C_post = C_two[~np.all(curr_H==0, axis=1), :][:, ~np.all(curr_H==0, axis=0)]
-                print("C SHAPES", curr_C_pre.shape, curr_C_post.shape)
-                alpha_i_change_pre = solve_optim_single(curr_alphas=coeffs_hat_total, 
-                                                            curr_C=curr_C_pre,
-                                                            prob_dict=prob_dict_clust,
-                                                            optim_idx=k)
-                alpha_i_change_post = solve_optim_single(curr_alphas=coeffs_hat_total, 
+                alpha_i_change_pre = solve_optim_single_cluster(curr_alphas=coeffs_hat_total, 
+                                                                curr_C=curr_C_pre,
+                                                                prob_dict=prob_dict_clust,
+                                                                optim_idx=k
+                                                                )
+                alpha_i_change_post = solve_optim_single_cluster(curr_alphas=coeffs_hat_total, 
                                                                 curr_C=curr_C_post,
                                                                 prob_dict=prob_dict_clust,
-                                                                optim_idx=k)
+                                                                optim_idx=k
+                                                                )
+                
             elif optim_type == 'unbiased':
                 """
                 THIS ONE PROBABLY ISN'T COMPLETE YET

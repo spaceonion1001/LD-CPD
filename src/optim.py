@@ -179,18 +179,18 @@ def unbiased_init_precision_single_alt(coeffs_zero, C, H_s, modify_index=0):
 
 
 class CVXProblemCluster(object):
-    def __init__(self, dim):
+    def __init__(self, dim, full_dim):
         super().__init__()
         self.dim = dim
+        self.full_dim = full_dim
 
     def create_single_optim_problem(self, H_s, optim_idx=0):
         self.single_alpha = cp.Variable()
         self.C = cp.Parameter((self.dim, self.dim))
         psi_hat = cp.Variable((self.dim, self.dim))
-        self.H_i = symmetrize_from_vector(H_s[optim_idx], self.dim)
+        self.H_i = symmetrize_from_vector(H_s[optim_idx], self.full_dim)
         self.H_i_reduced = self.H_i[:, ~np.all(self.H_i == 0, axis=0)]
         self.H_i_reduced = self.H_i_reduced[~np.all(self.H_i_reduced == 0, axis=1), :]
-        
         constr1 = ((psi_hat - np.eye(self.dim)*1e-6) >> 0)
         constr2 = (psi_hat == psi_hat.T)
         self.objective = cp.Maximize(cp.log_det(psi_hat) - cp.trace(psi_hat@self.C))
@@ -207,7 +207,7 @@ def create_all_optim_problems_cluster(H_s, dim):
         curr_H = curr_H[:, ~np.all(curr_H == 0, axis=0)]
         curr_H = curr_H[~np.all(curr_H == 0, axis=1), :]
         assert curr_H.shape[0] == curr_H.shape[1]
-        curr_prob = CVXProblemCluster(dim=curr_H.shape[0])
+        curr_prob = CVXProblemCluster(dim=curr_H.shape[0], full_dim=dim)
         curr_prob.create_single_optim_problem(H_s=H_s, optim_idx=i)
         prob_dict[i] = curr_prob
     return prob_dict
