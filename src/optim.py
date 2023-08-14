@@ -1,7 +1,7 @@
 import numpy as np
 from numpy.linalg import inv
 import cvxpy as cp
-from utils import lasso_likelihood, vectorize_matrix, symmetrize_from_vector, symmetrize_from_vector_alt
+from utils import lasso_likelihood, vectorize_matrix, symmetrize_from_vector, symmetrize_from_vector_alt, is_pos_def
 from numba import jit
 import pdb
 
@@ -90,6 +90,33 @@ def iterative_soln_precision(coeffs_zero, H_s, C, iters=5):
         
     return s_imo
 
+def coord_ascent(coeffs_zero, C, H_s, modify_index=0, iters=10, beta=1e-2):
+    H_dim = H_s.shape[0]
+    C_dim = C.shape[0]
+    new_alphas = coeffs_zero.copy()
+    alpha_log = {}
+    for it in range(iters):
+        iter_log = {}
+        H_i = symmetrize_from_vector(H_s[modify_index], C_dim)
+        psi_hat = np.zeros(int((C_dim*(C_dim+1))/2))
+        for i in range(H_s.shape[0]):
+            psi_hat = psi_hat + new_alphas[i]*H_s[i]
+        psi_hat = symmetrize_from_vector(psi_hat, C_dim)
+        if not is_pos_def(psi_hat):
+            pdb.set_trace()
+        partial_deriv = np.trace(inv(psi_hat).dot(H_i)) - np.trace(C.dot(H_i))
+        alpha_tpo = new_alphas[modify_index] + beta*partial_deriv
+        new_alphas[modify_index] = alpha_tpo
+
+        iter_log['step_size'] = beta*partial_deriv
+        iter_log['deriv'] = partial_deriv
+        iter_log['alphas'] = new_alphas.copy()
+        iter_log['logdet'] = np.log(np.linalg.det(psi_hat))
+        iter_log['det'] = np.linalg.det(psi_hat)
+        iter_log['eigvals'] = np.linalg.eig(psi_hat)[0]
+        alpha_log[it] = iter_log
+    return new_alphas
+
 def unbiased_init_precision(C, H_s):
     H_dim = H_s.shape[0]
     A = np.zeros((H_dim, H_dim))
@@ -102,6 +129,54 @@ def unbiased_init_precision(C, H_s):
             A[g, h] = np.trace(H_g.dot(H_h))
         B[g] = np.trace(inv(C).dot(H_g))
     return np.linalg.solve(A, B)
+
+def unbiased_init_precision_single(coeffs_zero, C, H_s, modify_index=0):
+    H_dim = H_s.shape[0]
+    C_dim = C.shape[0]
+    A = np.zeros((H_dim, ))
+    B = np.zeros((H_dim, ))
+    H_curr = symmetrize_from_vector(H_s[modify_index], C_dim)
+    # populate A vector
+    for i in range(H_dim):
+        H_i = symmetrize_from_vector(H_s[i], C_dim)
+        A[i] = np.trace(H_curr.dot(H_i))
+    
+    # populate B vector
+    for i in range(H_dim):
+        H_i = symmetrize_from_vector(H_s[i], C_dim)
+        lhs = np.trace(inv(C).dot(H_i))
+        rhs = 0
+        for j in range(H_dim):
+            if j != modify_index:
+                rhs += coeffs_zero[j] * np.trace(H_curr.dot(H_i))
+        B[i] = lhs - rhs
+    
+    A = np.expand_dims(A, 1)
+    #print(A, B)
+    soln = np.linalg.lstsq(A, B)[0]
+    print("SOLN", soln)
+    new_alphas = coeffs_zero.copy()
+    new_alphas[modify_index] = soln
+
+    return new_alphas
+
+def unbiased_init_precision_single_alt(coeffs_zero, C, H_s, modify_index=0):
+    H_dim = H_s.shape[0]
+    C_dim = C.shape[0]
+    H_curr = symmetrize_from_vector(H_s[modify_index], C_dim)
+    lhs = np.trace(inv(C).dot(H_curr))
+    rhs = 0
+    for i in range(H_dim):
+        if i != modify_index:
+            H_i = symmetrize_from_vector(H_s[i], C_dim)
+            rhs += coeffs_zero[i] * np.trace(H_i.dot(H_curr))
+    soln = (lhs-rhs)/np.trace(H_curr.dot(H_curr))
+
+    new_alphas = coeffs_zero.copy()
+    new_alphas[modify_index] = soln
+    print("SOLN", soln)
+    return new_alphas
+
 
     
 class CVXProblem(object):

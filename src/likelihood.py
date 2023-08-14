@@ -2,8 +2,8 @@ import numpy as np
 from tqdm import tqdm
 from optim import optimize_coeffs, optimize_single_coeff, optimize_coeffs_first_order, optimize_coeffs_first_order_single
 from optim import create_all_optim_problems, create_global_problem
-from optim import solve_optim_single, solve_optim_global
-from optim import iterative_soln_precision_single, iterative_soln_precision, unbiased_init_precision
+from optim import solve_optim_single, solve_optim_global, coord_ascent
+from optim import iterative_soln_precision_single, iterative_soln_precision, unbiased_init_precision, unbiased_init_precision_single, unbiased_init_precision_single_alt
 from statsmodels.stats.multitest import fdrcorrection, multipletests
 from scipy.stats import chi2, multivariate_normal
 from utils import is_pos_def, is_symmetric, vectorize_matrix, symmetrize_from_vector
@@ -240,12 +240,30 @@ def LRT_individual_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=5
                 WHICH IS A CONSEQUENCE OF SOLVING ALL COEFFICIENTS TOGETHER, BUT TOSSING OUT THE OTHERS
                 (FIXING THEM TO BE THE VALUES FROM THE TOTAL, SINCE UNBIASED ASSUMES THEY ALL FLEX TOGETHER)
                 """
-                temp_alph_pre = unbiased_init_precision(C=C_one, H_s=H_s)
-                temp_alph_post = unbiased_init_precision(C=C_two, H_s=H_s)
-                alpha_i_change_pre = coeffs_hat_total.copy()
-                alpha_i_change_post = coeffs_hat_total.copy()
-                alpha_i_change_pre[k] = temp_alph_pre[k]
-                alpha_i_change_post[k] = temp_alph_post[k]
+                # alpha_i_change_pre = unbiased_init_precision_single(coeffs_zero=coeffs_hat_total,
+                #                                                     C=C_one,
+                #                                                     H_s=H_s,
+                #                                                     modify_index=k
+                #                                                     )
+                # alpha_i_change_post = unbiased_init_precision_single(coeffs_zero=coeffs_hat_total,
+                #                                                     C=C_two,
+                #                                                     H_s=H_s,
+                #                                                     modify_index=k
+                #                                                     )
+                alpha_i_change_pre = coord_ascent(coeffs_zero=coeffs_hat_total,
+                                                                    C=C_one,
+                                                                    H_s=H_s,
+                                                                    modify_index=k,
+                                                                    iters=iters,
+                                                                    beta=beta
+                                                                    )
+                alpha_i_change_post = coord_ascent(coeffs_zero=coeffs_hat_total,
+                                                                    C=C_two,
+                                                                    H_s=H_s,
+                                                                    modify_index=k,
+                                                                    iters=iters,
+                                                                    beta=beta
+                                                                    )
             elif optim_type == 'Anderson':
                 alpha_i_change_pre = iterative_soln_precision_single(
                                     coeffs_zero=coeffs_hat_total,
