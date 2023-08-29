@@ -50,7 +50,9 @@ def get_args():
     parser.add_argument('--eps_matrices', type=int, default=0)
     parser.add_argument('--num_eps_mats', type=int, default=4)
     parser.add_argument('--runtimes', type=int, default=0)
-    parser.add_argument('--optim_type', type=str, choices=['CVX', 'unbiased', 'Anderson', 'first-order', 'CVXCLUST'], default='CVX', help='Optimization Type')
+    parser.add_argument('--optim_type', type=str, choices=['CVX', 'unbiased', 'Anderson', 'first-order', 'CVXCLUST', 'Boyd'], default='CVX', help='Optimization Type')
+    parser.add_argument('--resid_type', type=str, choices=['unstructured'], default='unstructured', help='Residual Type')
+    parser.add_argument('--num_indices', type=int, default=4)
     args = parser.parse_args()
 
     return args
@@ -87,6 +89,8 @@ def resolve_data(args, save_path=None):
             return scale_data(changepoint_cai_model_four(dim=args.dim, N=args.N, save_path=save_path))
         elif args.sim_type == 'cai_model_four_no_change':
             return scale_data(changepoint_cai_model_four_no_change(dim=args.dim, N=args.N, save_path=save_path))
+        elif args.sim_type == 'anderson_residual':
+            return scale_data(anderson_sim_with_residual(M=args.M, dim=args.dim, N=args.N, num_indices=args.num_indices, resid_type=args.resid_type, save_path=save_path), args.train_percent)
         else:
             print("Incorrect Simulation")
             exit(0)

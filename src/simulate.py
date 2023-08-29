@@ -13,6 +13,8 @@ def generate_matrices_orthogonal(prec_coeffs=None, M=2, dim=4):
     H_s = []
     if not prec_coeffs:
         prec_coeffs = np.random.rand(M)
+    if (prec_coeffs <= 0.).sum() > 0:
+        prec_coeffs = prec_coeffs + np.abs(prec_coeffs.min()) + 0.5 # add adjustment so non-negative
     precision = np.zeros((dim, dim))
     H_s_stacked = np.zeros((dim**2, M))
     mat = make_spd_matrix(dim)
@@ -33,6 +35,7 @@ def generate_matrices_orthogonal(prec_coeffs=None, M=2, dim=4):
     # ensure it's actually symmetric
     # minimal modification on scale of 1e-15
     precision_corrected = (precision + precision.T)/2
+    assert is_pos_def(precision_corrected), "Not Positive Definite Initial Matrices"
     
     return H_s, precision_corrected, prec_coeffs
 
@@ -40,6 +43,78 @@ def collect_precision_matrix(H_s, prec_coeffs):
     precision = (prec_coeffs.reshape(-1, 1, 1)*H_s).sum(0)
     
     return precision
+
+# TODO
+"""
+INCOMPLETE
+"""
+def create_residual_structured(omega, dim, N, num_indices=4):
+    U = np.zeros((dim, dim))
+    upper_indices = np.triu_indices(dim, k=1)
+    rand_four_indices = np.random.choice(np.arange(len(upper_indices[0])), size=num_indices)
+    w = np.max(np.diag(omega))
+    log_dim_over_N = np.log(dim)/N
+    root_log_dim = np.sqrt(log_dim_over_N)
+    rand_val_zero = -2*w*root_log_dim
+    rand_val_one = -w*root_log_dim
+    rand_val_two = w*root_log_dim
+    rand_val_three = 2*w*root_log_dim
+    for idx in rand_four_indices:
+        i = upper_indices[0][idx]
+        j = upper_indices[1][idx]
+        pos_neg = np.random.choice(np.arange(num_indices))
+        if pos_neg in [0, 1]:
+            rand_val = np.random.uniform(rand_val_zero, rand_val_one)
+        else:
+            rand_val = np.random.uniform(rand_val_two, rand_val_three)
+        U[i, j] = rand_val
+        U[j, i] = rand_val
+    return U
+"""
+INCOMPLETE
+"""
+
+def generate_residual_matrix(precision, dim, N, num_indices=4, resid_type='unstructured'):
+    if resid_type == 'unstructured':
+        """
+        Randomly sampled indices, no consideration of clusters
+        """
+        R = create_U_cai(precision, dim=dim, N=N, num_indices=num_indices)
+    
+    return R
+
+
+def anderson_sim_with_residual(M=2, dim=4, N=500, num_indices=4, resid_type='unstructured', save_path=None):
+    print("Simulating Anderson Decomp With Residual Matrix")
+    assert dim % M == 0, "Need dim divisible by M for sake of sampling at the moment"
+    H_s, precision_one, prec_coeffs_one = generate_matrices_orthogonal(M=M, dim=dim)
+    R = generate_residual_matrix(precision_one, 
+                                 dim=dim, 
+                                 N=N, 
+                                 num_indices=num_indices, 
+                                 resid_type=resid_type
+                                 )
+    delta = np.abs(np.min(np.linalg.eig(precision_one)[0])) + 0.05
+    delta_times_I = np.eye(dim)*delta
+    precision_one = precision_one + delta_times_I
+    if not is_pos_def(precision_one + R):
+        eig_vals = np.linalg.eig(precision_one + R)[0]
+        correction_vector = np.eye(dim)*np.abs(eig_vals.min()) + 0.05 # pos-def correction
+        precision_one = precision_one + correction_vector
+    precision_two = precision_one + R
+    assert is_pos_def(precision_one)
+    assert is_pos_def(precision_two), print(np.linalg.eig(precision_two)[0])
+    
+    data_one, C_one = sim_data(covar=inv(precision_one), dim=dim, N=N)
+    data_two, C_two = sim_data(covar=inv(precision_two), dim=dim, N=N)
+    data_total = np.concatenate((data_one, data_two), axis=1)
+
+    neq_indices = np.where(precision_one != precision_two)
+    neq_indices_arr = np.concatenate((np.expand_dims(neq_indices[0],1), np.expand_dims(neq_indices[1], 1)), 1)
+    if save_path is not None:
+        np.savetxt(os.path.join(save_path, 'changed_indx.csv'), neq_indices_arr)
+    print("Finished Simulation")
+    return data_total.T
 
 def sim_changepoint_mv_normal_orthogonal(sim_scale=0.8, M=2, dim=4, N=500, save_path=None):
     print("Simulating Anderson Decomp Data")
@@ -150,9 +225,9 @@ def sim_changepoint_mv_normal_no_decomp(dim, N, num_coeffs_change=1, scale=0.8, 
         np.savetxt(os.path.join(save_path, 'changed_indx.csv'), neq_indices_arr)
     return data_total
 
-def get_scale_val(C, dim):
+def get_scale_val(C, dim, scale_factor=50):
     w = np.max(np.diag(C))
-    log_dim_over_N = np.log(dim)/50
+    log_dim_over_N = np.log(dim)/scale_factor
     root_log_dim = np.sqrt(log_dim_over_N)
     rand_val_zero = -2*w*root_log_dim
     rand_val_one = -w*root_log_dim
@@ -409,6 +484,7 @@ def sim_changepoint_cai_model_one(dim):
                 omega[i+2, i] = 0.3
     
     omega = np.sqrt(D)@omega@np.sqrt(D)
+
     return omega
 
 def sim_changepoint_cai_model_three(dim):
@@ -428,7 +504,7 @@ def sim_changepoint_cai_model_three(dim):
     middle = omega_plus/(1+delta)
     omega = np.power(D, 0.5)@middle@np.power(D, 0.5)
     assert(is_pos_def(omega))
-
+    
     return omega
 
 def sim_changepoint_cai_model_four(dim):
@@ -453,10 +529,10 @@ def sim_changepoint_cai_model_four(dim):
     return omega
     
 
-def create_U_cai(omega, dim, N):
+def create_U_cai(omega, dim, N, num_indices=4):
     U = np.zeros((dim, dim))
     upper_indices = np.triu_indices(dim, k=1)
-    rand_four_indices = np.random.choice(np.arange(len(upper_indices[0])), size=4)
+    rand_four_indices = np.random.choice(np.arange(len(upper_indices[0])), size=num_indices)
     w = np.max(np.diag(omega))
     log_dim_over_N = np.log(dim)/N
     root_log_dim = np.sqrt(log_dim_over_N)
@@ -467,7 +543,7 @@ def create_U_cai(omega, dim, N):
     for idx in rand_four_indices:
         i = upper_indices[0][idx]
         j = upper_indices[1][idx]
-        pos_neg = np.random.choice(np.arange(4))
+        pos_neg = np.random.choice(np.arange(num_indices))
         if pos_neg in [0, 1]:
             rand_val = np.random.uniform(rand_val_zero, rand_val_one)
         else:

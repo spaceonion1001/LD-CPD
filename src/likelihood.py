@@ -3,7 +3,7 @@ from tqdm import tqdm
 from optim import optimize_coeffs, optimize_single_coeff, optimize_coeffs_first_order, optimize_coeffs_first_order_single
 from optim import create_all_optim_problems, create_global_problem
 from optim import create_all_optim_problems_cluster, solve_optim_single_cluster
-from optim import solve_optim_single, solve_optim_global, coord_ascent
+from optim import solve_optim_single, solve_optim_global, coord_ascent, optim_boyd
 from optim import iterative_soln_precision_single, iterative_soln_precision, unbiased_init_precision, unbiased_init_precision_single, unbiased_init_precision_single_alt
 from statsmodels.stats.multitest import fdrcorrection, multipletests
 from scipy.stats import chi2, multivariate_normal
@@ -14,6 +14,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 sns.set()
 from numpy.linalg import inv
+from sklearn.utils.extmath import fast_logdet
 
 import multiprocessing as mp
 from multiprocessing import Pool
@@ -81,7 +82,8 @@ def full_likelihood(alphas, H_s, C, N, lam=1e-2, include_l1=False, debug_title='
         return likelihood*(N/2)
     
     else:
-        _, first_term = np.linalg.slogdet(psi_hat)
+        #_, first_term = np.linalg.slogdet(psi_hat)
+        first_term = fast_logdet(psi_hat)
         #likelihood = np.log(np.linalg.det(psi_hat)) - np.trace(psi_hat@C) - P*np.log(2*np.pi)
         likelihood = first_term - np.trace(psi_hat@C) - P*np.log(2*np.pi)
         if not is_pos_def(psi_hat):
@@ -89,6 +91,14 @@ def full_likelihood(alphas, H_s, C, N, lam=1e-2, include_l1=False, debug_title='
             #pdb.set_trace()
         #assert is_pos_def(psi_hat), debug_title+str(alphas)
         return likelihood*(N/2)
+    
+def cluster_likelihood(alpha, H, C, N, debug_title='global'):
+    P = C.shape[0]
+    psi_hat = alpha*H
+    _, first_term = np.linalg.slogdet(psi_hat)
+    likelihood = first_term - np.trace(psi_hat@C) - P*np.log(2*np.pi)
+
+    return likelihood*(N/2)
 
 def LRT_all_coeffs(data_total, M, dim, H_s, window_size=500, lam=1e-2, step_size=1):
     lrt_vals = []
@@ -181,14 +191,35 @@ def LRT_individual_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=5
         
 
         #############################
-        if optim_type == 'CVX' or optim_type == 'CVXCLUST':
+        coeffs_hat_total = np.ones(M)
+        if optim_type == 'CVX':
             coeffs_hat_total = solve_optim_global(curr_C=C_full, g_prob=g_prob)
+        elif optim_type == 'CXVCLUST':
+            for k in range(M):
+                curr_H = H_s[k]
+                curr_H = symmetrize_from_vector(curr_H, dim=dim)
+                curr_C_pre = C_one[~np.all(curr_H==0, axis=1), :][:, ~np.all(curr_H==0, axis=0)]
+                curr_C_post = C_two[~np.all(curr_H==0, axis=1), :][:, ~np.all(curr_H==0, axis=0)]
+                coeffs_hat_total = solve_optim_single_cluster(curr_alphas=coeffs_hat_total, 
+                                                                curr_C=curr_C_pre,
+                                                                prob_dict=prob_dict_clust,
+                                                                optim_idx=k
+                                                                )
+                coeffs_hat_total = solve_optim_single_cluster(curr_alphas=coeffs_hat_total, 
+                                                                curr_C=curr_C_post,
+                                                                prob_dict=prob_dict_clust,
+                                                                optim_idx=k
+                                                                )
         elif optim_type == 'unbiased':
             coeffs_hat_total = unbiased_init_precision(C=C_full, H_s=H_s)
         elif optim_type == 'Anderson':
             coeffs_hat_total = iterative_soln_precision(coeffs_zero=np.ones(H_s.shape[0]), H_s=H_s, C=C_full, iters=15)
         elif optim_type == 'first-order':
-            coeffs_hat_total = optimize_coeffs_first_order(H_s, C_full, lam=lam, beta=beta, iters=iters, t=t)
+            #coeffs_hat_total = optimize_coeffs_first_order(H_s, C_full, lam=lam, beta=beta, iters=iters, t=t)
+            #coeffs_hat_total = solve_optim_global(curr_C=C_full, g_prob=g_prob)
+            coeffs_hat_total = unbiased_init_precision(C=C_full, H_s=H_s)
+        elif optim_type == 'Boyd':
+            coeffs_hat_total = optim_boyd(C=C_full, H_s=H_s)
         #coeffs_hat_total = optimize_coeffs(H_s, C_full, lam=lam)
         # psi_hat_temp = np.sum(np.expand_dims(coeffs_hat_total, 1)*H_s, 0)
         # psi_hat_temp = symmetrize_from_vector(psi_hat_temp, dim)
@@ -225,6 +256,8 @@ def LRT_individual_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=5
         # iterate over each coefficient
         for k in range(M):
             ####################################
+            #alpha_i_change_pre = np.ones(M)
+            #alpha_i_change_post = np.ones(M)
             if optim_type == 'CVX':
                 alpha_i_change_pre = solve_optim_single(curr_alphas=coeffs_hat_total, 
                                                             curr_C=C_one,
@@ -303,8 +336,25 @@ def LRT_individual_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=5
                             
                     )
             elif optim_type == 'first-order':
-                alpha_i_change_pre = optimize_coeffs_first_order_single(coeffs_hat_total, H_s, C_one, lam=lam, beta=beta, iters=iters, optim_indx=k, t=t)
-                alpha_i_change_post = optimize_coeffs_first_order_single(coeffs_hat_total, H_s, C_two, lam=lam, beta=beta, iters=iters, optim_indx=k, t=t)
+                #alpha_i_change_pre = optimize_coeffs_first_order_single(coeffs_hat_total, H_s, C_one, lam=lam, beta=beta, iters=iters, optim_indx=k, t=t)
+                #alpha_i_change_post = optimize_coeffs_first_order_single(coeffs_hat_total, H_s, C_two, lam=lam, beta=beta, iters=iters, optim_indx=k, t=t)
+                alpha_i_change_pre = coord_ascent(coeffs_zero=coeffs_hat_total,
+                                                                    C=C_one,
+                                                                    H_s=H_s,
+                                                                    modify_index=k,
+                                                                    iters=iters,
+                                                                    beta=beta
+                                                                    )
+                alpha_i_change_post = coord_ascent(coeffs_zero=coeffs_hat_total,
+                                                                    C=C_two,
+                                                                    H_s=H_s,
+                                                                    modify_index=k,
+                                                                    iters=iters,
+                                                                    beta=beta
+                                                                    )
+            elif optim_type == 'Boyd':
+                alpha_i_change_pre = optim_boyd(C=C_one, H_s=H_s)
+                alpha_i_change_post = optim_boyd(C=C_two, H_s=H_s)
             # alpha_i_change_pre = optimize_single_coeff(coeffs_hat_total, H_s, C_one, coeff_idx=i,
             #                                            lam=lam)
             # alpha_i_change_post = optimize_single_coeff(coeffs_hat_total, H_s, C_two, coeff_idx=i,
@@ -360,6 +410,40 @@ def LRT_individual_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=5
             # likelihood on post data, alpha_one change
             alt_likelihood_alpha_i_post = full_likelihood(alpha_i_change_post, H_s, C_two, N=data_two.shape[1], 
                                                           lam=lam, include_l1=include_l1, debug_title='Post')
+            
+            """
+            For cluster specific likelihood
+            """
+            # if optim_type == 'CVXCLUST':
+            #     curr_H = H_s[k]
+            #     curr_H = symmetrize_from_vector(curr_H, dim=dim)
+            #     curr_C_pre = C_one[~np.all(curr_H==0, axis=1), :][:, ~np.all(curr_H==0, axis=0)]
+            #     curr_C_post = C_two[~np.all(curr_H==0, axis=1), :][:, ~np.all(curr_H==0, axis=0)]
+            #     curr_C_full = C_full[~np.all(curr_H==0, axis=1), :][:, ~np.all(curr_H==0, axis=0)]
+            #     curr_H = curr_H[~np.all(curr_H==0, axis=1), :][:, ~np.all(curr_H==0, axis=0)]
+            #     alt_likelihood_alpha_i_pre = cluster_likelihood(alpha_i_change_pre[k],
+            #                                                     curr_H,
+            #                                                     curr_C_pre,
+            #                                                     N=data_one.shape[1],
+            #                                                     debug_title='Pre'
+            #                                                     )
+            #     alt_likelihood_alpha_i_post = cluster_likelihood(alpha_i_change_post[k],
+            #                                                     curr_H,
+            #                                                     curr_C_post,
+            #                                                     N=data_two.shape[1],
+            #                                                     debug_title='Post'
+            #                                                     )
+            #     null_likelihood = cluster_likelihood(coeffs_hat_total[k],
+            #                                         curr_H,
+            #                                         curr_C_full,
+            #                                         N=data_total.shape[1],
+            #                                         debug_title='Global'
+            #                                         )
+
+            """
+            END
+            """
+            
             # alt_likelihood_alpha_i_pre_alt = full_likelihood(alpha_i_change_pre_alt, H_s, C_one, N=data_one.shape[1], 
             #                                              lam=lam, include_l1=include_l1, debug_title='Pre')
             # # likelihood on post data, alpha_one change

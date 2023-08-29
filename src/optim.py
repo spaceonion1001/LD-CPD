@@ -3,8 +3,181 @@ from numpy.linalg import inv
 import cvxpy as cp
 from utils import lasso_likelihood, vectorize_matrix, symmetrize_from_vector, symmetrize_from_vector_alt, is_pos_def
 from numba import jit
+from scipy.optimize import line_search
+from sklearn.utils.extmath import fast_logdet
 import pdb
 
+class JacWrapper(object):
+    def __init__(self, H_s, C, dim):
+        self.H_s = H_s
+        self.C = C
+        self.dim = dim
+    
+    def boyd_likelihood(self, x):
+        alphas = x
+        new_psi_hat = calc_psi_hat(alphas=alphas, H_s=self.H_s, dim=self.dim)
+        P = self.dim
+        _, first_term = np.linalg.slogdet(new_psi_hat)
+        likelihood = first_term - np.trace(new_psi_hat@self.C) - P*np.log(2*np.pi)
+
+        return -likelihood
+    
+    def calc_jacobian(self, x):
+        alphas = x
+        M = self.H_s.shape[0]
+        psi_hat = calc_psi_hat(alphas, self.H_s, self.dim)
+        inv_psi_hat = inv(psi_hat)
+        jacobian = np.zeros((M, ))
+        for j in range(M):
+            H_j = symmetrize_from_vector(self.H_s[j], self.dim)
+            first_term = np.trace(inv_psi_hat.dot(H_j))
+            second_term = np.trace(H_j.dot(self.C))
+            jacobian[j] = -1*(first_term - second_term) # TODO is this sign right?!
+        
+        return jacobian
+
+
+#@jit(nopython=True)
+def boyd_likelihood(x, H_s, C, dim):
+    """
+    This is negative log likelihood for minimization purposes
+    """
+    alphas = x
+    new_psi_hat = calc_psi_hat(alphas=alphas, H_s=H_s, dim=dim)
+    assert is_pos_def(new_psi_hat), pdb.set_trace()
+    P = dim
+    #_, first_term = np.linalg.slogdet(new_psi_hat)
+    first_term = fast_logdet(new_psi_hat)
+    likelihood = first_term - np.trace(new_psi_hat@C) - P*np.log(2*np.pi)
+
+    return -likelihood
+
+#@jit(nopython=True)
+def calc_hessian(alphas, H_s, dim):
+    M = H_s.shape[0]
+    psi_hat = calc_psi_hat(alphas, H_s, dim)
+    inv_psi_hat = inv(psi_hat)
+    hessian = np.zeros((M, M))
+    for j in range(M):
+        for k in range(M):
+            H_j = symmetrize_from_vector(H_s[j], dim)
+            H_k = symmetrize_from_vector(H_s[k], dim)
+            prod = inv_psi_hat.dot(H_j).dot(inv_psi_hat).dot(H_k)
+            hessian[j,k] = np.trace(prod) # TODO is this sign right also?!
+    assert is_pos_def(hessian)
+    return hessian
+
+#@jit(nopython=True)
+def calc_jacobian(x, *args, H_s, C, dim):
+    alphas = x
+    M = H_s.shape[0]
+    psi_hat = calc_psi_hat(alphas, H_s, dim)
+    inv_psi_hat = inv(psi_hat)
+    jacobian = np.zeros((M, ))
+    for j in range(M):
+        H_j = symmetrize_from_vector(H_s[j], dim)
+        first_term = np.trace(inv_psi_hat.dot(H_j))
+        second_term = np.trace(H_j.dot(C))
+        jacobian[j] = -1*(first_term - second_term) # TODO is this sign right?!
+    
+    return jacobian
+
+#@jit(nopython=True)
+# def perform_line_search(alphas, H_s, C, dim):
+#     jac_wrapper = JacWrapper(H_s=H_s, C=C, dim=dim)
+#     obj_fn = jac_wrapper.boyd_likelihood
+#     grad_fn = jac_wrapper.calc_jacobian
+#     start_point = alphas
+#     search_gradient = grad_fn(alphas)
+#     res = line_search(obj_fn, grad_fn, start_point, search_gradient)
+#     print(res)
+#     exit()
+
+def calculate_local_slope(newton_direction, jacobian):
+    return np.dot(jacobian, newton_direction)
+
+def perform_line_search(local_slope, newton_direction, alphas, H_s, C, dim, tau, control_factor):
+    t = -control_factor*local_slope
+    print("t {}".format(t))
+    max_iters = 100
+    # calculate maximum step size heuristic
+    new_alph_temp = alphas + 1.0*newton_direction
+    if not (new_alph_temp <= 0).any():
+        lr_val = 1.0
+    else:
+        alph_diff = alphas - new_alph_temp
+        min_val = np.min(new_alph_temp) # most negative value
+        min_idx = np.argmin(new_alph_temp)
+        lr_val = -(alphas[min_idx]/newton_direction[min_idx])*0.95
+    print("\nLINE SEARCH\n")
+    for j in range(max_iters):
+        f_x = boyd_likelihood(x=alphas, H_s=H_s, C=C, dim=dim)
+        new_alphas = alphas+lr_val*newton_direction
+        f_x_update = boyd_likelihood(x=new_alphas, H_s=H_s, C=C, dim=dim)
+        fx_diff = f_x - f_x_update
+        print("***********")
+        print("ITER {}".format(j))
+        print("FX Diff {} Orig {} New {}".format(fx_diff, f_x, f_x_update))
+        print("New Alphas {}".format(new_alphas))
+        print("Stopping Criteria {}".format(lr_val*t))
+        print("************")
+        if fx_diff >= lr_val*t:
+            break
+        lr_val = tau*lr_val
+    
+    print("LR Val {}".format(lr_val))
+
+    return lr_val
+
+
+
+
+def optim_boyd(C, H_s, tolerance=0.5, iters=10, tau=0.9, control_factor=0.5):
+    dim = C.shape[0]
+    M = H_s.shape[0]
+    alphas_imo = np.ones(M)
+    for it in range(iters):
+        jacobian = calc_jacobian(x=alphas_imo, H_s=H_s, C=C, dim=dim)
+        hessian = calc_hessian(alphas=alphas_imo, H_s=H_s, dim=dim)
+        inv_hessian = inv(hessian)
+        newton_direction = -inv_hessian.dot(jacobian)
+        lambd = np.power(newton_direction.dot(hessian).dot(newton_direction), 0.5)
+        hhat = 1
+        if lambd > 0.5:
+            #print("Lambda {}".format(lambd))
+            # do line search
+            local_slope = calculate_local_slope(newton_direction, jacobian)
+            hhat = 1
+            hhat = perform_line_search(local_slope=local_slope,  
+                                       newton_direction=newton_direction,
+                                       alphas=alphas_imo,
+                                       H_s=H_s, C=C, dim=dim, tau=tau, control_factor=control_factor
+                                      )
+        elif lambd < 1e-5:
+            # termination condition for newton's mathod
+            break
+        #print('***********')
+        #print("ITER {}".format(it))
+        #print("Newton Direction: ", newton_direction)
+        #print("Lambda ", lambd)
+        new_alphas = alphas_imo + hhat*newton_direction
+        likelihood_curr = boyd_likelihood(x=alphas_imo, H_s=H_s, C=C, dim=dim)
+        likelihood_new = boyd_likelihood(x=new_alphas, H_s=H_s, C=C, dim=dim)
+        likelihood_diff = likelihood_curr - likelihood_new
+        print("Iter {} Likelihood Diff {}".format(it, likelihood_curr - likelihood_new))
+        if likelihood_diff < 0.0:
+            print("NEGATIVE LIKELIHOOD UPDATE")
+            pdb.set_trace()
+        alphas_imo = new_alphas.copy()
+        #print("New Alphas", new_alphas)
+        #print('***********')
+        #print()
+    #exit()
+    print()
+    #print("################")
+    #print("ALPHAS {}".format(alphas_imo))
+    #print("################")
+    return alphas_imo
 
 @jit(nopython=True)
 def calc_psi_hat(alphas, H_s, dim):
