@@ -472,7 +472,8 @@ def LRT_individual_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=5
             alt_likelihood_alpha_i = alt_likelihood_alpha_i_pre + alt_likelihood_alpha_i_post
             #alt_likelihood_alpha_i_alt = alt_likelihood_alpha_i_pre_alt + alt_likelihood_alpha_i_post_alt
             #print("Likelihood Diff Total {}".format(alt_likelihood_alpha_i - alt_likelihood_alpha_i_alt))
-            dof = 0.5*C_full.shape[0]*(C_full.shape[0]+1) - (M + 1)
+            #dof = 0.5*C_full.shape[0]*(C_full.shape[0]+1) - (M + 1)
+            dof = 2
             test_stat_i, p_val_i = likelihood_ratio_test(null_likelihood, 
                                                 alt_likelihood_alpha_i, dof)
             # test_stat_i_alt, p_val_i_alt = likelihood_ratio_test(null_likelihood, 

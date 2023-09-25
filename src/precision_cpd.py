@@ -92,10 +92,12 @@ class PrecisionCPD:
         self.cutree = cutree1
         self.root = root
         self.nodelist = nodelist
-        
+        self.root_dist_mat = clust_dist_mat
         #print(self.root)
         #print(self.nodelist)
         
+
+        self.curr_silhoutte_score = silhouette_score(clust_dist_mat, cutree1, metric='precomputed')
         self.basis_matrices = []
         for i in range(max(set(cutree1))+1): # iterate over clusters
             idxs = np.where(cutree1 == i)[0] # indexes for given cluster
@@ -181,11 +183,11 @@ class PrecisionCPD:
         Z = linkage(pairwise_distances, method='average')
         # BREAK INTO 2 NEW CLUSTERS
         cutree = hierarchy.cut_tree(Z, n_clusters=2).squeeze()
-        fclust_res = fcluster(Z, t=2, criterion='maxclust')
+        #fclust_res = fcluster(Z, t=2, criterion='maxclust')
         ###################
-        cutree = fclust_res
+        #cutree = fclust_res
+        new_silhoutte_score = silhouette_score(clust_dist_mat, cutree)
         ###################
-
         new_basis_matrices = []
         for i in range(min(set(cutree)), max(set(cutree))+1): # iterate over clusters
             idxs = np.where(cutree == i)[0] # indexes for given cluster
@@ -205,7 +207,7 @@ class PrecisionCPD:
             nonzero_cols = np.nonzero(np.any(curr_mat != 0, axis=0))[0]
             print("Matrix {} Len {} Channels Contained {}".format(i, len(nonzero_cols), nonzero_cols))
             print()
-        print(new_basis_matrices.shape)
+        print("NEW BASIS MATRICES SHAPE", new_basis_matrices.shape)
 
         return new_basis_matrices
 
@@ -290,12 +292,23 @@ class PrecisionCPD:
         chisquare_val = chi2.sf(anderson_lrt_value, dof)
         print("CHISQUARE P-VAL {} DOF {}".format(chisquare_val, dof))
         # if conditions are met, recurse
-        if len(nonzero_cols) > 2 and chisquare_val >= 1e-5:
+        if len(nonzero_cols) > 2: # first stopping conditions
             new_basis_matrices = self.recursive_split_basis_matrix(basis_mats, p_vals_corrected)
+            nonzero_cols_one = np.nonzero(np.any(symmetrize_from_vector(new_basis_matrices[0], self.dim) != 0, axis=0))[0]
+            if new_basis_matrices.shape[0] > 1:
+                print("RECALCULATING SILHOUETTE SCORE")
+                print("CURR CUTREE", self.cutree)
+                nonzero_cols_two = np.nonzero(np.any(symmetrize_from_vector(new_basis_matrices[1], self.dim) != 0, axis=0))[0]
+                print("NONZERO COLS", nonzero_cols_two)
+                self.cutree[nonzero_cols_two] = int(self.cutree.max() + 1)
+                print("NEW CUTREE", self.cutree)
+            new_silhoutte_score = silhouette_score(self.root_dist_mat, self.cutree)
+            print("Silhoutte Scores", new_silhoutte_score, self.curr_silhoutte_score)
             reduced_basis_mats = np.delete(basis_mats, greatest_change_mat_idx, axis=0)
             updated_basis_matrices = np.concatenate((reduced_basis_mats, new_basis_matrices), axis=0)
             self.basis_matrices = updated_basis_matrices
-            if new_basis_matrices.shape[0] > 1: # if the clustering won't go down a level
+            if new_basis_matrices.shape[0] > 1 and (new_silhoutte_score > self.curr_silhoutte_score or chisquare_val >= 1e-5): # if the clustering is able to be split, recurse
+                self.curr_silhoutte_score = new_silhoutte_score
                 return self.perform_lrt_local(data_full=data_full)
         """
         END RECURSION
@@ -304,7 +317,7 @@ class PrecisionCPD:
         #p_vals_corrected = p_vals_all
         #return np.array(lrt_vals_all), np.array(apply_bonferroni_correction(p_vals_all))
         #print(p_vals_all)
-        #print(p_vals_corrected)
+        #print("P VALS {}", p_vals_corrected)
         return lrt_vals_all, p_vals_corrected
 
     def print_clusters_rv(self):
