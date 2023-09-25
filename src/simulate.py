@@ -3,7 +3,7 @@ from venv import create
 import numpy as np
 from sklearn.datasets import make_spd_matrix
 from sklearn.preprocessing import scale
-from utils import is_pos_def, is_symmetric
+from utils import is_pos_def, is_symmetric, symmetrize_from_vector, symmetrize_from_vector_alt
 from numpy.linalg import inv as inv
 from statsmodels.tsa.vector_ar.var_model import VARProcess
 import matplotlib.pyplot as plt
@@ -44,13 +44,27 @@ def collect_precision_matrix(H_s, prec_coeffs):
     
     return precision
 
-# TODO
-"""
-INCOMPLETE
-"""
-def create_residual_structured(omega, dim, N, num_indices=4):
+def slow_permutations(upper_indices, nonzero_cols):
+    new_left = []
+    new_right = []
+    for i in range(len(upper_indices[0])):
+        left_idx = upper_indices[0][i]
+        right_idx = upper_indices[1][i]
+        if np.isin(left_idx, nonzero_cols) and np.isin(right_idx, nonzero_cols):
+            new_left.append(left_idx)
+            new_right.append(right_idx)
+        
+    return (np.array(new_left), np.array(new_right))
+
+def create_residual_structured(H_s, omega, dim, N, num_indices=4):
     U = np.zeros((dim, dim))
+    # randomly select an H matrix
+    rand_H_num = np.random.choice(np.arange(H_s.shape[0]))
+    curr_H = H_s[rand_H_num]
+    nonzero_cols = np.nonzero(np.any(curr_H != 0, axis=0))[0]
+    nonzero_rows = np.nonzero(np.any(curr_H != 0, axis=1))[0]
     upper_indices = np.triu_indices(dim, k=1)
+    upper_indices = slow_permutations(upper_indices, nonzero_cols)
     rand_four_indices = np.random.choice(np.arange(len(upper_indices[0])), size=num_indices)
     w = np.max(np.diag(omega))
     log_dim_over_N = np.log(dim)/N
@@ -60,6 +74,7 @@ def create_residual_structured(omega, dim, N, num_indices=4):
     rand_val_two = w*root_log_dim
     rand_val_three = 2*w*root_log_dim
     for idx in rand_four_indices:
+        #print(idx)
         i = upper_indices[0][idx]
         j = upper_indices[1][idx]
         pos_neg = np.random.choice(np.arange(num_indices))
@@ -70,17 +85,19 @@ def create_residual_structured(omega, dim, N, num_indices=4):
         U[i, j] = rand_val
         U[j, i] = rand_val
     return U
-"""
-INCOMPLETE
-"""
 
-def generate_residual_matrix(precision, dim, N, num_indices=4, resid_type='unstructured'):
+def generate_residual_matrix(H_s, precision, dim, N, num_indices=4, resid_type='unstructured'):
     if resid_type == 'unstructured':
         """
         Randomly sampled indices, no consideration of clusters
         """
         R = create_U_cai(precision, dim=dim, N=N, num_indices=num_indices)
-    
+    elif resid_type == 'block':
+        """
+        Randomly sampled indices, within blocks
+        Constrain to i,j that are non-zero
+        """
+        R = create_residual_structured(H_s=H_s, omega=precision, dim=dim, N=N, num_indices=num_indices)
     return R
 
 
@@ -88,7 +105,8 @@ def anderson_sim_with_residual(M=2, dim=4, N=500, num_indices=4, resid_type='uns
     print("Simulating Anderson Decomp With Residual Matrix")
     assert dim % M == 0, "Need dim divisible by M for sake of sampling at the moment"
     H_s, precision_one, prec_coeffs_one = generate_matrices_orthogonal(M=M, dim=dim)
-    R = generate_residual_matrix(precision_one, 
+    R = generate_residual_matrix(H_s, 
+                                 precision_one, 
                                  dim=dim, 
                                  N=N, 
                                  num_indices=num_indices, 
@@ -112,7 +130,7 @@ def anderson_sim_with_residual(M=2, dim=4, N=500, num_indices=4, resid_type='uns
     neq_indices = np.where(precision_one != precision_two)
     neq_indices_arr = np.concatenate((np.expand_dims(neq_indices[0],1), np.expand_dims(neq_indices[1], 1)), 1)
     if save_path is not None:
-        np.savetxt(os.path.join(save_path, 'changed_indx.csv'), neq_indices_arr)
+        np.savetxt(os.path.join(save_path, 'changed_indx.csv'), neq_indices_arr.astype(int))
     print("Finished Simulation")
     return data_total.T
 

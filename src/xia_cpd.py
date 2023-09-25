@@ -3,7 +3,7 @@ from cvxpy import vec
 import numpy as np
 from numpy.linalg import inv as inv
 from scipy.optimize import least_squares, minimize
-from simulate import sim_changepoint_mv_normal_cholesky, sim_changepoint_mv_normal_ldlt, sim_changepoint_var_process, changepoint_cai_model_one, changepoint_cai_model_three
+from simulate import sim_changepoint_mv_normal_cholesky, sim_changepoint_mv_normal_ldlt, sim_changepoint_var_process, changepoint_cai_model_one, changepoint_cai_model_three, anderson_sim_with_residual
 from utils import scale_data, difference_data, vectorize_matrix, symmetrize_from_vector
 from statsmodels.stats.multitest import fdrcorrection
 from tqdm import tqdm
@@ -59,6 +59,8 @@ def get_args():
     parser.add_argument('--num_coeffs_change', type=int, default=2)
     parser.add_argument('--results_path', type=str, default='/home/dink/Documents/Research/Correlation-Changepoint-Detection/results')
     parser.add_argument('--fix_pre', type=int, default=1)
+    parser.add_argument('--resid_type', type=str, choices=['unstructured', 'block'], default='unstructured', help='Residual Type')
+    parser.add_argument('--num_indices', type=int, default=4)
     args = parser.parse_args()
 
     return args
@@ -96,6 +98,8 @@ def resolve_data(args, save_path=None):
             return scale_data(changepoint_cai_model_four(dim=args.dim, N=args.N, save_path=save_path))
         elif args.sim_type == 'cai_model_four_no_change':
             return scale_data(changepoint_cai_model_four_no_change(dim=args.dim, N=args.N, save_path=save_path))
+        elif args.sim_type == 'anderson_residual':
+            return scale_data(anderson_sim_with_residual(M=args.M, dim=args.dim, N=args.N, num_indices=args.num_indices, resid_type=args.resid_type, save_path=save_path), args.train_percent)
         else:
             print("Incorrect Simulation")
             exit(0)
@@ -438,6 +442,8 @@ def perform_simulation_batch(args):
     if not os.path.isdir(sim_results_path):
         os.mkdir(sim_results_path)
     sim_type_path = os.path.join(sim_results_path, args.sim_type+"_"+str(args.dim))
+    if args.sim_type == 'anderson_residual':
+        sim_type_path = os.path.join(sim_results_path, args.sim_type+"_"+args.resid_type+"_"+str(args.dim))
     print(sim_type_path)
     if not os.path.isdir(sim_type_path):
         os.mkdir(sim_type_path)

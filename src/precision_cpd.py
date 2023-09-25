@@ -5,16 +5,21 @@ import glob
 import os
 import matplotlib.pyplot as plt
 import seaborn as sns
+from sklearn.utils.extmath import fast_logdet
+from optim import optim_boyd, unbiased_init_precision, solve_optim_global, create_global_problem
+from scipy.stats import chi2, multivariate_normal
 #from torch import zero_
 sns.set()
 
 from sklearn.covariance import graphical_lasso, GraphicalLasso, GraphicalLassoCV
+from sklearn.metrics import silhouette_score, pairwise_distances as pairwise_d
 from tqdm import tqdm
 
 from scipy.cluster import hierarchy
 from scipy.spatial.distance import squareform
 from scipy.cluster.hierarchy import dendrogram, linkage, fcluster
 import scipy.cluster.hierarchy as sch
+import scipy
 
 
 from statsmodels.tsa.seasonal import STL
@@ -29,6 +34,7 @@ warnings.filterwarnings('ignore')  # <- remember to comment this if something br
 
 class PrecisionCPD:
     def __init__(self, args):
+        self.args = args
         self.optim_type = args.optim_type
         self.lam = args.lam
         self.M = args.M
@@ -46,6 +52,7 @@ class PrecisionCPD:
 
     # data assumed to be cleaned and normalized, passed in shape: [T, dim]
     def fit_glasso(self, data):
+        print("GLASSO DATA {}".format(data.shape))
         self.glasso = GraphicalLasso(max_iter=100, alpha=self.lam, tol=1e-5, verbose=False).fit(data)
         #self.inv_cov = inv(np.cov(data.T, bias=True))
         #self.inv_cov += np.eye(self.inv_cov.shape[0])*np.abs(np.linalg.eig(self.inv_cov)[0].min()) + 0.05
@@ -69,20 +76,26 @@ class PrecisionCPD:
         np.fill_diagonal(clust_dist_mat, 0.0)
         ###########
         pairwise_distances = sch.distance.pdist(clust_dist_mat)
+        #pairwise_distances = squareform(clust_dist_mat)
         Z = linkage(pairwise_distances, method='average')
         ######
         # plot the dendrogram 
         # plt.figure()
-        # dn = hierarchy.dendrogram(Z)
-        # plt.savefig(os.path.join(self.fig_dir_path, "dendrogram.png"))
-        # plt.close()
+        #dn = hierarchy.dendrogram(Z)
+        #plt.savefig(os.path.join(self.fig_dir_path, "dendrogram.png"))
+        #plt.close()
         ######
         cutree1 = hierarchy.cut_tree(Z, n_clusters=self.M).squeeze()
+        root, nodelist = hierarchy.to_tree(Z, rd=True)
         #self.dendrogram = dn
         self.Z = Z
         self.cutree = cutree1
-
-
+        self.root = root
+        self.nodelist = nodelist
+        
+        #print(self.root)
+        #print(self.nodelist)
+        
         self.basis_matrices = []
         for i in range(max(set(cutree1))+1): # iterate over clusters
             idxs = np.where(cutree1 == i)[0] # indexes for given cluster
@@ -151,6 +164,69 @@ class PrecisionCPD:
                                                           iters=self.iters, beta=self.beta)
         
         return np.array(lrt_vals), np.array(p_vals)
+    
+    def recursive_split_basis_matrix(self, basis_mats, p_vals_corrected):
+        candidate_cp = p_vals_corrected.min(axis=1).argmin()
+        greatest_change_mat_idx = p_vals_corrected[candidate_cp, :].argmin()
+        greatest_change_mat = symmetrize_from_vector(basis_mats[greatest_change_mat_idx], dim=self.dim)
+        print("GREATEST CHANGE IDX: ", greatest_change_mat_idx, greatest_change_mat.shape)
+        # RECLUSTER - SIMPLEST SOLUTION CURRENTLY
+        clust_dist_mat = np.abs(greatest_change_mat)
+        np.fill_diagonal(clust_dist_mat, 0.0)
+        ###########
+        clust_dist_mat = (clust_dist_mat.max()+1e-5) - clust_dist_mat
+        np.fill_diagonal(clust_dist_mat, 0.0)
+        ###########
+        pairwise_distances = sch.distance.pdist(clust_dist_mat)
+        Z = linkage(pairwise_distances, method='average')
+        # BREAK INTO 2 NEW CLUSTERS
+        cutree = hierarchy.cut_tree(Z, n_clusters=2).squeeze()
+        fclust_res = fcluster(Z, t=2, criterion='maxclust')
+        ###################
+        cutree = fclust_res
+        ###################
+
+        new_basis_matrices = []
+        for i in range(min(set(cutree)), max(set(cutree))+1): # iterate over clusters
+            idxs = np.where(cutree == i)[0] # indexes for given cluster
+            A = np.zeros(greatest_change_mat.shape) # blank A matrix
+            for idx in idxs: # loop over indexes
+                for idx2 in idxs: # loop over indexes
+                    A[idx][idx2] = greatest_change_mat[idx][idx2].copy() # set i,j entry to be the entry from precision matrix for given cluster
+            if self.split_variance:
+                if len(np.nonzero(A)[0]) > 0:
+                    new_basis_matrices.append(vectorize_matrix(np.diag(np.diag(A.copy()))))
+                np.fill_diagonal(A, 0)
+            if len(np.nonzero(A)[0]) > 0:
+                new_basis_matrices.append(vectorize_matrix(A))
+        new_basis_matrices = np.array(new_basis_matrices)
+        for i in range(new_basis_matrices.shape[0]):
+            curr_mat = symmetrize_from_vector(new_basis_matrices[i], self.dim)
+            nonzero_cols = np.nonzero(np.any(curr_mat != 0, axis=0))[0]
+            print("Matrix {} Len {} Channels Contained {}".format(i, len(nonzero_cols), nonzero_cols))
+            print()
+        print(new_basis_matrices.shape)
+
+        return new_basis_matrices
+
+    def anderson_lrt(self, cluster_precision, C, N):
+        """
+        Anderson LRT for goodness-of-fit
+
+        -2*log of 4.10
+
+        -Nlogdet(C)-Nlogdet(precision)
+        """
+        
+        # calculate likelihood ratio criterion eq 4.10
+        print("C {} Prec {}".format(C.shape, cluster_precision.shape))
+        first_term = 0.5*N*fast_logdet(C)
+        second_term = 0.5*N*fast_logdet(cluster_precision)
+        res = -2*(first_term + second_term)
+        print("First Term {} Second Term {} Res {}".format(first_term, second_term, res))
+
+        return res
+
 
     def perform_lrt_local(self, data_full):
         basis_mats = self.basis_matrices
@@ -167,6 +243,64 @@ class PrecisionCPD:
         #p_vals_corrected = np.array(apply_bonferroni_correction(p_vals_all))
         #p_vals_corrected = np.array(apply_fdr_correction(p_vals_all))
         p_vals_corrected = meinshausen_correction(basis_mats, p_vals_all, dim=data_full.shape[0])
+        
+
+        """
+        TODO
+        LIKELIHOOD RATIO TEST FROM ANDERSON 1970 FOR RECURSION BASE CASE/SPLITTING CONDITION
+        
+        1) CHECK GREATEST CHANGE MAT SIZE > 2
+        2) CHECK LRT P VALUE < SOME CUTOFF
+        DO SOME SPLITTING WHILE ABOVE CONDITIONS OR WHATEVER
+        FIN
+        """
+        
+        """
+        RECURSION IN PROGRESS
+        """
+        candidate_cp = p_vals_corrected.min(axis=1).argmin()
+        greatest_change_mat_idx = p_vals_corrected[candidate_cp, :].argmin()
+        greatest_change_mat = symmetrize_from_vector(basis_mats[greatest_change_mat_idx], dim=self.dim)
+        nonzero_cols = np.nonzero(np.any(greatest_change_mat != 0, axis=0))[0]
+        print(data_full.shape)
+        print("GREATEST CHANGE MATRIX CHANNELS CONTAINED {}".format(nonzero_cols))
+
+        data_train = data_full[:, 0:int(self.args.train_percent*data_full.shape[1])]
+        print("TRAIN DATA {}".format(data_train.shape))
+        C_full = np.cov(data_train, bias=True)
+        data_train = data_train[nonzero_cols, :]
+        train_C = np.cov(data_train, bias=True)
+        train_C = train_C + np.eye(train_C.shape[0])*1e-7
+        
+        g_prob = create_global_problem(basis_mats, dim=self.dim)
+        alphas = optim_boyd(C=C_full, H_s=basis_mats)
+        print("ALPHAS BOYD {}".format(alphas))
+        #alphas = solve_optim_global(curr_C=C_full, g_prob=g_prob)
+        #print("ALPHAS CVX {}".format(alphas))
+        #alphas = unbiased_init_precision(C=C_full, H_s=basis_mats)
+        #print("ALPHAS UNBIASED {}".format(alphas))
+        
+        print("Train C Shape {}".format(train_C.shape))
+        #print("Alphas {}".format(alphas))
+        cluster_precision = greatest_change_mat[~np.all(greatest_change_mat == 0, axis=1)]
+        cluster_precision = alphas[greatest_change_mat_idx]*cluster_precision[:, ~np.all(cluster_precision == 0, axis=0)]
+        
+        anderson_lrt_value = self.anderson_lrt(cluster_precision=cluster_precision, C=train_C, N=data_train.shape[1])
+        dof = 0.5*train_C.shape[0]*(train_C.shape[0]+1) - 1 # q here is just 1 since we are cluster specific
+        chisquare_val = chi2.sf(anderson_lrt_value, dof)
+        print("CHISQUARE P-VAL {} DOF {}".format(chisquare_val, dof))
+        # if conditions are met, recurse
+        if len(nonzero_cols) > 2 and chisquare_val >= 1e-5:
+            new_basis_matrices = self.recursive_split_basis_matrix(basis_mats, p_vals_corrected)
+            reduced_basis_mats = np.delete(basis_mats, greatest_change_mat_idx, axis=0)
+            updated_basis_matrices = np.concatenate((reduced_basis_mats, new_basis_matrices), axis=0)
+            self.basis_matrices = updated_basis_matrices
+            if new_basis_matrices.shape[0] > 1: # if the clustering won't go down a level
+                return self.perform_lrt_local(data_full=data_full)
+        """
+        END RECURSION
+        """
+
         #p_vals_corrected = p_vals_all
         #return np.array(lrt_vals_all), np.array(apply_bonferroni_correction(p_vals_all))
         #print(p_vals_all)

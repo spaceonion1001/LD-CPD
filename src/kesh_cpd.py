@@ -5,7 +5,7 @@ from numpy.linalg import inv as inv
 import scipy
 from scipy.optimize import least_squares, minimize
 from scipy.stats import chi2
-from simulate import sim_changepoint_mv_normal_cholesky, sim_changepoint_mv_normal_ldlt, sim_changepoint_var_process, changepoint_cai_model_one, changepoint_cai_model_three
+from simulate import sim_changepoint_mv_normal_cholesky, sim_changepoint_mv_normal_ldlt, sim_changepoint_var_process, changepoint_cai_model_one, changepoint_cai_model_three, anderson_sim_with_residual
 from utils import scale_data, difference_data, vectorize_matrix, symmetrize_from_vector
 from statsmodels.stats.multitest import fdrcorrection
 from tqdm import tqdm
@@ -71,6 +71,9 @@ def get_args():
     parser.add_argument('--results_path', type=str, default='/home/dink/Documents/Research/Correlation-Changepoint-Detection/results')
     parser.add_argument('--percent', type=float, default=0.25, help='Percent to use for scaling data')
     parser.add_argument('--kesh_d', type=int, default=10)
+    parser.add_argument('--resid_type', type=str, choices=['unstructured', 'block'], default='unstructured', help='Residual Type')
+    parser.add_argument('--num_indices', type=int, default=4)
+    parser.add_argument('--train_percent', type=float, default=0.25)
     args = parser.parse_args()
 
     return args
@@ -111,6 +114,8 @@ def resolve_data(args, save_path=None):
             return scale_data(changepoint_cai_model_four_no_change(dim=args.dim, N=args.N, save_path=save_path), percent=args.percent)
         elif args.sim_type == 'kesh':
             return changepoint_kesh_model(p=args.dim, d=args.kesh_d, N=args.N, beta=0.2, lambda_0=0.1)
+        elif args.sim_type == 'anderson_residual':
+            return scale_data(anderson_sim_with_residual(M=args.M, dim=args.dim, N=args.N, num_indices=args.num_indices, resid_type=args.resid_type, save_path=save_path), args.train_percent)
         else:
             print("Incorrect Simulation")
             exit(0)
@@ -161,7 +166,7 @@ class KeshOnline:
         #print("G2 {}".format(self.g2))
         self.rhat0 = calc_rhat(self.clime_init, self.p)
         #self.rhat0 = calc_rhat(self.prec_mat, self.p)
-        self.T0 = calc_T_t(X=self.data, omega_hat=self.clime_init, r_hat=self.rhat0, w=self.w, p=self.p, t=0, g1=self.g1, g2=self.g2)
+        self.T0 = calc_T_t(X=self.data_full, omega_hat=self.clime_init, r_hat=self.rhat0, w=self.w, p=self.p, t=0, g1=self.g1, g2=self.g2)
         self.critical_value = inv_Q_func(self.pi_0)
 
         self.test_stats = self.iterate(self.data)
@@ -392,6 +397,8 @@ def perform_simulation_batch(args):
     if not os.path.isdir(sim_results_path):
         os.mkdir(sim_results_path)
     sim_type_path = os.path.join(sim_results_path, args.sim_type+"_"+str(args.dim))
+    if args.sim_type == 'anderson_residual':
+        sim_type_path = os.path.join(sim_results_path, args.sim_type+"_"+args.resid_type+"_"+str(args.dim))
     print(sim_type_path)
     if not os.path.isdir(sim_type_path):
         os.mkdir(sim_type_path)
@@ -404,6 +411,7 @@ def perform_simulation_batch(args):
         print(data_full.shape)
         model = KeshOnline(args, data_full)
         global_test_vals = model.test_stats
+        print("Test Vals Shape", global_test_vals.shape)
         print()
         np.savetxt(os.path.join(save_path, "global_test_vals.csv"), global_test_vals, delimiter=',')
     print("*******************************************************************************")

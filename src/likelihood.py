@@ -28,7 +28,7 @@ from joblib import Parallel, delayed
 def likelihood_ratio_test(likelihood_null, likelihood_alternative, dof):
     delta_d = -2*(likelihood_null-likelihood_alternative)
     
-    return delta_d, chi2.pdf(delta_d, dof)
+    return delta_d, chi2.sf(delta_d, dof)
 
 def apply_fdr_correction(p_vals_all, alpha=0.05):
     corrected_p_vals_all = []
@@ -172,13 +172,14 @@ def LRT_individual_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=5
     print("Creating Cluster Specific CVX Problems...")
     prob_dict_clust = create_all_optim_problems_cluster(H_s, dim=dim)
     g_prob = create_global_problem(H_s, dim=dim)
-    data_one = data_total[:, 0:2*window_size]
+    data_one = data_total[:, 0:window_size]
     C_one = np.cov(data_one, bias=True)
+    C_one = C_one + np.eye(C_one.shape[0])*1e-8 # correct numerical instability
     # alpha_i_change_pre = solve_optim_global(curr_C=C_one, g_prob=g_prob)
     # # likelihood on pre data, alpha_one change
     # alt_likelihood_alpha_i_pre = full_likelihood(alpha_i_change_pre, H_s, C_one, N=data_one.shape[1], 
     #                                                 lam=lam, include_l1=include_l1, debug_title='Pre')
-    for i in tqdm(range(2*window_size, data_total.shape[1]-window_size, step_size)):
+    for i in tqdm(range(0, data_total.shape[1]-window_size, step_size)):
         start_win_indx = i
         first_end_indx = i+window_size
         last_end_indx = i+2*window_size
@@ -187,7 +188,9 @@ def LRT_individual_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=5
         data_full = np.concatenate((data_one, data_two), axis=1)
         #C_one = np.cov(data_one, bias=True)
         C_two = np.cov(data_two, bias=True)
+        C_two = C_two + np.eye(C_two.shape[0])*1e-8 # correct numerical instability
         C_full = np.cov(data_full, bias=True)
+        C_full = C_full + np.eye(C_full.shape[0])*1e-8
         
 
         #############################
@@ -353,8 +356,14 @@ def LRT_individual_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=5
                                                                     beta=beta
                                                                     )
             elif optim_type == 'Boyd':
-                alpha_i_change_pre = optim_boyd(C=C_one, H_s=H_s)
-                alpha_i_change_post = optim_boyd(C=C_two, H_s=H_s)
+                alpha_i_change_pre_temp = optim_boyd(C=C_one, H_s=H_s)
+                alpha_i_change_post_temp = optim_boyd(C=C_two, H_s=H_s)
+                # fix other coefficients from optimization/null hypothesis
+                # check for only one change
+                alpha_i_change_pre = coeffs_hat_total.copy()
+                alpha_i_change_post = coeffs_hat_total.copy()
+                alpha_i_change_pre[k] = alpha_i_change_pre_temp[k]
+                alpha_i_change_post[k] = alpha_i_change_post_temp[k]
             # alpha_i_change_pre = optimize_single_coeff(coeffs_hat_total, H_s, C_one, coeff_idx=i,
             #                                            lam=lam)
             # alpha_i_change_post = optimize_single_coeff(coeffs_hat_total, H_s, C_two, coeff_idx=i,
@@ -463,9 +472,9 @@ def LRT_individual_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=5
             alt_likelihood_alpha_i = alt_likelihood_alpha_i_pre + alt_likelihood_alpha_i_post
             #alt_likelihood_alpha_i_alt = alt_likelihood_alpha_i_pre_alt + alt_likelihood_alpha_i_post_alt
             #print("Likelihood Diff Total {}".format(alt_likelihood_alpha_i - alt_likelihood_alpha_i_alt))
-            
+            dof = 0.5*C_full.shape[0]*(C_full.shape[0]+1) - (M + 1)
             test_stat_i, p_val_i = likelihood_ratio_test(null_likelihood, 
-                                                alt_likelihood_alpha_i, 2)
+                                                alt_likelihood_alpha_i, dof)
             # test_stat_i_alt, p_val_i_alt = likelihood_ratio_test(null_likelihood, 
             #                                     alt_likelihood_alpha_i_alt, 2)
             #print("\n\n")

@@ -98,41 +98,50 @@ def calculate_local_slope(newton_direction, jacobian):
 
 def perform_line_search(local_slope, newton_direction, alphas, H_s, C, dim, tau, control_factor):
     t = -control_factor*local_slope
-    print("t {}".format(t))
+    #print("t {}".format(t))
     max_iters = 100
     # calculate maximum step size heuristic
     new_alph_temp = alphas + 1.0*newton_direction
+    lr_val = 1.0
     if not (new_alph_temp <= 0).any():
         lr_val = 1.0
     else:
-        alph_diff = alphas - new_alph_temp
-        min_val = np.min(new_alph_temp) # most negative value
-        min_idx = np.argmin(new_alph_temp)
-        lr_val = -(alphas[min_idx]/newton_direction[min_idx])*0.95
-    print("\nLINE SEARCH\n")
+        while (alphas + lr_val*newton_direction <= 0).any():
+            lr_val = lr_val*0.9
+        # alph_diff = alphas - new_alph_temp
+        # min_val = np.min(new_alph_temp) # most negative value
+        # min_idx = np.argmin(new_alph_temp)
+        # # TODO FIX THIS LINE
+        # """
+        # INCOMPLETE
+        # """
+        # lr_val = -(alphas[min_idx]/newton_direction[min_idx])*0.5
+        # """
+        # """
+    #print("\nLINE SEARCH\n")
     for j in range(max_iters):
         f_x = boyd_likelihood(x=alphas, H_s=H_s, C=C, dim=dim)
         new_alphas = alphas+lr_val*newton_direction
         f_x_update = boyd_likelihood(x=new_alphas, H_s=H_s, C=C, dim=dim)
         fx_diff = f_x - f_x_update
-        print("***********")
-        print("ITER {}".format(j))
-        print("FX Diff {} Orig {} New {}".format(fx_diff, f_x, f_x_update))
-        print("New Alphas {}".format(new_alphas))
-        print("Stopping Criteria {}".format(lr_val*t))
-        print("************")
+        #print("***********")
+        #print("ITER {}".format(j))
+        #print("FX Diff {} Orig {} New {}".format(fx_diff, f_x, f_x_update))
+        #print("New Alphas {}".format(new_alphas))
+        #print("Stopping Criteria {}".format(lr_val*t))
+        #print("************")
         if fx_diff >= lr_val*t:
             break
         lr_val = tau*lr_val
     
-    print("LR Val {}".format(lr_val))
+    #print("LR Val {}".format(lr_val))
 
     return lr_val
 
 
 
 
-def optim_boyd(C, H_s, tolerance=0.5, iters=10, tau=0.9, control_factor=0.5):
+def optim_boyd(C, H_s, tolerance=0.5, iters=10, tau=0.95, control_factor=0.5):
     dim = C.shape[0]
     M = H_s.shape[0]
     alphas_imo = np.ones(M)
@@ -164,16 +173,16 @@ def optim_boyd(C, H_s, tolerance=0.5, iters=10, tau=0.9, control_factor=0.5):
         likelihood_curr = boyd_likelihood(x=alphas_imo, H_s=H_s, C=C, dim=dim)
         likelihood_new = boyd_likelihood(x=new_alphas, H_s=H_s, C=C, dim=dim)
         likelihood_diff = likelihood_curr - likelihood_new
-        print("Iter {} Likelihood Diff {}".format(it, likelihood_curr - likelihood_new))
-        if likelihood_diff < 0.0:
-            print("NEGATIVE LIKELIHOOD UPDATE")
-            pdb.set_trace()
+        # print("Iter {} Likelihood Diff {}".format(it, likelihood_curr - likelihood_new))
+        # if likelihood_diff < 0.0:
+        #     print("NEGATIVE LIKELIHOOD UPDATE")
+        #     pdb.set_trace()
         alphas_imo = new_alphas.copy()
         #print("New Alphas", new_alphas)
         #print('***********')
         #print()
     #exit()
-    print()
+    #print()
     #print("################")
     #print("ALPHAS {}".format(alphas_imo))
     #print("################")

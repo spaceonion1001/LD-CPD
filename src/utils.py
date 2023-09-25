@@ -4,6 +4,8 @@ from datetime import datetime
 from sklearn.preprocessing import StandardScaler
 from numba import jit
 import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 def is_pos_def(A):
     if is_symmetric(A):
@@ -44,6 +46,18 @@ def load_stock_market_data(args):
     print('Loading Stock Market Data...')
     data = np.loadtxt(os.path.join(args.data_path, 'logdiff_vals.csv'), delimiter=',')
     return data
+
+def load_mesonet_data(args):
+    print('Loading MesoNet Data...')
+    data = pd.read_csv(os.path.join(args.data_path, 'mesonet_out_test.csv'), delimiter=',')
+    data = data.drop('YYYYMMDDhhmm', axis=1)
+    sns.histplot(data.values, bins=40, legend=False)
+    plt.savefig('mesonet_hist.png')
+    plt.close()
+
+    return data.astype(np.float64)
+
+
 
 def scale_data(data, percent=1.0):
     scaler = StandardScaler()

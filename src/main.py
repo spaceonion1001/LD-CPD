@@ -9,7 +9,7 @@ sns.set()
 
 from precision_cpd import PrecisionCPD
 from simulate import *
-from utils import difference_data, load_alaska_data, scale_data, load_hjandrews_data, create_fig_dir, load_holiday_farm_data, load_tohoku_data, load_stock_market_data
+from utils import difference_data, load_alaska_data, scale_data, load_hjandrews_data, create_fig_dir, load_holiday_farm_data, load_tohoku_data, load_stock_market_data, load_mesonet_data
 import time
 from datetime import timedelta
 
@@ -51,7 +51,7 @@ def get_args():
     parser.add_argument('--num_eps_mats', type=int, default=4)
     parser.add_argument('--runtimes', type=int, default=0)
     parser.add_argument('--optim_type', type=str, choices=['CVX', 'unbiased', 'Anderson', 'first-order', 'CVXCLUST', 'Boyd'], default='CVX', help='Optimization Type')
-    parser.add_argument('--resid_type', type=str, choices=['unstructured'], default='unstructured', help='Residual Type')
+    parser.add_argument('--resid_type', type=str, choices=['unstructured', 'block'], default='unstructured', help='Residual Type')
     parser.add_argument('--num_indices', type=int, default=4)
     args = parser.parse_args()
 
@@ -109,6 +109,8 @@ def resolve_data(args, save_path=None):
             # python src/main.py --window_size 100 --sim 0 --data stocks --step 1 --window_size 100 --lam 5e-1 --full_basis 0 --M 6 --train_percent 0.4 --split_variance 0
             # python src/main.py --window_size 100 --sim 0 --data stocks --step 1 --window_size 100 --lam 5e-1 --full_basis 0 --M 10 --train_percent 0.4 --split_variance 0
             return scale_data(load_stock_market_data(args), args.train_percent)
+        elif args.data == 'mesonet':
+            return scale_data(load_mesonet_data(args), args.train_percent)
         else:
             print("Error: Dataset not understood")
             exit(0)
@@ -187,11 +189,13 @@ def perform_simulation_batch(args):
     args.fig_dir_path = fig_dir_path
     print("\n*******************************************************************************")
     print("Performing Batch Simulation of {} with Dim = {}, M = {}, Scale = {}, Window = {}, Lam = {}".format(args.sim_type, args.dim, args.M, args.sim_scale, args.window_size, args.lam))
-    seeds_list = np.arange(50, 60)
+    seeds_list = np.arange(50, 70)
     sim_results_path = os.path.join(args.results_path, "simulation_results")
     if not os.path.isdir(sim_results_path):
         os.mkdir(sim_results_path)
     sim_type_path = os.path.join(sim_results_path, args.sim_type+"_"+str(args.dim))
+    if args.sim_type == 'anderson_residual':
+        sim_type_path = os.path.join(sim_results_path, args.sim_type+"_"+args.resid_type+"_"+str(args.dim))
     print(sim_type_path)
     if not os.path.isdir(sim_type_path):
         os.mkdir(sim_type_path)
