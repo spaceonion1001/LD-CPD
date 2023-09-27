@@ -61,6 +61,21 @@ python src/main.py --sim 1 --sim_type cai_model_three --num_indices 4 --single_t
 python src/main.py --sim 1 --sim_type cai_model_three --num_indices 4 --single_test 0 --step_size 1 --window_size 100 --split_variance 0 --M 6 --dim 60 --optim_type Boyd --lam 5e-2 --N 400
 python src/main.py --sim 1 --sim_type cai_model_three --num_indices 4 --single_test 0 --step_size 1 --window_size 100 --split_variance 0 --M 8 --dim 80 --optim_type Boyd --lam 5e-2 --N 400
 
+# Sparse Cholesky
+python src/main.py --sim 1 --sim_type sparse_cholesky --num_coeffs_change 4 --single_test 0 --step_size 1 --window_size 100 --split_variance 0 --M 4 --dim 20 --optim_type Boyd --lam 5e-2 --N 400
+python src/main.py --sim 1 --sim_type sparse_cholesky --num_coeffs_change 4 --single_test 0 --step_size 1 --window_size 100 --split_variance 0 --M 5 --dim 40 --optim_type Boyd --lam 5e-2 --N 400
+python src/main.py --sim 1 --sim_type sparse_cholesky --num_coeffs_change 4 --single_test 0 --step_size 1 --window_size 100 --split_variance 0 --M 6 --dim 60 --optim_type Boyd --lam 5e-2 --N 400
+python src/main.py --sim 1 --sim_type sparse_cholesky --num_coeffs_change 4 --single_test 0 --step_size 1 --window_size 100 --split_variance 0 --M 8 --dim 80 --optim_type Boyd --lam 5e-2 --N 400
+
+python src/xia_cpd.py --sim 1 --sim_type sparse_cholesky --num_coeffs_change 4 --step_size 1 --window_size 100 --M 4 --dim 20 --lam 5e-2 --N 400
+python src/xia_cpd.py --sim 1 --sim_type sparse_cholesky --num_coeffs_change 4 --step_size 1 --window_size 100 --M 5 --dim 40 --lam 5e-2 --N 400
+python src/xia_cpd.py --sim 1 --sim_type sparse_cholesky --num_coeffs_change 4 --step_size 1 --window_size 100 --M 6 --dim 60 --lam 5e-2 --N 400
+python src/xia_cpd.py --sim 1 --sim_type sparse_cholesky --num_coeffs_change 4 --step_size 1 --window_size 100 --M 8 --dim 80 --lam 5e-2 --N 400
+
+python src/kesh_cpd.py --sim 1 --sim_type sparse_cholesky --num_coeffs_change 4 --step_size 1 --window_size 100 --M 4 --dim 20 --lam 5e-2 --N 400 --burn_in 100
+python src/kesh_cpd.py --sim 1 --sim_type sparse_cholesky --num_coeffs_change 4 --step_size 1 --window_size 100 --M 5 --dim 40 --lam 5e-2 --N 400 --burn_in 100
+python src/kesh_cpd.py --sim 1 --sim_type sparse_cholesky --num_coeffs_change 4 --step_size 1 --window_size 100 --M 6 --dim 60 --lam 5e-2 --N 400 --burn_in 100
+python src/kesh_cpd.py --sim 1 --sim_type sparse_cholesky --num_coeffs_change 4 --step_size 1 --window_size 100 --M 8 --dim 80 --lam 5e-2 --N 400 --burn_in 100
 
 
 ############################################################################

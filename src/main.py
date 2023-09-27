@@ -53,6 +53,7 @@ def get_args():
     parser.add_argument('--optim_type', type=str, choices=['CVX', 'unbiased', 'Anderson', 'first-order', 'CVXCLUST', 'Boyd'], default='CVX', help='Optimization Type')
     parser.add_argument('--resid_type', type=str, choices=['unstructured', 'block'], default='unstructured', help='Residual Type')
     parser.add_argument('--num_indices', type=int, default=4)
+    parser.add_argument('--recursion', action='store_true')
     args = parser.parse_args()
 
     return args
@@ -189,7 +190,7 @@ def perform_simulation_batch(args):
     args.fig_dir_path = fig_dir_path
     print("\n*******************************************************************************")
     print("Performing Batch Simulation of {} with Dim = {}, M = {}, Scale = {}, Window = {}, Lam = {}".format(args.sim_type, args.dim, args.M, args.sim_scale, args.window_size, args.lam))
-    seeds_list = np.arange(50, 70)
+    seeds_list = np.arange(50, 60)
     sim_results_path = os.path.join(args.results_path, "simulation_results")
     if not os.path.isdir(sim_results_path):
         os.mkdir(sim_results_path)

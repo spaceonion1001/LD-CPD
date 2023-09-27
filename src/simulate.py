@@ -102,7 +102,7 @@ def generate_residual_matrix(H_s, precision, dim, N, num_indices=4, resid_type='
 
 
 def anderson_sim_with_residual(M=2, dim=4, N=500, num_indices=4, resid_type='unstructured', save_path=None):
-    print("Simulating Anderson Decomp With Residual Matrix")
+    print("Simulating Anderson Decomp With Residual Matrix: {}".format(resid_type))
     assert dim % M == 0, "Need dim divisible by M for sake of sampling at the moment"
     H_s, precision_one, prec_coeffs_one = generate_matrices_orthogonal(M=M, dim=dim)
     R = generate_residual_matrix(H_s, 
