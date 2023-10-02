@@ -49,11 +49,11 @@ def load_stock_market_data(args):
 
 def load_mesonet_data(args):
     print('Loading MesoNet Data...')
-    data = pd.read_csv(os.path.join(args.data_path, 'mesonet_out_test.csv'), delimiter=',')
+    data = pd.read_csv(os.path.join(args.data_path, args.data_fname), delimiter=',')
     data = data.drop('YYYYMMDDhhmm', axis=1)
-    sns.histplot(data.values, bins=40, legend=False)
-    plt.savefig('mesonet_hist.png')
-    plt.close()
+    #sns.histplot(data.values, bins=40, legend=False)
+    #plt.savefig('mesonet_hist.png')
+    #plt.close()
 
     return data.astype(np.float64)
 

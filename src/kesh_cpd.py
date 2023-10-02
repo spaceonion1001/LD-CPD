@@ -6,7 +6,7 @@ import scipy
 from scipy.optimize import least_squares, minimize
 from scipy.stats import chi2
 from simulate import sim_changepoint_mv_normal_cholesky, sim_changepoint_mv_normal_ldlt, sim_changepoint_var_process, changepoint_cai_model_one, changepoint_cai_model_three, anderson_sim_with_residual
-from utils import scale_data, difference_data, vectorize_matrix, symmetrize_from_vector
+from utils import scale_data, difference_data, vectorize_matrix, symmetrize_from_vector, load_mesonet_data
 from statsmodels.stats.multitest import fdrcorrection
 from tqdm import tqdm
 from scipy.stats import norm
@@ -25,6 +25,11 @@ import rpy2.robjects as robjects
 import rpy2.robjects.numpy2ri
 from rpy2.robjects.packages import importr
 import rpy2.robjects.packages as rpackages
+
+import matplotlib.pyplot as plt
+import matplotlib
+
+matplotlib.use('Agg')
 
 from rpy2.rinterface_lib.callbacks import logger as rpy2_logger
 import logging
@@ -60,6 +65,7 @@ def get_args():
     parser.add_argument('--sim_type', type=str, default='cai_model_three')
     parser.add_argument('--data', type=str, default='alaska')
     parser.add_argument('--data_path', type=str, default='/home/dink/Documents/Research/data')
+    parser.add_argument('--data_fname', type=str, default='mesonet_test_out.csv')
     parser.add_argument('--sim_scale', type=float, default=0.8)
     parser.add_argument('--random_seed', type=int, default=42)
     parser.add_argument('--window_size', type=int, default=100)
@@ -74,6 +80,7 @@ def get_args():
     parser.add_argument('--resid_type', type=str, choices=['unstructured', 'block'], default='unstructured', help='Residual Type')
     parser.add_argument('--num_indices', type=int, default=4)
     parser.add_argument('--train_percent', type=float, default=0.25)
+    parser.add_argument('--single_test', type=int, default=0)
     args = parser.parse_args()
 
     return args
@@ -132,6 +139,8 @@ def resolve_data(args, save_path=None):
             # python src/main.py --M 5 --lam 2e-5 --window_size 200 --step_size 1 --data stocks --local 1 --sim 0 --split_variance 0 --train_percent 0.6
             # stocks need a low lambda value I think
             return load_stock_market_data(args)
+        elif args.data == 'mesonet':
+            return scale_data(load_mesonet_data(args), args.train_percent)
         else:
             print("Error: Dataset not understood")
             exit(0)
@@ -377,13 +386,17 @@ def inv_Q_func(pi_0):
 def perform_single_run(args):
     data_full = resolve_data(args, save_path=None)
     print(data_full.shape)
+    save_path = os.path.join(args.results_path+"_kesh", args.data)
+    if not os.path.isdir(save_path):
+        os.mkdir(save_path)
     model = KeshOnline(args, data_full)
-    print(model.test_stats)
-    print(model.test_stats.shape)
-    #print(model.D_hat)
-    #global_test_vals, _ = apply_cai_algorithm_windowed(args, data_full)
-    #plt.plot(global_test_vals)
-    #plt.show()
+    global_test_vals = model.test_stats
+    np.savetxt(os.path.join(save_path, args.data_fname+"_global_test_vals.csv"), global_test_vals, delimiter=',')
+    plt.plot(global_test_vals)
+    plt.savefig(os.path.join(save_path, args.data_fname+".png"))
+    plt.close()
+
+    
 
 def perform_simulation_batch(args):
     # run a batch of 50 simulations/results with a specified simulation model
@@ -420,8 +433,10 @@ def perform_simulation_batch(args):
 def main():
     np.random.seed(24)
     args = get_args()
-    #perform_single_run(args)
-    perform_simulation_batch(args)
+    if args.single_test:
+        perform_single_run(args)
+    else:
+        perform_simulation_batch(args)
 
 
 

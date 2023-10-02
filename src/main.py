@@ -28,6 +28,7 @@ def get_args():
     parser.add_argument('--N', type=int, default=1000)
     parser.add_argument('--data', type=str, default='alaska')
     parser.add_argument('--data_path', type=str, default='../data')
+    parser.add_argument('--data_fname', type=str, default='mesonet_test_out.csv')
     parser.add_argument('--fig_path', type=str, default='./figs')
     parser.add_argument('--results_path', type=str, default='./results')
     parser.add_argument('--results_filename', type=str, default="lrt_results.csv")
@@ -53,7 +54,8 @@ def get_args():
     parser.add_argument('--optim_type', type=str, choices=['CVX', 'unbiased', 'Anderson', 'first-order', 'CVXCLUST', 'Boyd'], default='CVX', help='Optimization Type')
     parser.add_argument('--resid_type', type=str, choices=['unstructured', 'block'], default='unstructured', help='Residual Type')
     parser.add_argument('--num_indices', type=int, default=4)
-    parser.add_argument('--recursion', action='store_true')
+    parser.add_argument('--recursion', type=int, default=1)
+    parser.add_argument('--results_fldr_name', type=str, default=None)
     args = parser.parse_args()
 
     return args
@@ -120,7 +122,12 @@ def perform_single_test(args):
     np.random.seed(args.random_seed)
     fig_dir_path = create_fig_dir(args.fig_path)
     args.fig_dir_path = fig_dir_path
-    results_dir_path = create_fig_dir(args.results_path)
+    if not args.results_fldr_name:
+        results_dir_path = create_fig_dir(args.results_path)
+    else:
+        results_dir_path = os.path.join(args.results_path, args.results_fldr_name)
+        if not os.path.isdir(results_dir_path):
+            os.mkdir(results_dir_path)
     data_full = resolve_data(args, results_dir_path)
     print(data_full.shape)
     model = PrecisionCPD(args)
@@ -190,7 +197,7 @@ def perform_simulation_batch(args):
     args.fig_dir_path = fig_dir_path
     print("\n*******************************************************************************")
     print("Performing Batch Simulation of {} with Dim = {}, M = {}, Scale = {}, Window = {}, Lam = {}".format(args.sim_type, args.dim, args.M, args.sim_scale, args.window_size, args.lam))
-    seeds_list = np.arange(50, 60)
+    seeds_list = np.arange(52, 60)
     sim_results_path = os.path.join(args.results_path, "simulation_results")
     if not os.path.isdir(sim_results_path):
         os.mkdir(sim_results_path)

@@ -9,7 +9,7 @@ from statsmodels.stats.multitest import fdrcorrection
 from tqdm import tqdm
 from scipy.stats import norm
 from simulate import *
-from utils import difference_data, load_alaska_data, scale_data, load_hjandrews_data, create_fig_dir, load_holiday_farm_data, load_tohoku_data, load_stock_market_data
+from utils import difference_data, load_alaska_data, scale_data, load_hjandrews_data, create_fig_dir, load_holiday_farm_data, load_tohoku_data, load_stock_market_data, load_mesonet_data
 from numba import jit
 import time
 from datetime import timedelta
@@ -51,6 +51,7 @@ def get_args():
     parser.add_argument('--sim_type', type=str, default='cai_model_three')
     parser.add_argument('--data', type=str, default='alaska')
     parser.add_argument('--data_path', type=str, default='/home/dink/Documents/Research/data')
+    parser.add_argument('--data_fname', type=str, default='mesonet_test_out.csv')
     parser.add_argument('--sim_scale', type=float, default=0.8)
     parser.add_argument('--random_seed', type=int, default=42)
     parser.add_argument('--train_percent', type=float, default=0.25)
@@ -61,6 +62,7 @@ def get_args():
     parser.add_argument('--fix_pre', type=int, default=1)
     parser.add_argument('--resid_type', type=str, choices=['unstructured', 'block'], default='unstructured', help='Residual Type')
     parser.add_argument('--num_indices', type=int, default=4)
+    parser.add_argument('--single_test', type=int, default=0)
     args = parser.parse_args()
 
     return args
@@ -116,6 +118,8 @@ def resolve_data(args, save_path=None):
             # python src/main.py --M 5 --lam 2e-5 --window_size 200 --step_size 1 --data stocks --local 1 --sim 0 --split_variance 0 --train_percent 0.6
             # stocks need a low lambda value I think
             return scale_data(load_stock_market_data(args), args.train_percent)
+        elif args.data == 'mesonet':
+            return scale_data(load_mesonet_data(args), args.train_percent)
         else:
             print("Error: Dataset not understood")
             exit(0)
@@ -746,7 +750,17 @@ if __name__ == '__main__':
     args = get_args()
     #data = resolve_data(args)
     #apply_cai_variance_windowed(args, data)
-    perform_simulation_batch(args)
+    if args.single_test:
+        data_full = resolve_data(args)
+        save_path = os.path.join(args.results_path+"_cai", args.data)
+        if not os.path.isdir(save_path):
+            os.mkdir(save_path)
+        print(data_full.shape)
+        global_test_vals, _ = apply_cai_algorithm_windowed(args, data_full)
+        print()
+        np.savetxt(os.path.join(save_path, args.data_fname+"_global_test_vals.csv"), global_test_vals, delimiter=',')
+    else:
+        perform_simulation_batch(args)
     #perform_simulation_batch_variance(args)
     #precision_recall_sims(args)
     #precision_recall_sims_precision(args)

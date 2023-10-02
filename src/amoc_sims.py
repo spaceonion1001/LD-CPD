@@ -6,15 +6,18 @@ import os
 import glob
 from statsmodels.stats.multitest import fdrcorrection
 from scipy.stats import chi2, multivariate_normal, zscore
-from tqdm.notebook import tqdm
+from tqdm import tqdm
 from scipy.stats import norm
 from numba import jit
 import argparse
 sns.set()
 #sns.set_style('dark')
 sns.set_palette("viridis")
+import matplotlib
 
+from functools import reduce
 
+matplotlib.use('Agg')
 def kesh_p_value(test_statistics):
     """
     Calculate z-score, then take survival function of normal dist
@@ -169,7 +172,7 @@ def average_AMOC(AMOC_points):
         mean_days = summed_days / len(AMOC_points)
         mean_days_per_threshold.append(mean_days)
     
-    return mean_days_per_threshold, thresholds
+    return np.array(mean_days_per_threshold), thresholds
 
 def amoc_lrt_vals(lrt_vals, first_possible_detect_time, last_possible_detect_time, use_p_vals=False, thresholds=None):
     # input should be padded vals
@@ -378,6 +381,7 @@ def main_sims():
     #sim_types = ['orthogonal']
     #sim_types = ['cai_model_one']
     dims = [20, 40, 60, 80]
+    #dims = [80]
     #dims = [24, 30, 36, 42, 48, 56, 64]
     #dims = [20, 24, 30]
     #dims=[36]
@@ -401,9 +405,9 @@ def main_sims():
             statset_cai = []
             statset_kesh = []
             for curr_seed in seeds:
-                cpd_path='./simulation_results/{}_{}/{}/lrt_vals.csv'.format(sim_type, curr_dim, curr_seed)
-                xia_path='./simulation_results_cai/{}_{}/{}/global_test_vals.csv'.format(sim_type, curr_dim, curr_seed)
-                kesh_path='./simulation_results_kesh/{}_{}/{}/global_test_vals.csv'.format(sim_type, curr_dim, curr_seed)
+                cpd_path='./results/simulation_results/{}_{}/{}/lrt_vals.csv'.format(sim_type, curr_dim, curr_seed)
+                xia_path='./results/simulation_results_cai/{}_{}/{}/global_test_vals.csv'.format(sim_type, curr_dim, curr_seed)
+                kesh_path='./results/simulation_results_kesh/{}_{}/{}/global_test_vals.csv'.format(sim_type, curr_dim, curr_seed)
                 cpd_vals = np.loadtxt(cpd_path, delimiter=',')
                 cutoff = cpd_vals.shape[1]//2
                 pvals_cpd = cpd_vals[:, cutoff:][100:] # just the p-values
@@ -512,6 +516,36 @@ def main_sims():
             means_per_threshold_ours, thresholds_ours = average_AMOC(fpr_detect_pairs_ours)
             means_per_threshold_cai, thresholds_cai = average_AMOC(fpr_detect_pairs_cai)
             means_per_threshold_kesh, thresholds_kesh = average_AMOC(fpr_detect_pairs_kesh)
+            
+            """
+            ###########################
+            Filter out highest detection time - unrealistic
+            and high FPR - also unrealistic
+            """
+            threshold_idx_mask = np.where(thresholds_ours < 0.2) # THESE ARE IDENTICAL INDICES ACROSS THE ALGORITHMS
+            means_per_threshold_ours = means_per_threshold_ours[threshold_idx_mask]
+            means_per_threshold_cai = means_per_threshold_cai[threshold_idx_mask]
+            means_per_threshold_kesh = means_per_threshold_kesh[threshold_idx_mask]
+            thresholds_ours = thresholds_ours[threshold_idx_mask]
+            thresholds_cai = thresholds_cai[threshold_idx_mask]
+            thresholds_kesh = thresholds_kesh[threshold_idx_mask]
+
+            detect_idx_mask_ours = np.where(means_per_threshold_ours <= 200) # maximum detection time, 2*window_size
+            detect_idx_mask_cai = np.where(means_per_threshold_cai <= 200)
+            detect_idx_mask_kesh = np.where(means_per_threshold_kesh <= 200)
+            detect_idx_mask = reduce(np.intersect1d, (detect_idx_mask_ours, detect_idx_mask_cai, detect_idx_mask_kesh)) # union of all idxs
+            
+            means_per_threshold_ours = means_per_threshold_ours[detect_idx_mask] # 4 seems fine
+            means_per_threshold_cai = means_per_threshold_cai[detect_idx_mask]
+            means_per_threshold_kesh = means_per_threshold_kesh[detect_idx_mask]
+            thresholds_ours = thresholds_ours[detect_idx_mask]
+            thresholds_cai = thresholds_cai[detect_idx_mask]
+            thresholds_kesh = thresholds_kesh[detect_idx_mask]
+
+
+            """
+            ###########################
+            """
             plt.plot(thresholds_ours, means_per_threshold_ours, '.b-', label='Ours')
             plt.plot(thresholds_cai, means_per_threshold_cai, '.r-', label='Cai')
             plt.plot(thresholds_kesh, means_per_threshold_kesh, '.g-', label='Kesh')

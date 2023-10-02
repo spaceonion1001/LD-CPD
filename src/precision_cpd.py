@@ -59,6 +59,118 @@ class PrecisionCPD:
         #self.inv_cov += np.eye(self.inv_cov.shape[0])*np.abs(np.linalg.eig(self.inv_cov)[0].min()) + 0.05
         #assert(is_pos_def(self.inv_cov))
 
+
+    def recursive_split(self, basis_mat):
+        performed_split = True
+        clust_dist_mat = np.abs(basis_mat)
+        np.fill_diagonal(clust_dist_mat, 0.0)
+        ###########
+        clust_dist_mat = (clust_dist_mat.max()+1e-5) - clust_dist_mat
+        np.fill_diagonal(clust_dist_mat, 0.0)
+        ###########
+        pairwise_distances = sch.distance.pdist(clust_dist_mat)
+        Z = linkage(pairwise_distances, method='average')
+        # BREAK INTO 2 NEW CLUSTERS
+        cutree = hierarchy.cut_tree(Z, n_clusters=2).squeeze()
+        new_basis_matrices = []
+        for i in range(min(set(cutree)), max(set(cutree))+1): # iterate over clusters
+            idxs = np.where(cutree == i)[0] # indexes for given cluster
+            A = np.zeros(basis_mat.shape) # blank A matrix
+            for idx in idxs: # loop over indexes
+                for idx2 in idxs: # loop over indexes
+                    A[idx][idx2] = basis_mat[idx][idx2].copy() # set i,j entry to be the entry from precision matrix for given cluster
+            if self.split_variance:
+                if len(np.nonzero(A)[0]) > 0:
+                    new_basis_matrices.append(vectorize_matrix(np.diag(np.diag(A.copy()))))
+                np.fill_diagonal(A, 0)
+            if len(np.nonzero(A)[0]) > 0:
+                new_basis_matrices.append(vectorize_matrix(A))
+        new_basis_matrices = np.array(new_basis_matrices)
+        for i in range(new_basis_matrices.shape[0]):
+            curr_mat = symmetrize_from_vector(new_basis_matrices[i], self.dim)
+            nonzero_cols = np.nonzero(np.any(curr_mat != 0, axis=0))[0]
+            #print("NONZERO COLS {}".format(nonzero_cols))
+            if len(nonzero_cols) < 3: # don't split into a singleton cluster - not informative - 3x3 is the minimum for splitting
+                performed_split = False
+                pass
+            #print("Matrix {} Len {} Channels Contained {}".format(i, len(nonzero_cols), nonzero_cols))
+            #print()
+        #print("NEW BASIS MATRICES SHAPE", new_basis_matrices.shape)
+
+        
+        if new_basis_matrices.shape[0] <= 1:
+            performed_split = False
+
+        return new_basis_matrices, performed_split
+
+
+
+    def bfs_basis_mats(self, data_full, curr_basis_mats):
+        #print("###################################### RECURSION BLOCK LEVEL ######################################")
+        data_train = data_full[:, 0:int(self.args.train_percent*data_full.shape[1])]
+        C_full = np.cov(data_train.copy(), bias=True)
+        level_basis_mats = []
+        for i, mat in enumerate(curr_basis_mats):
+            #print("TRAIN DATA {}".format(data_train.shape))
+            orig_mat = mat.copy()
+            mat = symmetrize_from_vector(mat, dim=self.dim)
+            if mat.shape[0] <= 4: # suitable localization - treat 4x4 or less as leaf nodes -> keep original matrix instead
+                level_basis_mats.append(orig_mat)
+                continue
+            nonzero_cols = np.nonzero(np.any(mat != 0, axis=0))[0]
+            #print("NONZERO COLS {}".format(nonzero_cols))
+            data_train_curr = data_train[nonzero_cols, :]
+            #print("Data Train Curr {}".format(data_train_curr.shape))
+            train_C = np.cov(data_train_curr.copy(), bias=True)
+            #print("Train C {}".format(train_C.shape))
+            train_C = train_C + np.eye(train_C.shape[0])*1e-8
+
+            # fit current level of recursion on training data
+            alphas = optim_boyd(C=C_full, H_s=curr_basis_mats)
+            #print("ALPHAS BOYD {}".format(alphas))
+            #print("Train C Shape {}".format(train_C.shape))
+            #print("Alphas {}".format(alphas))
+            cluster_precision = mat[~np.all(mat == 0, axis=1)]
+            cluster_precision = alphas[i]*cluster_precision[:, ~np.all(cluster_precision == 0, axis=0)]
+
+            anderson_lrt_value = self.anderson_lrt(cluster_precision=cluster_precision, C=train_C, N=data_train.shape[1])
+            dof = 0.5*train_C.shape[0]*(train_C.shape[0]+1) - 1 # q here is just 1 since we are cluster specific
+            chisquare_val = chi2.sf(anderson_lrt_value, dof)
+            #print("CHISQUARE P-VAL {} DOF {}".format(chisquare_val, dof))
+            new_mats, performed_split = self.recursive_split(mat)
+            #print(new_mats.shape, performed_split)
+            if performed_split:
+                reduced_basis_mats = np.delete(curr_basis_mats, i, axis=0)
+                updated_basis_matrices = np.concatenate((reduced_basis_mats, new_mats), axis=0)
+                nonzero_cols_two = np.nonzero(np.any(symmetrize_from_vector(updated_basis_matrices[1], self.dim) != 0, axis=0))[0]
+                silhoutte_labels = self.cutree
+                silhoutte_labels[nonzero_cols_two] = int(self.cutree.max() + 1)
+                new_silhoutte_score = silhouette_score(self.root_dist_mat, silhoutte_labels)
+                #print("Silhoutte Scores", new_silhoutte_score, self.curr_silhoutte_score)
+                condition_two = new_silhoutte_score > self.curr_silhoutte_score
+                condition_three = chisquare_val >= 1e-5
+
+                if condition_two or condition_three: # we split and the scores improved or didn't degrade (p-value) -> take new 2 matrices!
+                    #print("ADDING BASIS MATS")
+                    #print("NEW MATS SHAPE", new_mats.shape)
+                    self.curr_silhoutte_score = new_silhoutte_score
+                    for matr in new_mats:
+                        level_basis_mats.append(matr)
+                else: # both of these are false -> keep original matrix instead
+                    level_basis_mats.append(orig_mat)
+            else: # split didn't take place -> keep original matrix instead
+                level_basis_mats.append(orig_mat)
+        #print(np.concatenate(level_basis_mats, axis=1).shape)
+        level_basis_mats = np.array(level_basis_mats)
+        if level_basis_mats.shape[0] > curr_basis_mats.shape[0]: # splits took place
+            #print("$$$$$$$$$$$$$ RECURSING $$$$$$$$$$$$$$")
+            #print("###################################### END OF RECURSION BLOCK LEVEL ######################################")
+            level_basis_mats = self.bfs_basis_mats(data_full, level_basis_mats) # recurse down a level
+
+        
+        return level_basis_mats
+            
+
     def construct_basis_matrices(self):
         precision = self.glasso.precision_.copy()
         #precision = self.inv_cov
@@ -87,6 +199,9 @@ class PrecisionCPD:
         #plt.close()
         ######
         cutree1 = hierarchy.cut_tree(Z, n_clusters=self.M).squeeze()
+        if self.args.recursion:
+            print("*** Utilizing Recursion... ***")
+            cutree1 = hierarchy.cut_tree(Z, n_clusters=2).squeeze() # start with just 2
         root, nodelist = hierarchy.to_tree(Z, rd=True)
         #self.dendrogram = dn
         self.Z = Z
@@ -96,7 +211,6 @@ class PrecisionCPD:
         self.root_dist_mat = clust_dist_mat
         #print(self.root)
         #print(self.nodelist)
-        
 
         self.curr_silhoutte_score = silhouette_score(clust_dist_mat, cutree1, metric='precomputed')
         self.basis_matrices = []
@@ -135,6 +249,7 @@ class PrecisionCPD:
         #################
 
         self.basis_matrices = np.array(self.basis_matrices)
+
 
         #leftover_basis_matrix = precision - symmetrize_from_vector(self.basis_matrices.sum(axis=0), dim=self.dim)
         leftover_basis_matrix = precision - symmetrize_from_vector(basis_mats_backup.sum(axis=0), dim=self.dim)
@@ -220,11 +335,11 @@ class PrecisionCPD:
         """
         
         # calculate likelihood ratio criterion eq 4.10
-        print("C {} Prec {}".format(C.shape, cluster_precision.shape))
+        #print("C {} Prec {}".format(C.shape, cluster_precision.shape))
         first_term = 0.5*N*fast_logdet(C)
         second_term = 0.5*N*fast_logdet(cluster_precision)
         res = -2*(first_term + second_term)
-        print("First Term {} Second Term {} Res {}".format(first_term, second_term, res))
+        #print("First Term {} Second Term {} Res {}".format(first_term, second_term, res))
 
         return res
     
@@ -352,9 +467,17 @@ class PrecisionCPD:
 
     def perform_lrt_local(self, data_full):
         basis_mats = self.basis_matrices
-        print(basis_mats.shape[0])
-        if bool(self.full_basis):
-            basis_mats = self.basis_matrices_full
+        """
+        ADD BFS RECURSION HERE
+        """
+        basis_mats = self.bfs_basis_mats(data_full, basis_mats)
+        self.basis_matrices = basis_mats
+        """
+        """
+
+        print("Number of Basis Matrices {}".format(basis_mats.shape[0]))
+        # if bool(self.full_basis):
+        #     basis_mats = self.basis_matrices_full
         lrt_vals_all, p_vals_all = LRT_individual_coeffs_full_likelihood(data_full, M=basis_mats.shape[0], dim=data_full.shape[0], H_s=basis_mats, 
                                                                          window_size=self.window_size, lam=self.lam, step_size=self.step_size, include_l1=self.include_l1, 
                                                                          iters=self.iters, beta=self.beta, t=self.t, optim_type=self.optim_type)
@@ -379,10 +502,11 @@ class PrecisionCPD:
         """
         
         """
-        RECURSION IN PROGRESS
+        RECURSION IN PROGRESS HERE IN COMMENTS IS DFS RECURSION
         """
-        lrt_vals_all, p_vals_corrected = self.recurse_on_candidate_point(np.expand_dims(p_vals_corrected[candidate_cp, :], 0), data_full, basis_mats, candidate_cp)
-
+        #lrt_vals_all, p_vals_corrected = self.recurse_on_candidate_point(np.expand_dims(p_vals_corrected[candidate_cp, :], 0), data_full, basis_mats, candidate_cp)
+        """
+        """
         # greatest_change_mat_idx = p_vals_corrected[candidate_cp, :].argmin()
         # greatest_change_mat = symmetrize_from_vector(basis_mats[greatest_change_mat_idx], dim=self.dim)
         # nonzero_cols = np.nonzero(np.any(greatest_change_mat != 0, axis=0))[0]
