@@ -222,6 +222,49 @@ def indicator_global_stat(p, alpha=0.01):
 
     return threshold
 
+def amoc_gen_vectorized(lrt_values, first_detect_time, last_detect_time, max_time_detection, thresholds=None, p_values=False):
+    if not thresholds:
+        thresholds = sorted(list(lrt_values))
+
+    fpr_array = []
+    detect_array = []
+
+    for thresh in thresholds:
+        if p_values: # if we're using p-values, lower is the cutoff
+            exceed_mask = (lrt_values <= thresh) 
+        else: # if we're using LRT-values, higher is the cutoff
+            exceed_mask = (lrt_values >= thresh)
+
+        # calculate false_positives
+        early_fp = np.sum(exceed_mask[0:first_detect_time])
+        late_fp = np.sum(exceed_mask[last_detect_time+1:])
+
+        # calculate true_negatives
+        early_tn = np.sum(~exceed_mask[0:first_detect_time])
+        late_tn = np.sum(~exceed_mask[last_detect_time+1:])
+
+        cp_slice = lrt_values[first_detect_time:last_detect_time]
+        cp_mask_slice = exceed_mask[first_detect_time:last_detect_time]
+        # we didn't find it
+        if np.sum(cp_mask_slice) < 1:
+            detect_array.append(max_time_detection)
+        # we found it, take the earliest True
+        else:
+            earliest_time = np.where(cp_mask_slice==True)[0][0]
+            detect_array.append(earliest_time) # earliest detection
+        
+        false_positives = early_fp + late_fp
+        true_negatives = early_tn + late_tn
+        if false_positives + true_negatives < 1: # shouldn't happen, but if everything is storm
+            fp_rate = 0.0
+        else:
+            fp_rate = false_positives/(false_positives+true_negatives)
+        fpr_array.append(fp_rate)
+    
+    return fpr_array, detect_array
+
+
+
 @jit(nopython=True)
 def amoc_gen_cai(alarms, first_detect_time, last_detect_time, max_time_detection, p, thresholds=None):
     """
@@ -292,17 +335,21 @@ def amoc_gen_cai(alarms, first_detect_time, last_detect_time, max_time_detection
 
     return FPR_array, detection_array
 
-def amoc_lrt_vals_cai(lrt_vals, dim, first_possible_detect_time, last_possible_detect_time, thresholds=None):
-    # input should be padded vals
-    #p_vals = np.array([chi2.pdf(lrt_vals[:, i], 2) for i in range(lrt_vals.shape[1])]).T
+def amoc_lrt_vals(lrt_vals, first_possible_detect_time, last_possible_detect_time, thresholds=None, p_values=False):
     fprs = []
     detections = []
     
-    fprs, detections = amoc_gen_cai(lrt_vals, 
+    # fprs, detections = amoc_gen_cai(lrt_vals, 
+    #                                 first_detect_time=first_possible_detect_time, 
+    #                                 last_detect_time=last_possible_detect_time, 
+    #                                 max_time_detection=last_possible_detect_time-first_possible_detect_time,
+    #                                 p=dim)
+    fprs, detections = amoc_gen_vectorized(lrt_vals, 
                                     first_detect_time=first_possible_detect_time, 
                                     last_detect_time=last_possible_detect_time, 
                                     max_time_detection=last_possible_detect_time-first_possible_detect_time,
-                                    p=dim)
+                                    p_values=p_values
+                                    )
 
     fprs = np.array(fprs)
     detections = np.array(detections)
@@ -461,25 +508,28 @@ def main_sims():
                 
                 all_thresholds = sorted(list(set(np.concatenate((pvals_cpd, pvals_cai, pvals_kesh)))))
                 
-                
-                lrt_result_cpd, detect_result_cpd = amoc_p_vals(pvals_cpd, 
-                                                                first_possible_detect_time=first_d_time,
-                                                                last_possible_detect_time=last_d_time,
-                                                                dim=curr_dim,
-                                                                thresholds=all_thresholds
-                                                                )
-                lrt_result_cai, detect_result_cai = amoc_p_vals(pvals_cai, 
-                                                                first_possible_detect_time=first_d_time,
-                                                                last_possible_detect_time=last_d_time,
-                                                                dim=curr_dim,
-                                                                thresholds=all_thresholds
-                                                                )
-                lrt_result_kesh, detect_result_kesh = amoc_p_vals(pvals_kesh, 
-                                                                first_possible_detect_time=first_d_time,
-                                                                last_possible_detect_time=last_d_time,
-                                                                dim=curr_dim,
-                                                                thresholds=all_thresholds
-                                                                )
+                lrt_result_cpd, detect_result_cpd = amoc_lrt_vals(pvals_cpd, first_possible_detect_time=first_d_time, last_possible_detect_time=last_d_time, thresholds=all_thresholds, p_values=True)
+                lrt_result_cai, detect_result_cai = amoc_lrt_vals(pvals_cai, first_possible_detect_time=first_d_time, last_possible_detect_time=last_d_time, thresholds=all_thresholds, p_values=True)
+                lrt_result_kesh, detect_result_kesh = amoc_lrt_vals(pvals_kesh, first_possible_detect_time=first_d_time, last_possible_detect_time=last_d_time, thresholds=all_thresholds, p_values=True)
+
+                # lrt_result_cpd, detect_result_cpd = amoc_p_vals(pvals_cpd, 
+                #                                                 first_possible_detect_time=first_d_time,
+                #                                                 last_possible_detect_time=last_d_time,
+                #                                                 dim=curr_dim,
+                #                                                 thresholds=all_thresholds
+                #                                                 )
+                # lrt_result_cai, detect_result_cai = amoc_p_vals(pvals_cai, 
+                #                                                 first_possible_detect_time=first_d_time,
+                #                                                 last_possible_detect_time=last_d_time,
+                #                                                 dim=curr_dim,
+                #                                                 thresholds=all_thresholds
+                #                                                 )
+                # lrt_result_kesh, detect_result_kesh = amoc_p_vals(pvals_kesh, 
+                #                                                 first_possible_detect_time=first_d_time,
+                #                                                 last_possible_detect_time=last_d_time,
+                #                                                 dim=curr_dim,
+                #                                                 thresholds=all_thresholds
+                #                                                 )
                 
                 our_seed_dict[curr_seed] = (lrt_result_cpd, detect_result_cpd)
                 cai_seed_dict[curr_seed] = (lrt_result_cai, detect_result_cai)
@@ -625,27 +675,16 @@ def main_mesonet(storm_name='center'):
         #                                                 dim=None, # deprecated
         #                                                 thresholds=all_thresholds
         #                                                 )
-        lrt_result_cpd, detect_result_cpd = amoc_lrt_vals_cai(stats_cpd.max(axis=1), dim=None, first_possible_detect_time=first_d_time, last_possible_detect_time=last_d_time, thresholds=None)
-        
-        lrt_result_kesh, detect_result_kesh = amoc_p_vals(pvals_kesh, 
-                                                                first_possible_detect_time=first_d_time,
-                                                                last_possible_detect_time=last_d_time,
-                                                                dim=None, # deprecated
-                                                                thresholds=all_thresholds
-                                                                )
+        lrt_result_cpd, detect_result_cpd = amoc_lrt_vals(stats_cpd.max(axis=1), first_possible_detect_time=first_d_time, last_possible_detect_time=last_d_time, thresholds=None, p_values=False)
+        lrt_result_kesh, detect_result_kesh = amoc_lrt_vals(kesh_vals, first_possible_detect_time=first_d_time, last_possible_detect_time=last_d_time, thresholds=None, p_values=False)
         
         print(pvals_cpd.shape, stats_cpd.shape, kesh_vals.shape)
-        plt.plot(lrt_result_cpd)
-        plt.savefig('./fpr_temp_{}.png'.format(num))
-        plt.close()
-        plt.plot(detect_result_cpd)
-        plt.savefig('./detect_temp_{}.png'.format(num))
-        plt.close()
-        """
-        Sort them to fix the alignment - the amoc generation doesn't necessarily preserve the ordering
-
-        Highest detection time corresponds to lowest FPR
-        """
+        # plt.plot(lrt_result_cpd)
+        # plt.savefig('./fpr_temp_{}.png'.format(num))
+        # plt.close()
+        # plt.plot(detect_result_cpd)
+        # plt.savefig('./detect_temp_{}.png'.format(num))
+        # plt.close()
         sorted_lrt_result_cpd = lrt_result_cpd  # sorted(lrt_result_cpd, reverse=True) # 
         #sorted_lrt_result_cai = lrt_result_cai #sorted(lrt_result_cai, reverse=True)
         sorted_lrt_result_kesh = lrt_result_kesh  #sorted(lrt_result_kesh, reverse=True) #
@@ -662,7 +701,6 @@ def main_mesonet(storm_name='center'):
         fpr_detect_pairs_ours.append(merged_list_ours)
         #fpr_detect_pairs_cai.append(merged_list_cai)
         fpr_detect_pairs_kesh.append(merged_list_kesh)
-    exit()
 
     means_per_threshold_ours, thresholds_ours = average_AMOC(fpr_detect_pairs_ours)
     #means_per_threshold_cai, thresholds_cai = average_AMOC(fpr_detect_pairs_cai)

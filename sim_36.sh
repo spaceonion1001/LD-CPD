@@ -42,17 +42,17 @@
 
 
 # UNSTRUCTURED RESIDS
-#python src/main.py --sim 1 --sim_type anderson_residual --num_indices 6 --resid_type unstructured --single_test 0 --step_size 1 --window_size 100 --split_variance 0 --M 4 --dim 20 --optim_type Boyd --lam 5e-2 --N 400 --recursion 0 --linkage average --candidate_recursion 1
-#python src/main.py --sim 1 --sim_type anderson_residual --num_indices 10 --resid_type unstructured --single_test 0 --step_size 1 --window_size 100 --split_variance 0 --M 5 --dim 40 --optim_type Boyd --lam 5e-2 --N 400 --recursion 0 --linkage average --candidate_recursion 1
-#python src/main.py --sim 1 --sim_type anderson_residual --num_indices 14 --resid_type unstructured --single_test 0 --step_size 1 --window_size 100 --split_variance 0 --M 6 --dim 60 --optim_type Boyd --lam 5e-2 --N 400 --recursion 0 --linkage average --candidate_recursion 1
-#python src/main.py --sim 1 --sim_type anderson_residual --num_indices 18 --resid_type unstructured --single_test 0 --step_size 1 --window_size 100 --split_variance 0 --M 8 --dim 80 --optim_type Boyd --lam 5e-2 --N 400 --recursion 0 --linkage average --candidate_recursion 1
+python src/main.py --sim 1 --sim_type anderson_residual --num_indices 6 --resid_type unstructured --single_test 0 --step_size 1 --window_size 100 --split_variance 0 --M 4 --dim 20 --optim_type Boyd --lam 5e-2 --N 400 --recursion 0 --linkage average --candidate_recursion 1
+python src/main.py --sim 1 --sim_type anderson_residual --num_indices 10 --resid_type unstructured --single_test 0 --step_size 1 --window_size 100 --split_variance 0 --M 5 --dim 40 --optim_type Boyd --lam 5e-2 --N 400 --recursion 0 --linkage average --candidate_recursion 1
+python src/main.py --sim 1 --sim_type anderson_residual --num_indices 14 --resid_type unstructured --single_test 0 --step_size 1 --window_size 100 --split_variance 0 --M 6 --dim 60 --optim_type Boyd --lam 5e-2 --N 400 --recursion 0 --linkage average --candidate_recursion 1
+python src/main.py --sim 1 --sim_type anderson_residual --num_indices 18 --resid_type unstructured --single_test 0 --step_size 1 --window_size 100 --split_variance 0 --M 8 --dim 80 --optim_type Boyd --lam 5e-2 --N 400 --recursion 0 --linkage average --candidate_recursion 1
 
 ## $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
 # BLOCK RESIDS
-#python src/main.py --sim 1 --sim_type anderson_residual --num_indices 6 --resid_type block --single_test 0 --step_size 1 --window_size 100 --split_variance 0 --M 4 --dim 20 --optim_type Boyd --lam 5e-2 --N 400 --recursion 0 --linkage average --candidate_recursion 1
-#python src/main.py --sim 1 --sim_type anderson_residual --num_indices 10 --resid_type block --single_test 0 --step_size 1 --window_size 100 --split_variance 0 --M 5 --dim 40 --optim_type Boyd --lam 5e-2 --N 400 --recursion 0 --linkage average --candidate_recursion 1
-#python src/main.py --sim 1 --sim_type anderson_residual --num_indices 14 --resid_type block --single_test 0 --step_size 1 --window_size 100 --split_variance 0 --M 6 --dim 60 --optim_type Boyd --lam 5e-2 --N 400 --recursion 0 --linkage average --candidate_recursion 1
-#python src/main.py --sim 1 --sim_type anderson_residual --num_indices 18 --resid_type block --single_test 0 --step_size 1 --window_size 100 --split_variance 0 --M 8 --dim 80 --optim_type Boyd --lam 5e-2 --N 400 --recursion 0 --linkage average --candidate_recursion 1
+python src/main.py --sim 1 --sim_type anderson_residual --num_indices 6 --resid_type block --single_test 0 --step_size 1 --window_size 100 --split_variance 0 --M 4 --dim 20 --optim_type Boyd --lam 5e-2 --N 400 --recursion 0 --linkage average --candidate_recursion 1
+python src/main.py --sim 1 --sim_type anderson_residual --num_indices 10 --resid_type block --single_test 0 --step_size 1 --window_size 100 --split_variance 0 --M 5 --dim 40 --optim_type Boyd --lam 5e-2 --N 400 --recursion 0 --linkage average --candidate_recursion 1
+python src/main.py --sim 1 --sim_type anderson_residual --num_indices 14 --resid_type block --single_test 0 --step_size 1 --window_size 100 --split_variance 0 --M 6 --dim 60 --optim_type Boyd --lam 5e-2 --N 400 --recursion 0 --linkage average --candidate_recursion 1
+python src/main.py --sim 1 --sim_type anderson_residual --num_indices 18 --resid_type block --single_test 0 --step_size 1 --window_size 100 --split_variance 0 --M 8 --dim 80 --optim_type Boyd --lam 5e-2 --N 400 --recursion 0 --linkage average --candidate_recursion 1
 
 # # CAI MODEL ONE
 #python src/main.py --sim 1 --sim_type cai_model_one --num_indices 6 --single_test 0 --step_size 1 --window_size 100 --split_variance 0 --M 4 --dim 20 --optim_type Boyd --lam 5e-2 --N 400 --recursion 0 --linkage average --candidate_recursion 1

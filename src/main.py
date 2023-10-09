@@ -146,7 +146,7 @@ def perform_single_test(args):
         plt.savefig(os.path.join(fig_dir_path, 'lrt_cov_basic_win{}_step{}.png'.format(args.window_size, args.step_size)))
     # our algorithm            
     else:
-        data_train = data_full[0:int(args.train_percent*len(data_full)), :]
+        data_train = data_full[0:args.window_size, :]
         model.fit_glasso(data_train)
         model.construct_basis_matrices()
         #model.permute_blocks()
@@ -219,7 +219,7 @@ def perform_simulation_batch(args):
         data_full = resolve_data(args, save_path=save_path)
         print(data_full.shape)
         model = PrecisionCPD(args)
-        data_train = data_full[0:int(args.train_percent*len(data_full)), :]
+        data_train = data_full[0:args.window_size, :]
         model.fit_glasso(data_train)
         model.construct_basis_matrices()
         lrt_vals_all, p_vals_all = model.perform_lrt_local(data_full.T)
@@ -299,7 +299,7 @@ def precision_recall_sims(args):
                 data_full = resolve_data(args, save_path=save_path)
                 print(data_full.shape)
                 model = PrecisionCPD(args)
-                data_train = data_full[0:int(args.train_percent*len(data_full)), :]
+                data_train = data_full[0:args.window_size, :]
                 model.fit_glasso(data_train)
                 model.construct_basis_matrices()
                 lrt_vals_all, _ = model.perform_lrt_local(data_full.T)
@@ -326,7 +326,7 @@ def precision_recall_sims(args):
                 data_full = resolve_data(args, save_path=save_path)
                 print(data_full.shape)
                 model = PrecisionCPD(args)
-                data_train = data_full[0:int(args.train_percent*len(data_full)), :]
+                data_train = data_full[0:args.window_size, :]
                 model.fit_glasso(data_train)
                 model.construct_basis_matrices()
                 lrt_vals_all, _ = model.perform_lrt_local(data_full.T)
@@ -398,7 +398,7 @@ def precision_recall_sims_runtimes(args):
                 print(data_full.shape)
                 start_time = time.time()
                 model = PrecisionCPD(args)
-                data_train = data_full[0:int(args.train_percent*len(data_full)), :]
+                data_train = data_full[0:args.window_size, :]
                 model.fit_glasso(data_train)
                 model.construct_basis_matrices()
                 lrt_vals_all, _ = model.perform_lrt_local(data_full.T)
@@ -429,7 +429,7 @@ def precision_recall_sims_runtimes(args):
                 print(data_full.shape)
                 start_time = time.monotonic()
                 model = PrecisionCPD(args)
-                data_train = data_full[0:int(args.train_percent*len(data_full)), :]
+                data_train = data_full[0:args.window_size, :]
                 model.fit_glasso(data_train)
                 model.construct_basis_matrices()
                 lrt_vals_all, _ = model.perform_lrt_local(data_full.T)
