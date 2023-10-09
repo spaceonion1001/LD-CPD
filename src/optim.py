@@ -52,6 +52,16 @@ def boyd_likelihood(x, H_s, C, dim):
 
     return -likelihood
 
+def boyd_likelihood_dc(x, H, C, dim):
+    psi_hat = x*H
+    P = dim
+
+    first_term = fast_logdet(psi_hat)
+    likelihood = first_term - np.trace(psi_hat@C) - P*np.log(2*np.pi)
+
+    return -likelihood
+    
+
 #@jit(nopython=True)
 def calc_hessian(alphas, H_s, dim):
     M = H_s.shape[0]
@@ -63,7 +73,7 @@ def calc_hessian(alphas, H_s, dim):
             H_j = symmetrize_from_vector(H_s[j], dim)
             H_k = symmetrize_from_vector(H_s[k], dim)
             prod = inv_psi_hat.dot(H_j).dot(inv_psi_hat).dot(H_k)
-            hessian[j,k] = np.trace(prod) # TODO is this sign right also?!
+            hessian[j,k] = np.trace(prod) # double check sign
     assert is_pos_def(hessian)
     return hessian
 
@@ -78,9 +88,136 @@ def calc_jacobian(x, *args, H_s, C, dim):
         H_j = symmetrize_from_vector(H_s[j], dim)
         first_term = np.trace(inv_psi_hat.dot(H_j))
         second_term = np.trace(H_j.dot(C))
-        jacobian[j] = -1*(first_term - second_term) # TODO is this sign right?!
+        jacobian[j] = -1*(first_term - second_term) # double check sign
     
     return jacobian
+
+def calc_jacobian_hessian_dc(x, H, C, dim):
+    """
+    Divide and conquer derivative of likelihood function
+    x = single alpha
+    H = single cluster from block matrix
+    C = single cluster sample covariance
+    dim = dimensionality of problem
+    """
+    psi_hat = x*H
+    psi_hat = symmetrize_from_vector(psi_hat, dim)
+    psi_hat = psi_hat[:, ~np.all(psi_hat == 0, axis=0)]
+    psi_hat = psi_hat[~np.all(psi_hat == 0, axis=1), :]
+    assert psi_hat.shape[0] == C.shape[0]
+
+    inv_psi_hat = inv(psi_hat)
+    H_curr = symmetrize_from_vector(H, dim)
+    H_curr = H_curr[:, ~np.all(H_curr == 0, axis=0)]
+    H_curr = H_curr[~np.all(H_curr == 0, axis=1), :]
+
+    first_term = np.trace(inv_psi_hat.dot(H_curr))
+    second_term = np.trace(H_curr.dot(C))
+
+    jacobian = -1*(first_term - second_term) # scalar value
+    hess = np.trace(inv_psi_hat.dot(H_curr).dot(inv_psi_hat).dot(H_curr)) # no pairwise entries or other clusters - scalar value
+
+    return jacobian, hess
+
+def perform_line_search_dc(local_slope, newton_direction, alpha, H, C, dim, tau, control_factor):
+    t = -control_factor*local_slope
+    #print("t {}".format(t))
+    max_iters = 500
+    # calculate maximum step size heuristic
+    new_alph_temp = alpha + 1.0*newton_direction
+    lr_val = 1.0
+    if not new_alph_temp <= 0:
+        lr_val = 1.0
+    else:
+        while (alpha + lr_val*newton_direction <= 1e-8).any():
+            lr_val = lr_val*0.95
+        # alph_diff = alphas - new_alph_temp
+        # min_val = np.min(new_alph_temp) # most negative value
+        # min_idx = np.argmin(new_alph_temp)
+        # # TODO FIX THIS LINE
+        # """
+        # INCOMPLETE
+        # """
+        # lr_val = -(alphas[min_idx]/newton_direction[min_idx])*0.5
+        # """
+        # """
+    #print("\nLINE SEARCH\n")
+    for j in range(max_iters):
+        f_x = boyd_likelihood_dc(x=alpha, H=H, C=C, dim=C.shape[0])
+        new_alphas = alpha+lr_val*newton_direction
+        f_x_update = boyd_likelihood_dc(x=new_alphas, H=H, C=C, dim=C.shape[0])
+        fx_diff = f_x - f_x_update
+        #print("***********")
+        #print("ITER {}".format(j))
+        #print("FX Diff {} Orig {} New {}".format(fx_diff, f_x, f_x_update))
+        #print("New Alphas {}".format(new_alphas))
+        #print("Stopping Criteria {}".format(lr_val*t))
+        #print("************")
+        if fx_diff >= lr_val*t:
+            break
+        lr_val = tau*lr_val
+    
+    #print("LR Val {}".format(lr_val))
+
+    return lr_val
+
+def optim_boyd_dc(C, H, tolerance=0.5, iters=100, tau=0.95, control_factor=0.5):
+    dim = C.shape[0]
+    alphas_imo = 1
+    nonzero_cols = np.nonzero(np.any(symmetrize_from_vector(H, dim) != 0, axis=0))[0]
+    C_reduced = C[nonzero_cols, :][:, nonzero_cols]
+    H_reduced = symmetrize_from_vector(H, dim)[nonzero_cols, :][:, nonzero_cols]
+    alpha_best = 1
+    likelihood_best = np.inf
+    for it in range(iters):
+        jacobian, hessian = calc_jacobian_hessian_dc(x=alphas_imo, H=H, C=C_reduced, dim=dim)
+        inv_hessian = 1/hessian
+        newton_direction = -inv_hessian*jacobian
+        lambd = np.power(newton_direction*hessian*newton_direction, 0.5)
+        hhat = 1
+        if lambd > 0.5:
+            #print("Lambda {}".format(lambd))
+            # do line search
+            local_slope = jacobian*newton_direction
+            hhat = 1
+            hhat = perform_line_search_dc(local_slope=local_slope,  
+                                       newton_direction=newton_direction,
+                                       alpha=alphas_imo,
+                                       H=H_reduced, C=C_reduced, dim=dim, tau=tau, control_factor=control_factor
+                                      )
+        elif lambd < 1e-6:
+            # termination condition for newton's mathod
+            break
+        #print('***********')
+        #print("ITER {}".format(it))
+        #print("Newton Direction: ", newton_direction)
+        #print("Lambda ", lambd)
+        new_alphas = alphas_imo + hhat*newton_direction
+        likelihood_curr = boyd_likelihood_dc(x=alphas_imo, H=H_reduced, C=C_reduced, dim=C_reduced.shape[0])
+        likelihood_new = boyd_likelihood_dc(x=new_alphas, H=H_reduced, C=C_reduced, dim=C_reduced.shape[0])
+        likelihood_diff = likelihood_curr - likelihood_new
+        if likelihood_new < likelihood_best:
+            likelihood_best = likelihood_new
+            alpha_best = new_alphas
+        # print("Iter {} Likelihood Diff {}".format(it, likelihood_curr - likelihood_new))
+        # if likelihood_diff < 0.0:
+        #     print("NEGATIVE LIKELIHOOD UPDATE")
+        #     pdb.set_trace()
+        alphas_imo = new_alphas.copy()
+        #print("New Alphas", new_alphas)
+        #print('***********')
+        #print()
+    #exit()
+    #print()
+    #print("################")
+    #print("ALPHAS {}".format(alphas_imo))
+    #print("################")
+    if (alpha_best <= 0.0):
+        print("ALPHAS OUT OF BOUNDS")
+        exit(1)
+    return alpha_best # scalar return value
+
+
 
 #@jit(nopython=True)
 # def perform_line_search(alphas, H_s, C, dim):
@@ -99,15 +236,15 @@ def calculate_local_slope(newton_direction, jacobian):
 def perform_line_search(local_slope, newton_direction, alphas, H_s, C, dim, tau, control_factor):
     t = -control_factor*local_slope
     #print("t {}".format(t))
-    max_iters = 100
+    max_iters = 500
     # calculate maximum step size heuristic
     new_alph_temp = alphas + 1.0*newton_direction
     lr_val = 1.0
     if not (new_alph_temp <= 0).any():
         lr_val = 1.0
     else:
-        while (alphas + lr_val*newton_direction <= 0).any():
-            lr_val = lr_val*0.9
+        while (alphas + lr_val*newton_direction <= 1e-8).any():
+            lr_val = lr_val*0.95
         # alph_diff = alphas - new_alph_temp
         # min_val = np.min(new_alph_temp) # most negative value
         # min_idx = np.argmin(new_alph_temp)
@@ -186,6 +323,9 @@ def optim_boyd(C, H_s, tolerance=0.5, iters=10, tau=0.95, control_factor=0.5):
     #print("################")
     #print("ALPHAS {}".format(alphas_imo))
     #print("################")
+    if (alphas_imo <= 0.0).any():
+        print("ALPHAS OUT OF BOUNDS")
+        exit(1)
     return alphas_imo
 
 @jit(nopython=True)

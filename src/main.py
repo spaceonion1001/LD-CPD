@@ -56,6 +56,9 @@ def get_args():
     parser.add_argument('--num_indices', type=int, default=4)
     parser.add_argument('--recursion', type=int, default=1)
     parser.add_argument('--results_fldr_name', type=str, default=None)
+    parser.add_argument('--linkage', type=str, default='complete')
+    parser.add_argument('--base_M', type=int, default=2, help='Default value for M at base level of recursion - only valid with recursion==True')
+    parser.add_argument('--candidate_recursion', type=int, default=0, help='DFS recursion on candidate point. Better used with --recursion 0')
     args = parser.parse_args()
 
     return args
@@ -73,9 +76,9 @@ def resolve_data(args, save_path=None):
         elif args.sim_type == 'var_process':
             return scale_data(difference_data(sim_changepoint_var_process(dim=args.dim, N=args.N, num_coeffs_change=args.num_coeffs_change, scale=args.sim_scale, save_path=save_path)))
         elif args.sim_type == 'cai_model_one':
-            return scale_data(changepoint_cai_model_one(dim=args.dim, N=args.N, save_path=save_path), args.train_percent)
+            return scale_data(changepoint_cai_model_one(args, dim=args.dim, N=args.N, save_path=save_path), args.train_percent)
         elif args.sim_type == 'cai_model_three':
-            return scale_data(changepoint_cai_model_three(dim=args.dim, N=args.N, save_path=save_path), args.train_percent)
+            return scale_data(changepoint_cai_model_three(args, dim=args.dim, N=args.N, save_path=save_path), args.train_percent)
         elif args.sim_type == 'orthogonal_no_change':
             return sim_changepoint_mv_normal_orthogonal_no_change(sim_scale=args.sim_scale, M=args.M, dim=args.dim, N=args.N, save_path=save_path)[1].T
         elif args.sim_type == 'cholesky_no_change':
@@ -128,6 +131,7 @@ def perform_single_test(args):
         results_dir_path = os.path.join(args.results_path, args.results_fldr_name)
         if not os.path.isdir(results_dir_path):
             os.mkdir(results_dir_path)
+        fig_dir_path = results_dir_path
     data_full = resolve_data(args, results_dir_path)
     print(data_full.shape)
     model = PrecisionCPD(args)
@@ -197,7 +201,7 @@ def perform_simulation_batch(args):
     args.fig_dir_path = fig_dir_path
     print("\n*******************************************************************************")
     print("Performing Batch Simulation of {} with Dim = {}, M = {}, Scale = {}, Window = {}, Lam = {}".format(args.sim_type, args.dim, args.M, args.sim_scale, args.window_size, args.lam))
-    seeds_list = np.arange(52, 60)
+    seeds_list = np.arange(50, 60)
     sim_results_path = os.path.join(args.results_path, "simulation_results")
     if not os.path.isdir(sim_results_path):
         os.mkdir(sim_results_path)
@@ -223,6 +227,16 @@ def perform_simulation_batch(args):
         model.save_matrices_simulations(save_path)
         print()
         np.savetxt(os.path.join(save_path, "lrt_vals.csv"), test_results, delimiter=',')
+        model.save_matrices_simulations(save_path)
+        for i in range(lrt_vals_all.shape[1]):
+            plt.plot(lrt_vals_all[:, i])
+            plt.xlabel('Time')
+            plt.ylabel('Test Statistic {}'.format(i))
+            plt.savefig(os.path.join(save_path, 'lrt_local_i{}_M{}_win{}_step{}_lam{}_full{}_sim{}.png'.format(i, args.M, args.window_size, 
+                                                                                                                args.step_size, args.lam, 
+                                                                                                                args.full_basis, args.sim)))
+            plt.close()
+
         #np.savetxt(os.path.join(save_path, "p_vals.csv"), p_vals_all, delimiter=',')
         model.print_clusters_rv()
     print("*******************************************************************************")

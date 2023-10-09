@@ -201,7 +201,18 @@ def sim_changepoint_mv_normal_orthogonal_mult_coeff(sim_scale=0.8, M=2, dim=4, N
         np.savetxt(os.path.join(save_path, 'changed_indx.csv'), neq_indices)
     return H_s, data_total
 
+
+def get_near_psd(A):
+    C = (A + A.T)/2
+    eigval, eigvec = np.linalg.eig(C)
+    eigval[eigval < 0] = 0
+
+    return eigvec.dot(np.diag(eigval)).dot(eigvec.T)
+
 def sim_data(covar, dim, N=1000):
+    if not is_pos_def(covar):
+        covar = get_near_psd(covar)
+    
     assert is_symmetric(covar), is_pos_def(covar)
     data_sim = np.random.multivariate_normal(np.zeros(dim), covar, N).T
     data_sim = data_sim - data_sim.mean()
@@ -609,10 +620,10 @@ def simulate_changepoint_cai(omega, U, N=1000):
     data_full = np.concatenate((data_one, data_two), axis=0)
     return data_full, precision_one, precision_two
 
-def changepoint_cai_model_one(dim, N=100, save_path=None):
+def changepoint_cai_model_one(args, dim, N=100, save_path=None):
     print("Simulating Cai Model One")
     omega = sim_changepoint_cai_model_one(dim=dim)
-    U = create_U_cai(omega, dim=dim, N=N)
+    U = create_U_cai(omega, dim=dim, N=N, num_indices=args.num_indices)
     data_full, precision_one, precision_two = simulate_changepoint_cai(omega, U, N=N)
     neq_indices = np.where(precision_one != precision_two)
     neq_indices_arr = np.concatenate((np.expand_dims(neq_indices[0],1), np.expand_dims(neq_indices[1], 1)), 1)
@@ -634,10 +645,10 @@ def changepoint_cai_model_one_no_change(dim, N=100, save_path=None):
     return data_full, precision_one
 
 
-def changepoint_cai_model_three(dim, N=100, save_path=None):
+def changepoint_cai_model_three(args, dim, N=100, save_path=None):
     print("Simulating Cai Model Three")
     omega = sim_changepoint_cai_model_three(dim=dim)
-    U = create_U_cai(omega, dim=dim, N=N)
+    U = create_U_cai(omega, dim=dim, N=N, num_indices=args.num_indices)
     data_full, precision_one, precision_two = simulate_changepoint_cai(omega, U, N=N)
     neq_indices = np.where(precision_one != precision_two)
     neq_indices_arr = np.concatenate((np.expand_dims(neq_indices[0],1), np.expand_dims(neq_indices[1], 1)), 1)
@@ -658,10 +669,10 @@ def changepoint_cai_model_three_no_change(dim, N=100, save_path=None):
     print("Finished Simulation")
     return data_full
 
-def changepoint_cai_model_four(dim, N=100, save_path=None):
+def changepoint_cai_model_four(args, dim, N=100, save_path=None):
     print("Simulating Cai Model Four")
     omega = sim_changepoint_cai_model_four(dim=dim)
-    U = create_U_cai(omega, dim=dim, N=N)
+    U = create_U_cai(omega, dim=dim, N=N, num_indices=args.num_indices)
     data_full, precision_one, precision_two = simulate_changepoint_cai(omega, U, N=N)
     neq_indices = np.where(precision_one != precision_two)
     neq_indices_arr = np.concatenate((np.expand_dims(neq_indices[0],1), np.expand_dims(neq_indices[1], 1)), 1)

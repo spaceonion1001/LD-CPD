@@ -20,6 +20,11 @@ import rpy2.robjects.numpy2ri
 from rpy2.robjects.packages import importr
 import rpy2.robjects.packages as rpackages
 
+import matplotlib.pyplot as plt
+import matplotlib
+
+matplotlib.use("Agg")
+
 r = robjects.r
 rpy2.robjects.numpy2ri.activate()
 utils = importr('utils')
@@ -63,6 +68,8 @@ def get_args():
     parser.add_argument('--resid_type', type=str, choices=['unstructured', 'block'], default='unstructured', help='Residual Type')
     parser.add_argument('--num_indices', type=int, default=4)
     parser.add_argument('--single_test', type=int, default=0)
+    parser.add_argument('--results_fldr_name', type=str, default=None)
+    parser.add_argument('--results_filename', type=str, default=None)
     args = parser.parse_args()
 
     return args
@@ -81,9 +88,9 @@ def resolve_data(args, save_path=None):
         elif args.sim_type == 'var_process':
             return scale_data(difference_data(sim_changepoint_var_process(dim=args.dim, N=args.N, num_coeffs_change=args.num_coeffs_change, scale=args.sim_scale, save_path=save_path)))
         elif args.sim_type == 'cai_model_one':
-            return scale_data(changepoint_cai_model_one(dim=args.dim, N=args.N, save_path=save_path))
+            return scale_data(changepoint_cai_model_one(args, dim=args.dim, N=args.N, save_path=save_path))
         elif args.sim_type == 'cai_model_three':
-            return scale_data(changepoint_cai_model_three(dim=args.dim, N=args.N, save_path=save_path))
+            return scale_data(changepoint_cai_model_three(args, dim=args.dim, N=args.N, save_path=save_path))
         elif args.sim_type == 'orthogonal_no_change':
             return sim_changepoint_mv_normal_orthogonal_no_change(sim_scale=args.sim_scale, M=args.M, dim=args.dim, N=args.N, save_path=save_path)[1].T
         elif args.sim_type == 'cholesky_no_change':
@@ -461,6 +468,9 @@ def perform_simulation_batch(args):
         global_test_vals, _ = apply_cai_algorithm_windowed(args, data_full)
         print()
         np.savetxt(os.path.join(save_path, "global_test_vals.csv"), global_test_vals, delimiter=',')
+        plt.plot(global_test_vals)
+        plt.savefig(os.path.join(save_path, "test_stat.png"))
+        plt.close()
     print("*******************************************************************************")
     print("Done!")
 

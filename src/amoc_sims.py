@@ -227,7 +227,7 @@ def amoc_gen_cai(alarms, first_detect_time, last_detect_time, max_time_detection
     """
     Generate an AMOC curve.
     Arguments: 
-        alarms: p-vals?
+        alarms: test_stat-vals
         first_detect_time
         max_time_detection: the maximum number of days to detect a fire (int)
     Returns: 
@@ -241,7 +241,8 @@ def amoc_gen_cai(alarms, first_detect_time, last_detect_time, max_time_detection
     #thresholds = sorted(list(np.linspace(alarms.min(), alarms.max(), 6349)))
     FPR_array = []
     detection_array = []
-
+    prev_detection_time = np.inf
+    prev_fp_rate = np.inf
     # Check FPR and days to detection for each probability threshold
     for threshold in thresholds:
         #print(threshold)
@@ -249,21 +250,26 @@ def amoc_gen_cai(alarms, first_detect_time, last_detect_time, max_time_detection
         thr = threshold # use the set of possible values
         detected = False
         detection_time = 0
+        curr_detect_time = 0
         false_positives = 0
         true_negatives = 0
-        for p_value in alarms:
+        for lrt_value in alarms:
             # Two cases: false positive and true positive
-            if p_value >= thr:
+            if lrt_value >= thr:
                 if detection_time < first_detect_time or detection_time > last_detect_time: # Check for false positive
                     false_positives += 1
                 
                 else: # True positive: fire detected
                     detected = True
                     detection_array.append(detection_time - first_detect_time)
+                    curr_detect_time = detection_time - first_detect_time
+                    # if curr_detect_time < prev_detection_time:
+                    #     print("Threshold", thr, "Curr Detect Time", curr_detect_time, "Prev Detect Time", prev_detection_time)
+                    prev_detection_time = curr_detect_time
                     break
             
             else: # Two cases: false negative and true negative
-                if detection_time < first_detect_time: # Check for true negative -- needed for FPR
+                if detection_time < first_detect_time or detection_time > last_detect_time: # Check for true negative -- needed for FPR
                     true_negatives += 1
             detection_time += 1
 
@@ -272,15 +278,21 @@ def amoc_gen_cai(alarms, first_detect_time, last_detect_time, max_time_detection
             
         else:
             fp_rate = 0
-            pass
-
+        # curr_fp_rate = fp_rate
         FPR_array.append(fp_rate)
+        # if curr_fp_rate > prev_fp_rate:
+        #     print(curr_fp_rate)
+        # prev_fp_rate = curr_fp_rate
         if not detected:
+            curr_detect_time = max_time_detection
+            # if curr_detect_time < prev_detection_time:
+            #     print("Threshold", thr, "Curr Detect Time", curr_detect_time, "Prev Detect Time", prev_detection_time)
+            prev_detection_time = curr_detect_time
             detection_array.append(max_time_detection)
-    
+
     return FPR_array, detection_array
 
-def amoc_lrt_vals_cai(lrt_vals, dim, first_possible_detect_time, last_possible_detect_time):
+def amoc_lrt_vals_cai(lrt_vals, dim, first_possible_detect_time, last_possible_detect_time, thresholds=None):
     # input should be padded vals
     #p_vals = np.array([chi2.pdf(lrt_vals[:, i], 2) for i in range(lrt_vals.shape[1])]).T
     fprs = []
@@ -338,7 +350,7 @@ def amoc_gen_p_vals(alarms, first_detect_time, last_detect_time, max_time_detect
                     break
             
             else: # Two cases: false negative and true negative
-                if detection_time < first_detect_time: # Check for true negative -- needed for FPR
+                if detection_time < first_detect_time or detection_time > last_detect_time: # Check for true negative -- needed for FPR
                     true_negatives += 1
             detection_time += 1
 
@@ -347,7 +359,6 @@ def amoc_gen_p_vals(alarms, first_detect_time, last_detect_time, max_time_detect
             
         else:
             fp_rate = 0
-            pass
 
         FPR_array.append(fp_rate)
         if not detected:
@@ -551,28 +562,167 @@ def main_sims():
             plt.plot(thresholds_kesh, means_per_threshold_kesh, '.g-', label='Kesh')
             plt.xlabel('FPR')
             plt.ylabel('Detection Time')
-            plt.title('Average AMOC Curve for {}'.format(sim_type))
+            plt.title('Average AMOC Curve for {} Dim {}'.format(sim_type, curr_dim))
             plt.legend(loc='best')
             plt.savefig(os.path.join(curr_dim_path, 'avg_amoc_{}_dim_{}.png'.format(sim_type, curr_dim)))
             plt.close()
 
-def main_mesonet():
+def main_mesonet(storm_name='center'):
     """
     In progress for MesoNet data collection
 
     Will be more involved. Mainly for CP location identification with storm pairings
     """
-    pass
+    window_size = 400 # this is fixed currently
+    curr_path = os.getcwd()
+    save_path = os.path.join(curr_path, 'amoc_figs/')
+    cpd_path = 'results/{}_storm'.format(storm_name)
+    kesh_path = 'results_kesh/mesonet'
+    storm_data_path = '../data/out_{}'.format(storm_name)
+    dir_files = os.listdir(cpd_path)
+    storm_dir_files = os.listdir(storm_data_path)
+    storm_nums = []
+    for fi in dir_files:
+        if 'center_storm' in fi:
+            storm_nums.append(int(fi.split('_')[-1].split('.')[0]))
+
+    storm_files = []
+    for num in storm_nums:
+        storm_files.append('{}_storm_{}_storm_data.csv'.format(storm_name, num))
+    
+    our_results = {}
+    kesh_results = {}
+    fpr_detect_pairs_ours = []
+    fpr_detect_pairs_cai = []
+    fpr_detect_pairs_kesh = []
+    for num in sorted(storm_nums):
+        cpd_vals = np.loadtxt(os.path.join(cpd_path, "{}_storm_{}.csv".format(storm_name, num)), delimiter=',')
+        cutoff = cpd_vals.shape[1]//2 # split test stats and p-vals
+        pvals_cpd = cpd_vals[:, cutoff:][window_size:] # just the p-values, exclude first window size
+        stats_cpd = cpd_vals[:, 0:cutoff][window_size:] # just the stats, exclude first window size
+        kesh_vals = np.loadtxt(os.path.join(kesh_path, "{}_storm_{}_final_data.csv_global_test_vals.csv".format(storm_name, num)), delimiter=',')
+        actual_final_data = pd.read_csv(os.path.join(storm_data_path, '{}_storm_{}_final_data.csv').format(storm_name, num))
+        actual_final_data['YYYYMMDDhhmm'] = pd.to_datetime(actual_final_data['YYYYMMDDhhmm'])
+        actual_storm_data = pd.read_csv(os.path.join(storm_data_path, '{}_storm_{}_storm_data.csv').format(storm_name, num))
+        storm_start = pd.to_datetime(actual_storm_data.iloc[2]).dt.round("5min") # always index 2 for the start time
+        storm_end = pd.to_datetime(actual_storm_data.iloc[3]).dt.round("5min") # always index 3 for the end time
+        storm_start_idx = actual_final_data[actual_final_data['YYYYMMDDhhmm']==storm_start.item()].index.item()
+        storm_end_idx = actual_final_data[actual_final_data['YYYYMMDDhhmm']==storm_end.item()].index.item()
+        cp_location = storm_start_idx
+        # subtract off 2*window_size to handle the sliding window edges at start/end of data
+        first_d_time = cp_location-window_size+1 - 2*window_size
+        last_d_time = cp_location + storm_end_idx - storm_start_idx + 1 - 2*window_size# how long is the storm contained in the window as it slides over the data - at least window_size times (right to left)
+        
+        #print(stats_cpd.min(), stats_cpd.max(), pvals_cpd.max())
+        pvals_cpd = pvals_cpd.min(axis=1)
+        pvals_kesh = kesh_p_value(kesh_vals)
+
+        all_thresholds = sorted(list(set(np.concatenate((pvals_cpd, pvals_kesh)))))
+
+        # lrt_result_cpd, detect_result_cpd = amoc_p_vals(pvals_cpd, 
+        #                                                 first_possible_detect_time=first_d_time,
+        #                                                 last_possible_detect_time=last_d_time,
+        #                                                 dim=None, # deprecated
+        #                                                 thresholds=all_thresholds
+        #                                                 )
+        lrt_result_cpd, detect_result_cpd = amoc_lrt_vals_cai(stats_cpd.max(axis=1), dim=None, first_possible_detect_time=first_d_time, last_possible_detect_time=last_d_time, thresholds=None)
+        
+        lrt_result_kesh, detect_result_kesh = amoc_p_vals(pvals_kesh, 
+                                                                first_possible_detect_time=first_d_time,
+                                                                last_possible_detect_time=last_d_time,
+                                                                dim=None, # deprecated
+                                                                thresholds=all_thresholds
+                                                                )
+        
+        print(pvals_cpd.shape, stats_cpd.shape, kesh_vals.shape)
+        plt.plot(lrt_result_cpd)
+        plt.savefig('./fpr_temp_{}.png'.format(num))
+        plt.close()
+        plt.plot(detect_result_cpd)
+        plt.savefig('./detect_temp_{}.png'.format(num))
+        plt.close()
+        """
+        Sort them to fix the alignment - the amoc generation doesn't necessarily preserve the ordering
+
+        Highest detection time corresponds to lowest FPR
+        """
+        sorted_lrt_result_cpd = lrt_result_cpd  # sorted(lrt_result_cpd, reverse=True) # 
+        #sorted_lrt_result_cai = lrt_result_cai #sorted(lrt_result_cai, reverse=True)
+        sorted_lrt_result_kesh = lrt_result_kesh  #sorted(lrt_result_kesh, reverse=True) #
+        sorted_detect_result_cpd = detect_result_cpd  #sorted(detect_result_cpd, reverse=False) # 
+        #sorted_detect_result_cai = detect_result_cai #sorted(detect_result_cai, reverse=False)
+        sorted_detect_result_kesh = detect_result_kesh  # sorted(detect_result_kesh, reverse=False) #
+
+        merged_list_ours = [(sorted_lrt_result_cpd[i], 
+                            sorted_detect_result_cpd[i]) for i in range(0, len(lrt_result_cpd))]
+        # merged_list_cai = [(sorted_lrt_result_cai[i], 
+        #                     sorted_detect_result_cai[i]) for i in range(0, len(lrt_result_cai))]
+        merged_list_kesh = [(sorted_lrt_result_kesh[i], 
+                            sorted_detect_result_kesh[i]) for i in range(0, len(lrt_result_kesh))]
+        fpr_detect_pairs_ours.append(merged_list_ours)
+        #fpr_detect_pairs_cai.append(merged_list_cai)
+        fpr_detect_pairs_kesh.append(merged_list_kesh)
+    exit()
+
+    means_per_threshold_ours, thresholds_ours = average_AMOC(fpr_detect_pairs_ours)
+    #means_per_threshold_cai, thresholds_cai = average_AMOC(fpr_detect_pairs_cai)
+    means_per_threshold_kesh, thresholds_kesh = average_AMOC(fpr_detect_pairs_kesh)
+
+    threshold_idx_mask = np.where(thresholds_ours < 0.5) # THESE ARE IDENTICAL INDICES ACROSS THE ALGORITHMS
+    means_per_threshold_ours = means_per_threshold_ours[threshold_idx_mask]
+    #means_per_threshold_cai = means_per_threshold_cai[threshold_idx_mask]
+    means_per_threshold_kesh = means_per_threshold_kesh[threshold_idx_mask]
+    thresholds_ours = thresholds_ours[threshold_idx_mask]
+    #thresholds_cai = thresholds_cai[threshold_idx_mask]
+    thresholds_kesh = thresholds_kesh[threshold_idx_mask]
+
+    #detect_idx_mask_ours = np.where(means_per_threshold_ours <= 200) # maximum detection time, 2*window_size
+    #detect_idx_mask_cai = np.where(means_per_threshold_cai <= 200)
+    #detect_idx_mask_kesh = np.where(means_per_threshold_kesh <= 200)
+    #detect_idx_mask = reduce(np.intersect1d, (detect_idx_mask_ours, detect_idx_mask_cai, detect_idx_mask_kesh)) # union of all idxs
+    #detect_idx_mask = reduce(np.intersect1d, (detect_idx_mask_ours, detect_idx_mask_kesh)) # union of all idxs
+    
+    #means_per_threshold_ours = means_per_threshold_ours[detect_idx_mask] # 4 seems fine
+    #means_per_threshold_cai = means_per_threshold_cai[detect_idx_mask]
+    #means_per_threshold_kesh = means_per_threshold_kesh[detect_idx_mask]
+    #thresholds_ours = thresholds_ours[detect_idx_mask]
+    #thresholds_cai = thresholds_cai[detect_idx_mask]
+    #thresholds_kesh = thresholds_kesh[detect_idx_mask]
+
+
+    """
+    ###########################
+    """
+    plt.plot(thresholds_ours, means_per_threshold_ours, '.b-', label='Ours')
+    #plt.plot(thresholds_cai, means_per_threshold_cai, '.r-', label='Cai')
+    plt.plot(thresholds_kesh, means_per_threshold_kesh, '.g-', label='Kesh')
+    plt.xlabel('FPR')
+    plt.ylabel('Detection Time')
+    plt.title('Average AMOC Curve for {}'.format(storm_name))
+    plt.legend(loc='best')
+    plt.ylim(0.0, max(means_per_threshold_kesh.max(), means_per_threshold_ours.max()))
+    curr_storm_save_path = save_path+"mesonet/"+storm_name
+    if not os.path.exists(curr_storm_save_path):
+        os.mkdir(curr_storm_save_path)
+    plt.savefig(os.path.join(curr_storm_save_path, 'avg_amoc_{}.png'.format(storm_name)))
+    plt.close()
+
+
+        
 
 
 def get_args():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--sims', actions='store_true')
+    parser.add_argument('--sims', action='store_true')
     parser.add_argument('--mesonet', action='store_true')
     args = parser.parse_args()
 
     return args
 
 if __name__ == "__main__":
-    main_sims()
+    args = get_args()
+    if args.sims:
+        main_sims()
+    if args.mesonet:
+        main_mesonet()

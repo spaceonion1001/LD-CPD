@@ -3,7 +3,7 @@ from tqdm import tqdm
 from optim import optimize_coeffs, optimize_single_coeff, optimize_coeffs_first_order, optimize_coeffs_first_order_single
 from optim import create_all_optim_problems, create_global_problem
 from optim import create_all_optim_problems_cluster, solve_optim_single_cluster
-from optim import solve_optim_single, solve_optim_global, coord_ascent, optim_boyd
+from optim import solve_optim_single, solve_optim_global, coord_ascent, optim_boyd, optim_boyd_dc
 from optim import iterative_soln_precision_single, iterative_soln_precision, unbiased_init_precision, unbiased_init_precision_single, unbiased_init_precision_single_alt
 from statsmodels.stats.multitest import fdrcorrection, multipletests
 from scipy.stats import chi2, multivariate_normal
@@ -222,6 +222,9 @@ def LRT_individual_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=5
             #coeffs_hat_total = solve_optim_global(curr_C=C_full, g_prob=g_prob)
             coeffs_hat_total = unbiased_init_precision(C=C_full, H_s=H_s)
         elif optim_type == 'Boyd':
+            # coeffs_hat_total = np.ones(M)
+            # for k in range(M):
+            #     coeffs_hat_total[k] = optim_boyd_dc(C=C_full, H=H_s[k])
             coeffs_hat_total = optim_boyd(C=C_full, H_s=H_s)
         #coeffs_hat_total = optimize_coeffs(H_s, C_full, lam=lam)
         # psi_hat_temp = np.sum(np.expand_dims(coeffs_hat_total, 1)*H_s, 0)
@@ -356,14 +359,26 @@ def LRT_individual_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=5
                                                                     beta=beta
                                                                     )
             elif optim_type == 'Boyd':
-                alpha_i_change_pre_temp = optim_boyd(C=C_one, H_s=H_s)
-                alpha_i_change_post_temp = optim_boyd(C=C_two, H_s=H_s)
-                # fix other coefficients from optimization/null hypothesis
-                # check for only one change
+
+                #***************
+                # alpha_i_change_pre_temp = optim_boyd(C=C_one, H_s=H_s)
+                # alpha_i_change_post_temp = optim_boyd(C=C_two, H_s=H_s)
+                # # fix other coefficients from optimization/null hypothesis
+                # # check for only one change
+                # alpha_i_change_pre = coeffs_hat_total.copy()
+                # alpha_i_change_post = coeffs_hat_total.copy()
+                # alpha_i_change_pre[k] = alpha_i_change_pre_temp[k]
+                # alpha_i_change_post[k] = alpha_i_change_post_temp[k]
+                #***************
                 alpha_i_change_pre = coeffs_hat_total.copy()
                 alpha_i_change_post = coeffs_hat_total.copy()
-                alpha_i_change_pre[k] = alpha_i_change_pre_temp[k]
-                alpha_i_change_post[k] = alpha_i_change_post_temp[k]
+                curr_alpha_i_pre = optim_boyd_dc(C=C_one, H=H_s[k])
+                curr_alpha_i_post = optim_boyd_dc(C=C_two, H=H_s[k])
+                alpha_i_change_pre[k] = curr_alpha_i_pre
+                alpha_i_change_post[k] = curr_alpha_i_post
+
+
+
             # alpha_i_change_pre = optimize_single_coeff(coeffs_hat_total, H_s, C_one, coeff_idx=i,
             #                                            lam=lam)
             # alpha_i_change_post = optimize_single_coeff(coeffs_hat_total, H_s, C_two, coeff_idx=i,
