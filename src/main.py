@@ -165,7 +165,7 @@ def perform_single_test(args):
                                                                                                                     args.full_basis, args.sim)))
                 plt.close()
 
-                plt.plot(np.log(p_vals_all[:, i]))
+                plt.plot(p_vals_all[:, i])
                 plt.xlabel('Time')
                 plt.ylabel('P Vals {}'.format(i))
                 plt.savefig(os.path.join(fig_dir_path, 'pvals_local_i{}_M{}_win{}_step{}_lam{}_full{}_sim{}.png'.format(i, args.M, args.window_size, 

@@ -42,15 +42,15 @@
 
 
 # UNSTRUCTURED RESIDS
-python src/main.py --sim 1 --sim_type anderson_residual --num_indices 6 --resid_type unstructured --single_test 0 --step_size 1 --window_size 100 --split_variance 0 --M 4 --dim 20 --optim_type Boyd --lam 5e-2 --N 400 --recursion 0 --linkage average --candidate_recursion 1
-python src/main.py --sim 1 --sim_type anderson_residual --num_indices 10 --resid_type unstructured --single_test 0 --step_size 1 --window_size 100 --split_variance 0 --M 5 --dim 40 --optim_type Boyd --lam 5e-2 --N 400 --recursion 0 --linkage average --candidate_recursion 1
-python src/main.py --sim 1 --sim_type anderson_residual --num_indices 14 --resid_type unstructured --single_test 0 --step_size 1 --window_size 100 --split_variance 0 --M 6 --dim 60 --optim_type Boyd --lam 5e-2 --N 400 --recursion 0 --linkage average --candidate_recursion 1
-python src/main.py --sim 1 --sim_type anderson_residual --num_indices 18 --resid_type unstructured --single_test 0 --step_size 1 --window_size 100 --split_variance 0 --M 8 --dim 80 --optim_type Boyd --lam 5e-2 --N 400 --recursion 0 --linkage average --candidate_recursion 1
+#python src/main.py --sim 1 --sim_type anderson_residual --num_indices 6 --resid_type unstructured --single_test 0 --step_size 1 --window_size 100 --split_variance 0 --M 4 --dim 20 --optim_type Boyd --lam 5e-2 --N 400 --recursion 0 --linkage average --candidate_recursion 1
+#python src/main.py --sim 1 --sim_type anderson_residual --num_indices 10 --resid_type unstructured --single_test 0 --step_size 1 --window_size 100 --split_variance 0 --M 5 --dim 40 --optim_type Boyd --lam 5e-2 --N 400 --recursion 0 --linkage average --candidate_recursion 1
+#python src/main.py --sim 1 --sim_type anderson_residual --num_indices 14 --resid_type unstructured --single_test 0 --step_size 1 --window_size 100 --split_variance 0 --M 6 --dim 60 --optim_type Boyd --lam 5e-2 --N 400 --recursion 0 --linkage average --candidate_recursion 1
+#python src/main.py --sim 1 --sim_type anderson_residual --num_indices 18 --resid_type unstructured --single_test 0 --step_size 1 --window_size 100 --split_variance 0 --M 8 --dim 80 --optim_type Boyd --lam 5e-2 --N 400 --recursion 0 --linkage average --candidate_recursion 1
 
 ## $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
 # BLOCK RESIDS
-python src/main.py --sim 1 --sim_type anderson_residual --num_indices 6 --resid_type block --single_test 0 --step_size 1 --window_size 100 --split_variance 0 --M 4 --dim 20 --optim_type Boyd --lam 5e-2 --N 400 --recursion 0 --linkage average --candidate_recursion 1
-python src/main.py --sim 1 --sim_type anderson_residual --num_indices 10 --resid_type block --single_test 0 --step_size 1 --window_size 100 --split_variance 0 --M 5 --dim 40 --optim_type Boyd --lam 5e-2 --N 400 --recursion 0 --linkage average --candidate_recursion 1
+#python src/main.py --sim 1 --sim_type anderson_residual --num_indices 6 --resid_type block --single_test 0 --step_size 1 --window_size 100 --split_variance 0 --M 4 --dim 20 --optim_type Boyd --lam 5e-2 --N 400 --recursion 0 --linkage average --candidate_recursion 1
+#python src/main.py --sim 1 --sim_type anderson_residual --num_indices 10 --resid_type block --single_test 0 --step_size 1 --window_size 100 --split_variance 0 --M 5 --dim 40 --optim_type Boyd --lam 5e-2 --N 400 --recursion 0 --linkage average --candidate_recursion 1
 python src/main.py --sim 1 --sim_type anderson_residual --num_indices 14 --resid_type block --single_test 0 --step_size 1 --window_size 100 --split_variance 0 --M 6 --dim 60 --optim_type Boyd --lam 5e-2 --N 400 --recursion 0 --linkage average --candidate_recursion 1
 python src/main.py --sim 1 --sim_type anderson_residual --num_indices 18 --resid_type block --single_test 0 --step_size 1 --window_size 100 --split_variance 0 --M 8 --dim 80 --optim_type Boyd --lam 5e-2 --N 400 --recursion 0 --linkage average --candidate_recursion 1
 
@@ -122,12 +122,12 @@ python src/main.py --sim 1 --sim_type anderson_residual --num_indices 18 --resid
 # python src/xia_cpd.py --sim 1 --sim_type cai_model_three --num_indices 6 --step_size 1 --window_size 100 --M 4 --dim 20 --lam 5e-2 --N 400
 # python src/xia_cpd.py --sim 1 --sim_type cai_model_three --num_indices 10 --step_size 1 --window_size 100 --M 5 --dim 40 --lam 5e-2 --N 400
 # python src/xia_cpd.py --sim 1 --sim_type cai_model_three --num_indices 14 --step_size 1 --window_size 100 --M 6 --dim 60 --lam 5e-2 --N 400
-python src/xia_cpd.py --sim 1 --sim_type cai_model_three --num_indices 18 --step_size 1 --window_size 100 --M 8 --dim 80 --lam 5e-2 --N 400
+#python src/xia_cpd.py --sim 1 --sim_type cai_model_three --num_indices 18 --step_size 1 --window_size 100 --M 8 --dim 80 --lam 5e-2 --N 400
 
-python src/kesh_cpd.py --sim 1 --sim_type cai_model_three --num_indices 6 --step_size 1 --window_size 100 --M 4 --dim 20 --lam 5e-2 --N 400 --burn_in 100
-python src/kesh_cpd.py --sim 1 --sim_type cai_model_three --num_indices 10 --step_size 1 --window_size 100 --M 5 --dim 40 --lam 5e-2 --N 400 --burn_in 100
-python src/kesh_cpd.py --sim 1 --sim_type cai_model_three --num_indices 14 --step_size 1 --window_size 100 --M 6 --dim 60 --lam 5e-2 --N 400 --burn_in 100
-python src/kesh_cpd.py --sim 1 --sim_type cai_model_three --num_indices 18 --step_size 1 --window_size 100 --M 8 --dim 80 --lam 5e-2 --N 400 --burn_in 100
+#python src/kesh_cpd.py --sim 1 --sim_type cai_model_three --num_indices 6 --step_size 1 --window_size 100 --M 4 --dim 20 --lam 5e-2 --N 400 --burn_in 100
+#python src/kesh_cpd.py --sim 1 --sim_type cai_model_three --num_indices 10 --step_size 1 --window_size 100 --M 5 --dim 40 --lam 5e-2 --N 400 --burn_in 100
+#python src/kesh_cpd.py --sim 1 --sim_type cai_model_three --num_indices 14 --step_size 1 --window_size 100 --M 6 --dim 60 --lam 5e-2 --N 400 --burn_in 100
+#python src/kesh_cpd.py --sim 1 --sim_type cai_model_three --num_indices 18 --step_size 1 --window_size 100 --M 8 --dim 80 --lam 5e-2 --N 400 --burn_in 100
 
 
 # dims 20, 40, 80, optionally (100)

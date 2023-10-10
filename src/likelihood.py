@@ -29,6 +29,7 @@ def likelihood_ratio_test(likelihood_null, likelihood_alternative, dof):
     delta_d = -2*(likelihood_null-likelihood_alternative)
     
     return delta_d, chi2.sf(delta_d, dof)
+    #return delta_d, chi2.logsf(delta_d, dof)
 
 def apply_fdr_correction(p_vals_all, alpha=0.05):
     corrected_p_vals_all = []
