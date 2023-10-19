@@ -59,6 +59,8 @@ def get_args():
     parser.add_argument('--linkage', type=str, default='complete')
     parser.add_argument('--base_M', type=int, default=2, help='Default value for M at base level of recursion - only valid with recursion==True')
     parser.add_argument('--candidate_recursion', type=int, default=0, help='DFS recursion on candidate point. Better used with --recursion 0')
+    parser.add_argument('--log_pvals', type=int, default=0)
+    parser.add_argument('--recursion_min', type=int, default=4)
     args = parser.parse_args()
 
     return args
@@ -201,7 +203,7 @@ def perform_simulation_batch(args):
     args.fig_dir_path = fig_dir_path
     print("\n*******************************************************************************")
     print("Performing Batch Simulation of {} with Dim = {}, M = {}, Scale = {}, Window = {}, Lam = {}".format(args.sim_type, args.dim, args.M, args.sim_scale, args.window_size, args.lam))
-    seeds_list = np.arange(50, 60)
+    seeds_list = np.arange(50, 70)
     sim_results_path = os.path.join(args.results_path, "simulation_results")
     if not os.path.isdir(sim_results_path):
         os.mkdir(sim_results_path)

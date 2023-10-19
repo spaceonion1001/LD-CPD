@@ -54,7 +54,7 @@ class PrecisionCPD:
     # data assumed to be cleaned and normalized, passed in shape: [T, dim]
     def fit_glasso(self, data):
         print("GLASSO DATA {}".format(data.shape))
-        self.glasso = GraphicalLasso(max_iter=100, alpha=self.lam, tol=1e-5, verbose=False).fit(data)
+        self.glasso = GraphicalLasso(max_iter=500, alpha=self.lam, tol=1e-5, verbose=False).fit(data)
         #self.inv_cov = inv(np.cov(data.T, bias=True))
         #self.inv_cov += np.eye(self.inv_cov.shape[0])*np.abs(np.linalg.eig(self.inv_cov)[0].min()) + 0.05
         #assert(is_pos_def(self.inv_cov))
@@ -133,11 +133,11 @@ class PrecisionCPD:
             #print("TRAIN DATA {}".format(data_train.shape))
             orig_mat = mat.copy()
             mat = symmetrize_from_vector(mat, dim=self.dim)
-            if mat.shape[0] <= 4: # suitable localization - treat 4x4 or less as leaf nodes -> keep original matrix instead
-                level_basis_mats.append(orig_mat)
-                continue
+            # if mat.shape[0] <= 4: # suitable localization - treat 4x4 or less as leaf nodes -> keep original matrix instead
+            #     level_basis_mats.append(orig_mat)
+            #     continue
             nonzero_cols = np.nonzero(np.any(mat != 0, axis=0))[0]
-            if len(nonzero_cols) <= 1:
+            if len(nonzero_cols) <= self.args.recursion_min:
                 print("...Recursion Complete for Singleton Cluster...")
                 level_basis_mats.append(orig_mat)
                 continue
@@ -176,10 +176,11 @@ class PrecisionCPD:
                 print("SILHOUETTE DIFFERENCE CURR {} NEW {}".format(self.curr_silhoutte_score, new_silhoutte_score))
                 print("CHISQUARE VAL {}".format(chisquare_val))
                 #print("Silhoutte Scores", new_silhoutte_score, self.curr_silhoutte_score)
+                condition_one = len(nonzero_cols_one) >= self.args.recursion_min and len(nonzero_cols_two) >= self.args.recursion_min
                 condition_two = new_silhoutte_score > self.curr_silhoutte_score
                 condition_three = chisquare_val >= 1e-5
 
-                if condition_two or condition_three: # we split and the scores improved or didn't degrade (p-value) -> take new 2 matrices!
+                if condition_one and (condition_two or condition_three): # we split and the scores improved or didn't degrade (p-value) -> take new 2 matrices!
                     #print("ADDING BASIS MATS")
                     #print("NEW MATS SHAPE", new_mats.shape)
                     self.curr_silhoutte_score = new_silhoutte_score
@@ -414,7 +415,7 @@ class PrecisionCPD:
             test_stats_m.append(test_stat_i)
             p_vals_m.append(p_val_i)
         
-        return np.expand_dims(np.array(test_stats_m), 0), meinshausen_correction(H_s=H_s, p_vals_all=np.expand_dims(np.array(p_vals_m), 0), dim=self.dim)
+        return np.expand_dims(np.array(test_stats_m), 0), meinshausen_correction(H_s=H_s, p_vals_all=np.expand_dims(np.array(p_vals_m), 0), dim=self.dim, log_pvals=self.args.log_pvals)
     
     def recurse_on_candidate_point(self, lrt_vals_all, p_vals_corrected, data_full, basis_mats, candidate_point):
         """
@@ -446,16 +447,16 @@ class PrecisionCPD:
         #print("TRAIN DATA {}".format(data_train.shape))
         C_full = np.cov(data_train.copy(), bias=True)
         data_train = data_train[nonzero_cols, :]
-        if len(nonzero_cols) <= 4: # rerun it and stop
+        if len(nonzero_cols) <= self.args.recursion_min: # rerun it and stop
             lrt_vals_all, p_vals_all = LRT_individual_coeffs_full_likelihood(data_full, M=basis_mats.shape[0], dim=data_full.shape[0], H_s=basis_mats, 
                                                                          window_size=self.window_size, lam=self.lam, step_size=self.step_size, include_l1=self.include_l1, 
-                                                                         iters=self.iters, beta=self.beta, t=self.t, optim_type=self.optim_type)
+                                                                         iters=self.iters, beta=self.beta, t=self.t, optim_type=self.optim_type, args=self.args)
             
             lrt_vals_all = np.array(lrt_vals_all)
             p_vals_all = np.array(p_vals_all)
             #p_vals_corrected = np.array(apply_bonferroni_correction(p_vals_all))
             #p_vals_corrected = np.array(apply_fdr_correction(p_vals_all))
-            p_vals_corrected = meinshausen_correction(basis_mats, p_vals_all, dim=data_full.shape[0])
+            p_vals_corrected = meinshausen_correction(basis_mats, p_vals_all, dim=data_full.shape[0], log_pvals=self.args.log_pvals)
 
             return lrt_vals_all, p_vals_corrected
         train_C = np.cov(data_train.copy(), bias=True)
@@ -474,7 +475,7 @@ class PrecisionCPD:
         chisquare_val = chi2.sf(anderson_lrt_value, dof)
         #print("CHISQUARE P-VAL {} DOF {}".format(chisquare_val, dof))
         # if conditions are met, recurse
-        if len(nonzero_cols) > 4: # first stopping conditions
+        if len(nonzero_cols) > self.args.recursion_min: # first stopping conditions
             new_basis_matrices = self.recursive_split_basis_matrix(basis_mats, greatest_change_mat_idx)
             #print("NUMBER OF NEW BASIS MATRICES {}".format(new_basis_matrices.shape[0]))
             nonzero_cols_one = np.nonzero(np.any(symmetrize_from_vector(new_basis_matrices[0], self.dim) != 0, axis=0))[0]
@@ -483,37 +484,37 @@ class PrecisionCPD:
                 #print("CURR CUTREE", self.cutree)
                 nonzero_cols_two = np.nonzero(np.any(symmetrize_from_vector(new_basis_matrices[1], self.dim) != 0, axis=0))[0]
                 #print("NONZERO COLS", nonzero_cols_two)
-                #if len(nonzero_cols_one) > 1 and len(nonzero_cols_two) > 1: # if the clustering is able to be split, recurse
-                self.cutree[nonzero_cols_two] = int(self.cutree.max() + 1)
-                #print("NEW CUTREE", self.cutree)
-                new_silhoutte_score = silhouette_score(self.root_dist_mat, self.cutree, metric='precomputed')
-                #print("Silhoutte Scores", new_silhoutte_score, self.curr_silhoutte_score)
-                reduced_basis_mats = np.delete(basis_mats, greatest_change_mat_idx, axis=0)
-                updated_basis_matrices = np.concatenate((reduced_basis_mats, new_basis_matrices), axis=0)
-                self.basis_matrices = updated_basis_matrices
-                condition_one = new_basis_matrices.shape[0] > 1
-                condition_two = new_silhoutte_score > self.curr_silhoutte_score
-                condition_three = chisquare_val >= 1e-5
-                #print("Condition One {} Two {} Three {}".format(condition_one, condition_two, condition_three))
-                #print("\n\n############# RECURSING #################\n")
-                self.curr_silhoutte_score = new_silhoutte_score
-                _, p_vals_corrected = self.fit_optim_candidate_point(C_one=C_one, C_two=C_two, C_full=C_total, H_s=basis_mats, window_size=self.window_size, lam=self.lam)
-                return self.recurse_on_candidate_point(lrt_vals_all, p_vals_corrected=p_vals_corrected, data_full=data_full, basis_mats=self.basis_matrices, candidate_point=candidate_point)
-                # else:
-                #     print("\n\n************** NOT RECURSING **************\n")
+                if len(nonzero_cols_one) > self.args.recursion_min and len(nonzero_cols_two) > self.args.recursion_min: # if the clustering is able to be split, recurse
+                    self.cutree[nonzero_cols_two] = int(self.cutree.max() + 1)
+                    #print("NEW CUTREE", self.cutree)
+                    new_silhoutte_score = silhouette_score(self.root_dist_mat, self.cutree, metric='precomputed')
+                    #print("Silhoutte Scores", new_silhoutte_score, self.curr_silhoutte_score)
+                    reduced_basis_mats = np.delete(basis_mats, greatest_change_mat_idx, axis=0)
+                    updated_basis_matrices = np.concatenate((reduced_basis_mats, new_basis_matrices), axis=0)
+                    self.basis_matrices = updated_basis_matrices
+                    condition_one = new_basis_matrices.shape[0] > 1
+                    condition_two = new_silhoutte_score > self.curr_silhoutte_score
+                    condition_three = chisquare_val >= 1e-5
+                    #print("Condition One {} Two {} Three {}".format(condition_one, condition_two, condition_three))
+                    #print("\n\n############# RECURSING #################\n")
+                    self.curr_silhoutte_score = new_silhoutte_score
+                    _, p_vals_corrected = self.fit_optim_candidate_point(C_one=C_one, C_two=C_two, C_full=C_total, H_s=basis_mats, window_size=self.window_size, lam=self.lam)
+                    return self.recurse_on_candidate_point(lrt_vals_all, p_vals_corrected=p_vals_corrected, data_full=data_full, basis_mats=self.basis_matrices, candidate_point=candidate_point)
+                else:
+                    print("\n\n************** NOT RECURSING **************\n")
             else:
                 print("\n\n************** NOT RECURSING **************\n")
 
 
         lrt_vals_all, p_vals_all = LRT_individual_coeffs_full_likelihood(data_full, M=basis_mats.shape[0], dim=data_full.shape[0], H_s=basis_mats, 
                                                                          window_size=self.window_size, lam=self.lam, step_size=self.step_size, include_l1=self.include_l1, 
-                                                                         iters=self.iters, beta=self.beta, t=self.t, optim_type=self.optim_type)
+                                                                         iters=self.iters, beta=self.beta, t=self.t, optim_type=self.optim_type, args=self.args)
         
         lrt_vals_all = np.array(lrt_vals_all)
         p_vals_all = np.array(p_vals_all)
         #p_vals_corrected = np.array(apply_bonferroni_correction(p_vals_all))
         #p_vals_corrected = np.array(apply_fdr_correction(p_vals_all))
-        p_vals_corrected = meinshausen_correction(basis_mats, p_vals_all, dim=data_full.shape[0])
+        p_vals_corrected = meinshausen_correction(basis_mats, p_vals_all, dim=data_full.shape[0], log_pvals=self.args.log_pvals)
 
         return lrt_vals_all, p_vals_corrected
 
@@ -535,14 +536,14 @@ class PrecisionCPD:
         #     basis_mats = self.basis_matrices_full
         lrt_vals_all, p_vals_all = LRT_individual_coeffs_full_likelihood(data_full, M=basis_mats.shape[0], dim=data_full.shape[0], H_s=basis_mats, 
                                                                          window_size=self.window_size, lam=self.lam, step_size=self.step_size, include_l1=self.include_l1, 
-                                                                         iters=self.iters, beta=self.beta, t=self.t, optim_type=self.optim_type)
+                                                                         iters=self.iters, beta=self.beta, t=self.t, optim_type=self.optim_type, args=self.args)
 
         #return np.array(lrt_vals_all), np.array(apply_fdr_correction(p_vals_all))
         lrt_vals_all = np.array(lrt_vals_all)
         p_vals_all = np.array(p_vals_all)
         #p_vals_corrected = np.array(apply_bonferroni_correction(p_vals_all))
         #p_vals_corrected = np.array(apply_fdr_correction(p_vals_all))
-        p_vals_corrected = meinshausen_correction(basis_mats, p_vals_all, dim=data_full.shape[0])
+        p_vals_corrected = meinshausen_correction(basis_mats, p_vals_all, dim=data_full.shape[0], log_pvals=self.args.log_pvals)
         candidate_cp = p_vals_corrected.min(axis=1).argmin()
 
         

@@ -141,7 +141,7 @@ def sim_changepoint_mv_normal_orthogonal(sim_scale=0.8, M=2, dim=4, N=500, save_
     data_one, C_one = sim_data(covar=inv(precision_one), dim=dim, N=N)
     
     prec_coeffs_two = prec_coeffs_one.copy()
-    prec_coeffs_two[0] += sim_scale#*np.random.choice([-1, 1])
+    prec_coeffs_two[0] += np.random.uniform(0.4, 0.8)
     precision_two = collect_precision_matrix(H_s, prec_coeffs_two)
     data_two, C_two = sim_data(covar=inv(precision_two), dim=dim, N=N)
     

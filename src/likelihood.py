@@ -25,10 +25,15 @@ import copy
 import dask
 from joblib import Parallel, delayed
 
-def likelihood_ratio_test(likelihood_null, likelihood_alternative, dof):
+def likelihood_ratio_test(likelihood_null, likelihood_alternative, dof, log_pvals=None):
     delta_d = -2*(likelihood_null-likelihood_alternative)
-    
-    return delta_d, chi2.sf(delta_d, dof)
+    pval = chi2.sf(delta_d, dof)
+    if log_pvals:
+        """
+        special case dof=2
+        """
+        pval = -delta_d/2
+    return delta_d, pval
     #return delta_d, chi2.logsf(delta_d, dof)
 
 def apply_fdr_correction(p_vals_all, alpha=0.05):
@@ -165,7 +170,7 @@ def LRT_all_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=500, lam
         p_vals.append(p_val)
     return lrt_vals, p_vals
 
-def LRT_individual_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=500, lam=1e-2, step_size=1, beta=5e-3, iters=150, include_l1=False, t=2.0, optim_type='unbiased'):
+def LRT_individual_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=500, lam=1e-2, step_size=1, beta=5e-3, iters=150, include_l1=False, t=2.0, optim_type='unbiased', args=None):
     lrt_vals = []
     p_vals = []
     print("Creating CVX Problems...")
@@ -491,7 +496,7 @@ def LRT_individual_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=5
             #dof = 0.5*C_full.shape[0]*(C_full.shape[0]+1) - (M + 1)
             dof = 2
             test_stat_i, p_val_i = likelihood_ratio_test(null_likelihood, 
-                                                alt_likelihood_alpha_i, dof)
+                                                alt_likelihood_alpha_i, dof, log_pvals=args.log_pvals)
             # test_stat_i_alt, p_val_i_alt = likelihood_ratio_test(null_likelihood, 
             #                                     alt_likelihood_alpha_i_alt, 2)
             #print("\n\n")
