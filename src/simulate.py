@@ -138,10 +138,13 @@ def sim_changepoint_mv_normal_orthogonal(sim_scale=0.8, M=2, dim=4, N=500, save_
     print("Simulating Anderson Decomp Data")
     assert dim % M == 0, "Need dim divisible by M for sake of sampling at the moment"
     H_s, precision_one, prec_coeffs_one = generate_matrices_orthogonal(M=M, dim=dim)
+    prec_coeffs_one = np.ones(M)
+    precision_one = collect_precision_matrix(H_s, prec_coeffs_one)
     data_one, C_one = sim_data(covar=inv(precision_one), dim=dim, N=N)
     
     prec_coeffs_two = prec_coeffs_one.copy()
-    prec_coeffs_two[0] += np.random.uniform(0.4, 0.8)
+    rand_idx = np.random.choice(np.arange(M))
+    prec_coeffs_two[rand_idx] += np.random.uniform(0.5, 2.0)
     precision_two = collect_precision_matrix(H_s, prec_coeffs_two)
     data_two, C_two = sim_data(covar=inv(precision_two), dim=dim, N=N)
     
@@ -177,6 +180,8 @@ def sim_changepoint_mv_normal_orthogonal_no_change(sim_scale=0.8, M=2, dim=4, N=
 def sim_changepoint_mv_normal_orthogonal_mult_coeff(sim_scale=0.8, M=2, dim=4, N=500, num_coeffs_change=1, save_path=None):
     assert dim % M == 0, "Need dim divisible by M for sake of sampling at the moment"
     H_s, precision_one, prec_coeffs_one = generate_matrices_orthogonal(M=M, dim=dim)
+    prec_coeffs_one = np.ones(M)*2.0
+    precision_one = collect_precision_matrix(H_s, prec_coeffs_one)
     data_one, C_one = sim_data(covar=inv(precision_one), dim=dim, N=N)
     
     assert num_coeffs_change <= M, "Cannot change more coefficients than exist"
@@ -185,7 +190,7 @@ def sim_changepoint_mv_normal_orthogonal_mult_coeff(sim_scale=0.8, M=2, dim=4, N
     to_change_coeffs = np.random.choice(np.arange(M), num_coeffs_change, replace=False)
     prec_coeffs_two = prec_coeffs_one.copy()
     for i in range(num_coeffs_change):
-        prec_coeffs_two[to_change_coeffs[i]] += np.random.uniform(0.8, 1.5, 1)[0]*np.random.choice([-1, 1])
+        prec_coeffs_two[to_change_coeffs[i]] += np.random.uniform(0.8, 1.8, 1)[0]*np.random.choice([-1, 1])
         
     precision_two = collect_precision_matrix(H_s, prec_coeffs_two)
     data_two, C_two = sim_data(covar=inv(precision_two), dim=dim, N=N)

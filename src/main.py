@@ -36,7 +36,7 @@ def get_args():
     parser.add_argument('--full_basis', type=int, default=0)
     parser.add_argument('--local', type=int, default=1)
     parser.add_argument('--sim_type', type=str, default='cholesky')
-    parser.add_argument('--sim_scale', type=float, default=1.5)
+    parser.add_argument('--sim_scale', type=float, default=0.8)
     parser.add_argument('--include_l1', type=int, default=0)
     parser.add_argument('--split_variance', type=int, default=0)
     parser.add_argument('--iters', type=int, default=150)
