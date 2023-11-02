@@ -101,7 +101,7 @@ def full_likelihood(alphas, H_s, C, N, lam=1e-2, include_l1=False, debug_title='
 def cluster_likelihood(alpha, H, C, N, debug_title='global'):
     P = C.shape[0]
     psi_hat = alpha*H
-    _, first_term = np.linalg.slogdet(psi_hat)
+    first_term = fast_logdet(psi_hat)
     likelihood = first_term - np.trace(psi_hat@C) - P*np.log(2*np.pi)
 
     return likelihood*(N/2)
@@ -440,6 +440,30 @@ def LRT_individual_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=5
             # likelihood on post data, alpha_one change
             alt_likelihood_alpha_i_post = full_likelihood(alpha_i_change_post, H_s, C_two, N=data_two.shape[1], 
                                                           lam=lam, include_l1=include_l1, debug_title='Post')
+            # curr_H = H_s[k]
+            # curr_H = symmetrize_from_vector(curr_H, dim=dim)
+            # curr_C_pre = C_one[~np.all(curr_H==0, axis=1), :][:, ~np.all(curr_H==0, axis=0)]
+            # curr_C_post = C_two[~np.all(curr_H==0, axis=1), :][:, ~np.all(curr_H==0, axis=0)]
+            # curr_C_full = C_full[~np.all(curr_H==0, axis=1), :][:, ~np.all(curr_H==0, axis=0)]
+            # curr_H = curr_H[~np.all(curr_H==0, axis=1), :][:, ~np.all(curr_H==0, axis=0)]
+            # alt_likelihood_alpha_i_pre = cluster_likelihood(alpha_i_change_pre[k],
+            #                                                 curr_H,
+            #                                                 curr_C_pre,
+            #                                                 N=data_one.shape[1],
+            #                                                 debug_title='Pre'
+            #                                                 )
+            # alt_likelihood_alpha_i_post = cluster_likelihood(alpha_i_change_post[k],
+            #                                                 curr_H,
+            #                                                 curr_C_post,
+            #                                                 N=data_two.shape[1],
+            #                                                 debug_title='Post'
+            #                                                 )
+            # null_likelihood = cluster_likelihood(coeffs_hat_total[k],
+            #                                     curr_H,
+            #                                     curr_C_full,
+            #                                     N=data_total.shape[1],
+            #                                     debug_title='Global'
+            #                                     )
             
             """
             For cluster specific likelihood

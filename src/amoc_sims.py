@@ -461,10 +461,11 @@ def main_sims():
     save_path = os.path.join(curr_path, 'amoc_figs/')
     seeds = np.arange(50, 70)
     #seeds = np.arange(50, 54)
-    sim_types = ['anderson_residual_block', 'anderson_residual_unstructured', 'orthogonal']
-    #sim_types = ['orthogonal']
+    #sim_types = ['anderson_residual_block', 'anderson_residual_unstructured', 'orthogonal']
+    sim_types = ['orthogonal_mult_coeff']
     #sim_types = ['cai_model_one']
     dims = [20, 40, 60, 80]
+    #dims = [20,40,60]
     #dims = [80]
     #dims = [24, 30, 36, 42, 48, 56, 64]
     #dims = [20, 24, 30]
@@ -538,7 +539,8 @@ def main_sims():
                 pvals_cai = cai_p_value(xia_cpd, curr_dim)
                 pvals_kesh = kesh_p_value(kesh_cpd)
                 
-                all_thresholds = sorted(list(set(np.concatenate((pvals_cpd, pvals_cai, pvals_kesh)))))
+                #all_thresholds = sorted(list(set(np.concatenate((pvals_cpd, pvals_cai, pvals_kesh)))))
+                all_thresholds = None
                 
                 lrt_result_cpd, detect_result_cpd = amoc_lrt_vals(pvals_cpd, first_possible_detect_time=first_d_time, last_possible_detect_time=last_d_time, thresholds=all_thresholds, p_values=True)
                 lrt_result_cai, detect_result_cai = amoc_lrt_vals(pvals_cai, first_possible_detect_time=first_d_time, last_possible_detect_time=last_d_time, thresholds=all_thresholds, p_values=True)
@@ -658,18 +660,18 @@ def main_sims():
             Filter out highest detection time - unrealistic
             and high FPR - also unrealistic
             """
-            # threshold_idx_mask = np.where(thresholds_ours < 0.2) # THESE ARE IDENTICAL INDICES ACROSS THE ALGORITHMS
-            # means_per_threshold_ours = means_per_threshold_ours[threshold_idx_mask]
-            # means_per_threshold_cai = means_per_threshold_cai[threshold_idx_mask]
-            # means_per_threshold_kesh = means_per_threshold_kesh[threshold_idx_mask]
-            # thresholds_ours = thresholds_ours[threshold_idx_mask]
-            # thresholds_cai = thresholds_cai[threshold_idx_mask]
-            # thresholds_kesh = thresholds_kesh[threshold_idx_mask]
+            threshold_idx_mask = np.where(thresholds_ours <= 0.2) # THESE ARE IDENTICAL INDICES ACROSS THE ALGORITHMS
+            means_per_threshold_ours = means_per_threshold_ours[threshold_idx_mask]
+            means_per_threshold_cai = means_per_threshold_cai[threshold_idx_mask]
+            means_per_threshold_kesh = means_per_threshold_kesh[threshold_idx_mask]
+            thresholds_ours = thresholds_ours[threshold_idx_mask]
+            thresholds_cai = thresholds_cai[threshold_idx_mask]
+            thresholds_kesh = thresholds_kesh[threshold_idx_mask]
 
-            # detect_idx_mask_ours = np.where(means_per_threshold_ours <= 200) # maximum detection time, 2*window_size
-            # detect_idx_mask_cai = np.where(means_per_threshold_cai <= 200)
-            # detect_idx_mask_kesh = np.where(means_per_threshold_kesh <= 200)
-            # detect_idx_mask = reduce(np.intersect1d, (detect_idx_mask_ours, detect_idx_mask_cai, detect_idx_mask_kesh)) # union of all idxs
+            detect_idx_mask_ours = np.where(means_per_threshold_ours <= 200) # maximum detection time, 2*window_size
+            detect_idx_mask_cai = np.where(means_per_threshold_cai <= 200)
+            detect_idx_mask_kesh = np.where(means_per_threshold_kesh <= 200)
+            detect_idx_mask = reduce(np.intersect1d, (detect_idx_mask_ours, detect_idx_mask_cai, detect_idx_mask_kesh)) # union of all idxs
             
             # means_per_threshold_ours = means_per_threshold_ours[detect_idx_mask] # 4 seems fine
             # means_per_threshold_cai = means_per_threshold_cai[detect_idx_mask]

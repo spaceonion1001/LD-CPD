@@ -60,7 +60,7 @@ def get_args():
     parser.add_argument('--base_M', type=int, default=2, help='Default value for M at base level of recursion - only valid with recursion==True')
     parser.add_argument('--candidate_recursion', type=int, default=0, help='DFS recursion on candidate point. Better used with --recursion 0')
     parser.add_argument('--log_pvals', type=int, default=0)
-    parser.add_argument('--recursion_min', type=int, default=4)
+    parser.add_argument('--recursion_min', type=int, default=2)
     args = parser.parse_args()
 
     return args
@@ -71,6 +71,8 @@ def resolve_data(args, save_path=None):
             return sim_changepoint_mv_normal_orthogonal(sim_scale=args.sim_scale, M=args.M, dim=args.dim, N=args.N, save_path=save_path)[1].T
         elif args.sim_type == 'orthogonal_mult_coeff':
             return sim_changepoint_mv_normal_orthogonal_mult_coeff(sim_scale=args.sim_scale, num_coeffs_change=args.num_coeffs_change, M=args.M, dim=args.dim, N=args.N, save_path=save_path)[1].T
+            #print("TESTING MAKE SURE TO CHANGE THIS")
+            #return sim_changepoint_mv_normal_orthogonal_mult_coeff(sim_scale=args.sim_scale, num_coeffs_change=args.num_coeffs_change, M=args.M, dim=args.dim, N=args.N, save_path=save_path)
         elif args.sim_type == 'cholesky':
             return scale_data(sim_changepoint_mv_normal_cholesky(dim=args.dim, N=args.N, num_coeffs_change=args.num_coeffs_change, scale=args.sim_scale, save_path=save_path))
         elif args.sim_type == 'ldlt':
@@ -219,11 +221,21 @@ def perform_simulation_batch(args):
         if not os.path.isdir(save_path):
             os.mkdir(save_path)
         data_full = resolve_data(args, save_path=save_path)
+        # if 'orthogonal' in args.sim_type:
+        #     H_s, data_full = data_full
+        #     data_full = data_full.T
         print(data_full.shape)
         model = PrecisionCPD(args)
         data_train = data_full[0:args.window_size, :]
         model.fit_glasso(data_train)
         model.construct_basis_matrices()
+
+        ############
+        # if 'orthogonal' in args.sim_type:
+        #     print("DEFINITELY CHANGE THIS THIS IS JUST A SANITY CHECK")
+        #     model.basis_matrices = H_s
+        ############
+
         lrt_vals_all, p_vals_all = model.perform_lrt_local(data_full.T)
         test_results = np.hstack([lrt_vals_all, p_vals_all])
         model.save_matrices_simulations(save_path)

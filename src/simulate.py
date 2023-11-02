@@ -7,7 +7,11 @@ from utils import is_pos_def, is_symmetric, symmetrize_from_vector, symmetrize_f
 from numpy.linalg import inv as inv
 from statsmodels.tsa.vector_ar.var_model import VARProcess
 import matplotlib.pyplot as plt
+from scipy.cluster import hierarchy
+from scipy.cluster.hierarchy import dendrogram, linkage, fcluster
 import os
+
+from utils import vectorize_matrix, symmetrize_from_vector
 
 def generate_matrices_orthogonal(prec_coeffs=None, M=2, dim=4):
     H_s = []
@@ -15,34 +19,73 @@ def generate_matrices_orthogonal(prec_coeffs=None, M=2, dim=4):
         prec_coeffs = np.random.rand(M)
     if (prec_coeffs <= 0.).sum() > 0:
         prec_coeffs = prec_coeffs + np.abs(prec_coeffs.min()) + 0.5 # add adjustment so non-negative
-    precision = np.zeros((dim, dim))
-    H_s_stacked = np.zeros((dim**2, M))
-    mat = make_spd_matrix(dim)
-    indxes = np.random.choice(np.arange(dim), (M, dim//M), replace=False)
-    for i in range(M):
-        A = np.zeros((dim, dim))
-        for idx in indxes[i]:
-            for idx2 in indxes[i]:
-                A[idx, idx2] = mat[idx, idx2]
-        H_s.append(A)
-        precision += prec_coeffs[i]*A
-        H_s_stacked[:, i] = A.flatten()
+    precision = make_spd_matrix(dim)
+    precision = (precision+precision.T)/2
+    assert is_pos_def(precision), "Not Positive Definite Precision Matrix"
+    clust_dist_mat = np.abs(precision)
+    np.fill_diagonal(clust_dist_mat, 0.0)
+    clust_dist_mat = (clust_dist_mat.max()+1e-5) - clust_dist_mat
+    np.fill_diagonal(clust_dist_mat, 0.0)
+    pairwise_distances = hierarchy.distance.pdist(clust_dist_mat)
+    Z = linkage(pairwise_distances, method='average')
+    cutree1 = hierarchy.cut_tree(Z, n_clusters=M).squeeze()
+    for i in range(max(set(cutree1))+1): # iterate over clusters
+        idxs = np.where(cutree1 == i)[0] # indexes for given cluster
+        A = np.zeros(precision.shape) # blank A matrix
+        for idx in idxs: # loop over indexes
+            for idx2 in idxs: # loop over indexes
+                A[idx][idx2] = precision[idx][idx2].copy() # set i,j entry to be the entry from precision matrix for given cluster
+        if len(np.nonzero(A)[0]) > 0:
+            H_s.append(vectorize_matrix(A))
     H_s = np.array(H_s)
+    ##############
+    # precision = np.zeros((dim, dim))
+    # H_s_stacked = np.zeros((dim**2, M))
+    # mat = make_spd_matrix(dim)
+    # indxes = np.random.choice(np.arange(dim), (M, dim//M), replace=False)
+    # for i in range(M):
+    #     A = np.zeros((dim, dim))
+    #     for idx in indxes[i]:
+    #         for idx2 in indxes[i]:
+    #             A[idx, idx2] = mat[idx, idx2]
+    #     H_s.append(A)
+    #     precision += prec_coeffs[i]*A
+    #     H_s_stacked[:, i] = A.flatten()
+    # H_s = np.array(H_s)
     
-    # ensure basis matrices are linearly independent
-    assert np.linalg.matrix_rank(H_s_stacked) == M, "Not Linearly Independent basis matrices"
+    # # ensure basis matrices are linearly independent
+    # assert np.linalg.matrix_rank(H_s_stacked) == M, "Not Linearly Independent basis matrices"
     
-    # ensure it's actually symmetric
-    # minimal modification on scale of 1e-15
-    precision_corrected = (precision + precision.T)/2
-    assert is_pos_def(precision_corrected), "Not Positive Definite Initial Matrices"
-    
-    return H_s, precision_corrected, prec_coeffs
+    # # ensure it's actually symmetric
+    # # minimal modification on scale of 1e-15
+    # precision_corrected = (precision + precision.T)/2
+    # assert is_pos_def(precision_corrected), "Not Positive Definite Initial Matrices"
+    ##############
 
-def collect_precision_matrix(H_s, prec_coeffs):
-    precision = (prec_coeffs.reshape(-1, 1, 1)*H_s).sum(0)
+    for i in range(H_s.shape[0]):
+        curr_mat = symmetrize_from_vector(H_s[i], dim)
+        #curr_mat = H_s[i]
+        nonzero_cols = np.nonzero(np.any(curr_mat != 0, axis=0))[0]
+        print("****************************************")
+        print("SIMULATION MATRICES")
+        if i == (H_s.shape[0] - 1):
+            print("Sim Basis Matrix {}".format(i))
+        else:
+            print("Sim Basis Matrix {}".format(i))
+        print("Sim Channels Contained {}".format(nonzero_cols))
+        #print("Diag: ", set(list(np.diag(curr_mat))))
+        #print("OffDiag: ", set(list(curr_mat[np.triu_indices(dim, k=1)])))
+        print("****************************************")
+        print()
+
+    return H_s, precision, prec_coeffs
+
+def collect_precision_matrix(H_s, prec_coeffs, P):
+    psi_hat = np.sum(np.expand_dims(prec_coeffs, 1)*H_s, 0)
+    psi_hat = symmetrize_from_vector(psi_hat, P)
+    #precision = (prec_coeffs.reshape(-1, 1, 1)*H_s).sum(0)
     
-    return precision
+    return psi_hat
 
 def slow_permutations(upper_indices, nonzero_cols):
     new_left = []
@@ -136,16 +179,16 @@ def anderson_sim_with_residual(M=2, dim=4, N=500, num_indices=4, resid_type='uns
 
 def sim_changepoint_mv_normal_orthogonal(sim_scale=0.8, M=2, dim=4, N=500, save_path=None):
     print("Simulating Anderson Decomp Data")
-    assert dim % M == 0, "Need dim divisible by M for sake of sampling at the moment"
+    #assert dim % M == 0, "Need dim divisible by M for sake of sampling at the moment"
     H_s, precision_one, prec_coeffs_one = generate_matrices_orthogonal(M=M, dim=dim)
     prec_coeffs_one = np.ones(M)
-    precision_one = collect_precision_matrix(H_s, prec_coeffs_one)
+    precision_one = collect_precision_matrix(H_s, prec_coeffs_one, dim)
     data_one, C_one = sim_data(covar=inv(precision_one), dim=dim, N=N)
     
     prec_coeffs_two = prec_coeffs_one.copy()
     rand_idx = np.random.choice(np.arange(M))
     prec_coeffs_two[rand_idx] += np.random.uniform(0.5, 2.0)
-    precision_two = collect_precision_matrix(H_s, prec_coeffs_two)
+    precision_two = collect_precision_matrix(H_s, prec_coeffs_two, dim)
     data_two, C_two = sim_data(covar=inv(precision_two), dim=dim, N=N)
     
     data_total = np.concatenate((data_one, data_two), axis=1)
@@ -159,13 +202,13 @@ def sim_changepoint_mv_normal_orthogonal(sim_scale=0.8, M=2, dim=4, N=500, save_
 
 def sim_changepoint_mv_normal_orthogonal_no_change(sim_scale=0.8, M=2, dim=4, N=500, save_path=None):
     print("Simulating Anderson Decomp Data")
-    assert dim % M == 0, "Need dim divisible by M for sake of sampling at the moment"
+    #assert dim % M == 0, "Need dim divisible by M for sake of sampling at the moment"
     H_s, precision_one, prec_coeffs_one = generate_matrices_orthogonal(M=M, dim=dim)
     data_one, C_one = sim_data(covar=inv(precision_one), dim=dim, N=N)
     
     prec_coeffs_two = prec_coeffs_one.copy()
     # prec_coeffs_two[0] += sim_scale#*np.random.choice([-1, 1])
-    precision_two = collect_precision_matrix(H_s, prec_coeffs_two)
+    precision_two = collect_precision_matrix(H_s, prec_coeffs_two, dim)
     data_two, C_two = sim_data(covar=inv(precision_two), dim=dim, N=N)
     
     data_total = np.concatenate((data_one, data_two), axis=1)
@@ -178,10 +221,10 @@ def sim_changepoint_mv_normal_orthogonal_no_change(sim_scale=0.8, M=2, dim=4, N=
     return H_s, data_total
 
 def sim_changepoint_mv_normal_orthogonal_mult_coeff(sim_scale=0.8, M=2, dim=4, N=500, num_coeffs_change=1, save_path=None):
-    assert dim % M == 0, "Need dim divisible by M for sake of sampling at the moment"
+    #assert dim % M == 0, "Need dim divisible by M for sake of sampling at the moment"
     H_s, precision_one, prec_coeffs_one = generate_matrices_orthogonal(M=M, dim=dim)
     prec_coeffs_one = np.ones(M)*2.0
-    precision_one = collect_precision_matrix(H_s, prec_coeffs_one)
+    precision_one = collect_precision_matrix(H_s, prec_coeffs_one, dim)
     data_one, C_one = sim_data(covar=inv(precision_one), dim=dim, N=N)
     
     assert num_coeffs_change <= M, "Cannot change more coefficients than exist"
@@ -192,9 +235,8 @@ def sim_changepoint_mv_normal_orthogonal_mult_coeff(sim_scale=0.8, M=2, dim=4, N
     for i in range(num_coeffs_change):
         prec_coeffs_two[to_change_coeffs[i]] += np.random.uniform(0.8, 1.8, 1)[0]*np.random.choice([-1, 1])
         
-    precision_two = collect_precision_matrix(H_s, prec_coeffs_two)
+    precision_two = collect_precision_matrix(H_s, prec_coeffs_two, dim)
     data_two, C_two = sim_data(covar=inv(precision_two), dim=dim, N=N)
-    
     data_total = np.concatenate((data_one, data_two), axis=1)
     C_total = np.cov(data_total)
     print("Precision Coefficients Pre-Changepoint: ", prec_coeffs_one)
@@ -216,6 +258,7 @@ def get_near_psd(A):
 
 def sim_data(covar, dim, N=1000):
     if not is_pos_def(covar):
+        print("ALERT: Adjusting covar...")
         covar = get_near_psd(covar)
     
     assert is_symmetric(covar), is_pos_def(covar)

@@ -161,7 +161,7 @@ def perform_line_search_dc(local_slope, newton_direction, alpha, H, C, dim, tau,
 
     return lr_val
 
-def optim_boyd_dc(C, H, tolerance=0.5, iters=100, tau=0.95, control_factor=0.5):
+def optim_boyd_dc(C, H, tolerance=0.5, iters=200, tau=0.95, control_factor=0.5):
     dim = C.shape[0]
     alphas_imo = 1
     nonzero_cols = np.nonzero(np.any(symmetrize_from_vector(H, dim) != 0, axis=0))[0]
@@ -185,7 +185,7 @@ def optim_boyd_dc(C, H, tolerance=0.5, iters=100, tau=0.95, control_factor=0.5):
                                        alpha=alphas_imo,
                                        H=H_reduced, C=C_reduced, dim=dim, tau=tau, control_factor=control_factor
                                       )
-        elif lambd < 1e-6:
+        elif lambd < 1e-8:
             # termination condition for newton's mathod
             break
         #print('***********')
