@@ -179,6 +179,7 @@ class PrecisionCPD:
                 condition_one = len(nonzero_cols_one) >= self.args.recursion_min and len(nonzero_cols_two) >= self.args.recursion_min
                 condition_two = new_silhoutte_score > self.curr_silhoutte_score
                 condition_three = chisquare_val >= 1e-5
+                
 
                 if condition_one and (condition_two or condition_three): # we split and the scores improved or didn't degrade (p-value) -> take new 2 matrices!
                     #print("ADDING BASIS MATS")
@@ -198,7 +199,7 @@ class PrecisionCPD:
             #print("###################################### END OF RECURSION BLOCK LEVEL ######################################")
             level_basis_mats = self.bfs_basis_mats(data_full, level_basis_mats) # recurse down a level
 
-        
+
         return level_basis_mats
             
 
@@ -335,7 +336,7 @@ class PrecisionCPD:
         #fclust_res = fcluster(Z, t=2, criterion='maxclust')
         ###################
         #cutree = fclust_res
-        new_silhoutte_score = silhouette_score(clust_dist_mat, cutree, metric='precomputed')
+        # new_silhoutte_score = silhouette_score(clust_dist_mat, cutree, metric='precomputed')
         ###################
         new_basis_matrices = []
         for i in range(min(set(cutree)), max(set(cutree))+1): # iterate over clusters
@@ -447,7 +448,7 @@ class PrecisionCPD:
         #print("TRAIN DATA {}".format(data_train.shape))
         C_full = np.cov(data_train.copy(), bias=True)
         data_train = data_train[nonzero_cols, :]
-        if len(nonzero_cols) <= self.args.recursion_min: # rerun it and stop
+        if len(nonzero_cols) < self.args.recursion_min: # rerun it and stop
             lrt_vals_all, p_vals_all = LRT_individual_coeffs_full_likelihood(data_full, M=basis_mats.shape[0], dim=data_full.shape[0], H_s=basis_mats, 
                                                                          window_size=self.window_size, lam=self.lam, step_size=self.step_size, include_l1=self.include_l1, 
                                                                          iters=self.iters, beta=self.beta, t=self.t, optim_type=self.optim_type, args=self.args)
@@ -473,9 +474,16 @@ class PrecisionCPD:
         anderson_lrt_value = self.anderson_lrt(cluster_precision=cluster_precision, C=train_C, N=data_train.shape[1])
         dof = 0.5*train_C.shape[0]*(train_C.shape[0]+1) - 1 # q here is just 1 since we are cluster specific
         chisquare_val = chi2.sf(anderson_lrt_value, dof)
+
+        cluster_eigvals = sorted(np.linalg.eig(cluster_precision)[0], reverse=True)
+        cluster_eigval_max = max(cluster_eigvals)
+        cluster_eigval_min = min(cluster_eigvals)
+        eigval_ratio = cluster_eigval_max/cluster_eigval_min # condition number
+        print("Eigvals", cluster_eigvals)
+        print("Eigval ratio", eigval_ratio)
         #print("CHISQUARE P-VAL {} DOF {}".format(chisquare_val, dof))
         # if conditions are met, recurse
-        if len(nonzero_cols) > self.args.recursion_min: # first stopping conditions
+        if len(nonzero_cols) >= self.args.recursion_min and eigval_ratio >= self.args.condition_number_thresh: # first stopping conditions
             new_basis_matrices = self.recursive_split_basis_matrix(basis_mats, greatest_change_mat_idx)
             #print("NUMBER OF NEW BASIS MATRICES {}".format(new_basis_matrices.shape[0]))
             nonzero_cols_one = np.nonzero(np.any(symmetrize_from_vector(new_basis_matrices[0], self.dim) != 0, axis=0))[0]
@@ -484,7 +492,7 @@ class PrecisionCPD:
                 #print("CURR CUTREE", self.cutree)
                 nonzero_cols_two = np.nonzero(np.any(symmetrize_from_vector(new_basis_matrices[1], self.dim) != 0, axis=0))[0]
                 #print("NONZERO COLS", nonzero_cols_two)
-                if len(nonzero_cols_one) > self.args.recursion_min and len(nonzero_cols_two) > self.args.recursion_min: # if the clustering is able to be split, recurse
+                if len(nonzero_cols_one) >= self.args.recursion_min or len(nonzero_cols_two) >= self.args.recursion_min: # if the clustering is able to be split, recurse
                     self.cutree[nonzero_cols_two] = int(self.cutree.max() + 1)
                     #print("NEW CUTREE", self.cutree)
                     new_silhoutte_score = silhouette_score(self.root_dist_mat, self.cutree, metric='precomputed')
@@ -501,9 +509,9 @@ class PrecisionCPD:
                     _, p_vals_corrected = self.fit_optim_candidate_point(C_one=C_one, C_two=C_two, C_full=C_total, H_s=basis_mats, window_size=self.window_size, lam=self.lam)
                     return self.recurse_on_candidate_point(lrt_vals_all, p_vals_corrected=p_vals_corrected, data_full=data_full, basis_mats=self.basis_matrices, candidate_point=candidate_point)
                 else:
-                    print("\n\n************** NOT RECURSING **************\n")
+                    print("\n\n************** NOT RECURSING - TOO SMALL OF SPLIT {} {}**************\n".format(len(nonzero_cols_one), len(nonzero_cols_two)))
             else:
-                print("\n\n************** NOT RECURSING **************\n")
+                print("\n\n************** NOT RECURSING - BASIS MATRIX SHAPE **************\n")
 
 
         lrt_vals_all, p_vals_all = LRT_individual_coeffs_full_likelihood(data_full, M=basis_mats.shape[0], dim=data_full.shape[0], H_s=basis_mats, 

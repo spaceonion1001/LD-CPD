@@ -22,13 +22,16 @@ from functools import reduce
 matplotlib.use('Agg')
 
 
-def plot_confidence_interval(x, values, z=1.96, color='#2187bb', horizontal_line_width=0.25):
+def plot_confidence_interval(x, values, z=1.96, color='#2187bb', horizontal_line_width=0.25, constrain=False):
     mean = statistics.mean(values)
     stdev = statistics.stdev(values)
     confidence_interval = z * stdev / sqrt(len(values))
 
     left = x - horizontal_line_width / 2
     top = mean - confidence_interval
+    if constrain:
+        if top <= 0.0:
+            top = 0.0
     right = x + horizontal_line_width / 2
     bottom = mean + confidence_interval
     plt.plot([x, x], [top, bottom], color=color)
@@ -43,7 +46,8 @@ def kesh_p_value(test_statistics):
     Calculate z-score, then take survival function of normal dist
     """
     
-    z_scores = zscore(test_statistics)
+    #z_scores = zscore(test_statistics)
+    z_scores = (test_statistics - 0)/1 # substract mean and divide by standard deviation of true distribution?
     p_values = 1-norm.cdf(z_scores)
     
     return p_values
@@ -462,7 +466,7 @@ def main_sims():
     seeds = np.arange(50, 70)
     #seeds = np.arange(50, 54)
     #sim_types = ['anderson_residual_block', 'anderson_residual_unstructured', 'orthogonal']
-    sim_types = ['orthogonal_mult_coeff']
+    sim_types = ['anderson_residual_unstructured']
     #sim_types = ['cai_model_one']
     dims = [20, 40, 60, 80]
     #dims = [20,40,60]
@@ -544,11 +548,11 @@ def main_sims():
                 
                 lrt_result_cpd, detect_result_cpd = amoc_lrt_vals(pvals_cpd, first_possible_detect_time=first_d_time, last_possible_detect_time=last_d_time, thresholds=all_thresholds, p_values=True)
                 lrt_result_cai, detect_result_cai = amoc_lrt_vals(pvals_cai, first_possible_detect_time=first_d_time, last_possible_detect_time=last_d_time, thresholds=all_thresholds, p_values=True)
-                lrt_result_kesh, detect_result_kesh = amoc_lrt_vals(pvals_kesh, first_possible_detect_time=first_d_time, last_possible_detect_time=last_d_time, thresholds=all_thresholds, p_values=True)
+                #lrt_result_kesh, detect_result_kesh = amoc_lrt_vals(pvals_kesh, first_possible_detect_time=first_d_time, last_possible_detect_time=last_d_time, thresholds=all_thresholds, p_values=True)
 
                 #lrt_result_cpd, detect_result_cpd = amoc_lrt_vals(stats_cpd.max(axis=1), first_possible_detect_time=first_d_time, last_possible_detect_time=last_d_time, thresholds=None, p_values=False)
                 #lrt_result_cai, detect_result_cai = amoc_lrt_vals(xia_cpd, first_possible_detect_time=first_d_time, last_possible_detect_time=last_d_time, thresholds=None, p_values=False)
-                #lrt_result_kesh, detect_result_kesh = amoc_lrt_vals(kesh_cpd, first_possible_detect_time=first_d_time, last_possible_detect_time=last_d_time, thresholds=None, p_values=False)
+                lrt_result_kesh, detect_result_kesh = amoc_lrt_vals(kesh_cpd, first_possible_detect_time=first_d_time, last_possible_detect_time=last_d_time, thresholds=None, p_values=False)
 
                 # lrt_result_cpd, detect_result_cpd = amoc_p_vals(pvals_cpd, 
                 #                                                 first_possible_detect_time=first_d_time,
@@ -647,9 +651,9 @@ def main_sims():
                 plot_idx_counter += 1
                 plot_confidence_interval(x=plot_idx_counter, values=kesh_d_vals, z=1.96, color='#2187bb', horizontal_line_width=0.25)
                 plot_idx_counter += 1
-            plt.ylim(0.0, ylim_max)
+            plt.ylim(-10.0, 40.0)
             plt.title("Confidence Intervals {} Dim {}".format(sim_type, curr_dim))
-            plt.ylabel("Detect Time")
+            plt.ylabel("Detection Time")
             plt.xlabel("FPR")
             plt.tight_layout()
             plt.savefig(os.path.join(curr_dim_path, 'conf_avg_amoc_{}_dim_{}.png'.format(sim_type, curr_dim)))
@@ -690,6 +694,7 @@ def main_sims():
             plt.xlabel('FPR')
             plt.ylabel('Detection Time')
             plt.title('Average AMOC Curve for {} Dim {}'.format(sim_type, curr_dim))
+            plt.ylim(0.0, 20.0)
             plt.legend(loc='best')
             plt.savefig(os.path.join(curr_dim_path, 'avg_amoc_{}_dim_{}.png'.format(sim_type, curr_dim)))
             plt.close()

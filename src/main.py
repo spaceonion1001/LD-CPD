@@ -61,13 +61,14 @@ def get_args():
     parser.add_argument('--candidate_recursion', type=int, default=0, help='DFS recursion on candidate point. Better used with --recursion 0')
     parser.add_argument('--log_pvals', type=int, default=0)
     parser.add_argument('--recursion_min', type=int, default=2)
+    parser.add_argument('--condition_number_thresh', type=float, default=10.0)
     args = parser.parse_args()
 
     return args
 
 def resolve_data(args, save_path=None):
     if bool(args.sim):
-        if args.sim_type == 'orthogonal':
+        if args.sim_type == 'orthogonal_small':
             return sim_changepoint_mv_normal_orthogonal(sim_scale=args.sim_scale, M=args.M, dim=args.dim, N=args.N, save_path=save_path)[1].T
         elif args.sim_type == 'orthogonal_mult_coeff':
             return sim_changepoint_mv_normal_orthogonal_mult_coeff(sim_scale=args.sim_scale, num_coeffs_change=args.num_coeffs_change, M=args.M, dim=args.dim, N=args.N, save_path=save_path)[1].T

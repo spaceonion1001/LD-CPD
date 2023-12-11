@@ -13,7 +13,7 @@ import os
 
 from utils import vectorize_matrix, symmetrize_from_vector
 
-def generate_matrices_orthogonal(prec_coeffs=None, M=2, dim=4):
+def generate_matrices_orthogonal(prec_coeffs=None, M=2, dim=4, to_print=True):
     H_s = []
     if not prec_coeffs:
         prec_coeffs = np.random.rand(M)
@@ -61,22 +61,22 @@ def generate_matrices_orthogonal(prec_coeffs=None, M=2, dim=4):
     # precision_corrected = (precision + precision.T)/2
     # assert is_pos_def(precision_corrected), "Not Positive Definite Initial Matrices"
     ##############
-
-    for i in range(H_s.shape[0]):
-        curr_mat = symmetrize_from_vector(H_s[i], dim)
-        #curr_mat = H_s[i]
-        nonzero_cols = np.nonzero(np.any(curr_mat != 0, axis=0))[0]
-        print("****************************************")
-        print("SIMULATION MATRICES")
-        if i == (H_s.shape[0] - 1):
-            print("Sim Basis Matrix {}".format(i))
-        else:
-            print("Sim Basis Matrix {}".format(i))
-        print("Sim Channels Contained {}".format(nonzero_cols))
-        #print("Diag: ", set(list(np.diag(curr_mat))))
-        #print("OffDiag: ", set(list(curr_mat[np.triu_indices(dim, k=1)])))
-        print("****************************************")
-        print()
+    if to_print:
+        for i in range(H_s.shape[0]):
+            curr_mat = symmetrize_from_vector(H_s[i], dim)
+            #curr_mat = H_s[i]
+            nonzero_cols = np.nonzero(np.any(curr_mat != 0, axis=0))[0]
+            print("****************************************")
+            print("SIMULATION MATRICES")
+            if i == (H_s.shape[0] - 1):
+                print("Sim Basis Matrix {}".format(i))
+            else:
+                print("Sim Basis Matrix {}".format(i))
+            print("Sim Channels Contained {}".format(nonzero_cols))
+            #print("Diag: ", set(list(np.diag(curr_mat))))
+            #print("OffDiag: ", set(list(curr_mat[np.triu_indices(dim, k=1)])))
+            print("****************************************")
+            print()
 
     return H_s, precision, prec_coeffs
 
@@ -99,16 +99,34 @@ def slow_permutations(upper_indices, nonzero_cols):
         
     return (np.array(new_left), np.array(new_right))
 
-def create_residual_structured(H_s, omega, dim, N, num_indices=4):
+def create_residual_structured(H_s, omega, dim, N, num_indices=4, double_H=False, small_scale=False):
     U = np.zeros((dim, dim))
     # randomly select an H matrix
     rand_H_num = np.random.choice(np.arange(H_s.shape[0]))
-    curr_H = H_s[rand_H_num]
-    nonzero_cols = np.nonzero(np.any(curr_H != 0, axis=0))[0]
-    nonzero_rows = np.nonzero(np.any(curr_H != 0, axis=1))[0]
+    curr_H = symmetrize_from_vector(H_s[rand_H_num], dim=dim)
+    if double_H:
+        rand_H_num = np.random.choice(np.arange(H_s.shape[0]), size=2, replace=False)
+        nonzero_cols = []
+        nonzero_rows = []
+        for cnum in rand_H_num:
+            curr_H = symmetrize_from_vector(H_s[cnum], dim=dim)
+            nonzero_cols_curr = np.nonzero(np.any(curr_H != 0, axis=0))[0]
+            nonzero_rows_curr = np.nonzero(np.any(curr_H != 0, axis=1))[0]
+            nonzero_cols.extend(nonzero_cols_curr)
+            nonzero_rows.extend(nonzero_rows_curr)
+        nonzero_cols = np.array(nonzero_cols)
+        nonzero_rows = np.array(nonzero_rows)
+    else:
+        nonzero_cols = np.nonzero(np.any(curr_H != 0, axis=0))[0]
+        nonzero_rows = np.nonzero(np.any(curr_H != 0, axis=1))[0]
     upper_indices = np.triu_indices(dim, k=1)
     upper_indices = slow_permutations(upper_indices, nonzero_cols)
-    rand_four_indices = np.random.choice(np.arange(len(upper_indices[0])), size=num_indices)
+    if num_indices > len(upper_indices[0]):
+        num_indices = len(upper_indices[0])
+    #print(len(upper_indices[0]), num_indices)
+    # for i in range(len(upper_indices[0])):
+    #     print(upper_indices[0][i], upper_indices[1][i])
+    rand_four_indices = np.random.choice(np.arange(len(upper_indices[0])), size=num_indices, replace=False)
     w = np.max(np.diag(omega))
     log_dim_over_N = np.log(dim)/N
     root_log_dim = np.sqrt(log_dim_over_N)
@@ -122,9 +140,15 @@ def create_residual_structured(H_s, omega, dim, N, num_indices=4):
         j = upper_indices[1][idx]
         pos_neg = np.random.choice(np.arange(num_indices))
         if pos_neg in [0, 1]:
-            rand_val = np.random.uniform(rand_val_zero, rand_val_one)
+            if not small_scale:
+                rand_val = np.random.uniform(rand_val_zero, rand_val_one)
+            else:
+                rand_val = np.random.uniform(-0.8, -0.6)
         else:
-            rand_val = np.random.uniform(rand_val_two, rand_val_three)
+            if not small_scale:
+                rand_val = np.random.uniform(rand_val_two, rand_val_three)
+            else:
+                rand_val = np.random.uniform(0.6, 0.8)
         U[i, j] = rand_val
         U[j, i] = rand_val
     return U
@@ -155,15 +179,15 @@ def anderson_sim_with_residual(M=2, dim=4, N=500, num_indices=4, resid_type='uns
                                  num_indices=num_indices, 
                                  resid_type=resid_type
                                  )
-    delta = np.abs(np.min(np.linalg.eig(precision_one)[0])) + 0.05
-    delta_times_I = np.eye(dim)*delta
-    precision_one = precision_one + delta_times_I
+    #delta = np.abs(np.min(np.linalg.eig(precision_one)[0])) + 0.05
+    #delta_times_I = np.eye(dim)*delta
+    #precision_one = precision_one + delta_times_I
     if not is_pos_def(precision_one + R):
         eig_vals = np.linalg.eig(precision_one + R)[0]
         correction_vector = np.eye(dim)*np.abs(eig_vals.min()) + 0.05 # pos-def correction
         precision_one = precision_one + correction_vector
     precision_two = precision_one + R
-    assert is_pos_def(precision_one)
+    assert is_pos_def(precision_one), print(np.linalg.eig(precision_one)[0])
     assert is_pos_def(precision_two), print(np.linalg.eig(precision_two)[0])
     
     data_one, C_one = sim_data(covar=inv(precision_one), dim=dim, N=N)
@@ -187,7 +211,7 @@ def sim_changepoint_mv_normal_orthogonal(sim_scale=0.8, M=2, dim=4, N=500, save_
     
     prec_coeffs_two = prec_coeffs_one.copy()
     rand_idx = np.random.choice(np.arange(M))
-    prec_coeffs_two[rand_idx] += np.random.uniform(0.5, 2.0)
+    prec_coeffs_two[rand_idx] += sim_scale
     precision_two = collect_precision_matrix(H_s, prec_coeffs_two, dim)
     data_two, C_two = sim_data(covar=inv(precision_two), dim=dim, N=N)
     
