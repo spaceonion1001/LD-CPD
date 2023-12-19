@@ -23,6 +23,7 @@ def get_args():
     parser.add_argument('--sim', type=int, default=1)
     parser.add_argument('--M', type=int, default=2)
     parser.add_argument('--window_size', type=int, default=100)
+    parser.add_argument('--post_window_size', type=int, default=20)
     parser.add_argument('--step_size', type=int, default=1)
     parser.add_argument('--dim', type=int, default=16)
     parser.add_argument('--N', type=int, default=1000)

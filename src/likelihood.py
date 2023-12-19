@@ -170,7 +170,7 @@ def LRT_all_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=500, lam
         p_vals.append(p_val)
     return lrt_vals, p_vals
 
-def LRT_individual_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=500, lam=1e-2, step_size=1, beta=5e-3, iters=150, include_l1=False, t=2.0, optim_type='unbiased', args=None):
+def LRT_individual_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=500, post_window_size=100, lam=1e-2, step_size=1, beta=5e-3, iters=150, include_l1=False, t=2.0, optim_type='unbiased', args=None):
     lrt_vals = []
     p_vals = []
     print("Creating CVX Problems...")

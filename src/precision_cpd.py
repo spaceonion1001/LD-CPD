@@ -40,6 +40,7 @@ class PrecisionCPD:
         self.lam = args.lam
         self.M = args.M
         self.window_size = args.window_size
+        self.post_window_size = args.post_window_size
         self.step_size = args.step_size
         self.full_basis = args.full_basis
         self.include_l1 = bool(args.include_l1)
@@ -450,7 +451,7 @@ class PrecisionCPD:
         data_train = data_train[nonzero_cols, :]
         if len(nonzero_cols) < self.args.recursion_min: # rerun it and stop
             lrt_vals_all, p_vals_all = LRT_individual_coeffs_full_likelihood(data_full, M=basis_mats.shape[0], dim=data_full.shape[0], H_s=basis_mats, 
-                                                                         window_size=self.window_size, lam=self.lam, step_size=self.step_size, include_l1=self.include_l1, 
+                                                                         window_size=self.window_size, post_window_size=self.post_window_size, lam=self.lam, step_size=self.step_size, include_l1=self.include_l1, 
                                                                          iters=self.iters, beta=self.beta, t=self.t, optim_type=self.optim_type, args=self.args)
             
             lrt_vals_all = np.array(lrt_vals_all)
@@ -515,7 +516,7 @@ class PrecisionCPD:
 
 
         lrt_vals_all, p_vals_all = LRT_individual_coeffs_full_likelihood(data_full, M=basis_mats.shape[0], dim=data_full.shape[0], H_s=basis_mats, 
-                                                                         window_size=self.window_size, lam=self.lam, step_size=self.step_size, include_l1=self.include_l1, 
+                                                                         window_size=self.window_size, post_window_size=self.post_window_size, lam=self.lam, step_size=self.step_size, include_l1=self.include_l1, 
                                                                          iters=self.iters, beta=self.beta, t=self.t, optim_type=self.optim_type, args=self.args)
         
         lrt_vals_all = np.array(lrt_vals_all)
@@ -543,7 +544,7 @@ class PrecisionCPD:
         # if bool(self.full_basis):
         #     basis_mats = self.basis_matrices_full
         lrt_vals_all, p_vals_all = LRT_individual_coeffs_full_likelihood(data_full, M=basis_mats.shape[0], dim=data_full.shape[0], H_s=basis_mats, 
-                                                                         window_size=self.window_size, lam=self.lam, step_size=self.step_size, include_l1=self.include_l1, 
+                                                                         window_size=self.window_size, post_window_size=self.post_window_size, lam=self.lam, step_size=self.step_size, include_l1=self.include_l1, 
                                                                          iters=self.iters, beta=self.beta, t=self.t, optim_type=self.optim_type, args=self.args)
 
         #return np.array(lrt_vals_all), np.array(apply_fdr_correction(p_vals_all))

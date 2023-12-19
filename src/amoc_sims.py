@@ -18,6 +18,7 @@ sns.set_palette("viridis")
 import matplotlib
 
 from functools import reduce
+import statistics
 
 matplotlib.use('Agg')
 
@@ -158,7 +159,7 @@ def apply_fdr_correction(p_vals_all, alpha=0.05):
     return np.array(corrected_p_vals_all)
 
 
-def average_AMOC_new(fprs, dts):
+def average_AMOC_new(fprs, dts, debug_title="Ours"):
     thresholds = np.arange(0.0, 1.0, 0.001) # list of possible FPR values
     mean_days_per_threshold = []
     fpr_dict = {}
@@ -177,6 +178,11 @@ def average_AMOC_new(fprs, dts):
         mean_days_per_threshold.append(mean_val)
         if thresh == 0.01 or thresh == 0.05 or thresh == 0.1:
             fpr_dict[thresh] = detect_times_per_thresh
+            #print("FPR {} Mean {} Min {} Max {}".format(thresh, statistics.mean(detect_times_per_thresh), min(detect_times_per_thresh), max(detect_times_per_thresh)))
+            sns.histplot(detect_times_per_thresh, kde=True)
+            plt.title("Detect Times FPR: {}".format(thresh))
+            plt.savefig("debugging_figs/{}_{}_fpr_fig.png".format(debug_title, thresh))
+            plt.close()
     
     return np.array(mean_days_per_threshold), thresholds, fpr_dict
 
@@ -281,6 +287,7 @@ def amoc_gen_vectorized(lrt_values, first_detect_time, last_detect_time, max_tim
         # we found it, take the earliest True
         else:
             earliest_time = np.where(cp_mask_slice==True)[0][0]
+            #print(earliest_time)
             detect_array.append(earliest_time) # earliest detection
         
         false_positives = early_fp + late_fp
@@ -736,6 +743,7 @@ def main_mesonet(storm_name='center'):
     lol_cai_dts = []
     lol_kesh_fprs = []
     lol_kesh_dts = []
+    unique_tuples = []
     for num in sorted(storm_nums):
         cpd_vals = np.loadtxt(os.path.join(cpd_path, "{}_storm_{}.csv".format(storm_name, num)), delimiter=',')
         cutoff = cpd_vals.shape[1]//2 # split test stats and p-vals
@@ -748,13 +756,23 @@ def main_mesonet(storm_name='center'):
         actual_storm_data = pd.read_csv(os.path.join(storm_data_path, '{}_storm_{}_storm_data.csv').format(storm_name, num))
         storm_start = pd.to_datetime(actual_storm_data.iloc[2]).dt.round("5min") # always index 2 for the start time
         storm_end = pd.to_datetime(actual_storm_data.iloc[3]).dt.round("5min") # always index 3 for the end time
+        storm_type = actual_storm_data.iloc[1].item()
         storm_start_idx = actual_final_data[actual_final_data['YYYYMMDDhhmm']==storm_start.item()].index.item()
         storm_end_idx = actual_final_data[actual_final_data['YYYYMMDDhhmm']==storm_end.item()].index.item()
+        if storm_start.item() == storm_end.item():
+            continue
+        else:
+            curr_tuple = (storm_type, storm_start.item(), storm_end.item())
+            if curr_tuple in list(set(unique_tuples)):
+                continue
+            else:
+                unique_tuples.append(curr_tuple)
         cp_location = storm_start_idx
         # subtract off window_size to handle the sliding window edges at start/end of data
         first_d_time = cp_location - window_size + 1 - window_size
         last_d_time = cp_location + storm_end_idx - storm_start_idx + 1 - window_size# how long is the storm contained in the window as it slides over the data - at least window_size times (right to left)
-        
+        print("Storm type {}; Duration {}".format(storm_type, storm_end_idx-storm_start_idx))
+        #print(pvals_cpd.shape, stats_cpd.shape, kesh_vals.shape, actual_final_data.shape)
         
         
         #print(stats_cpd.min(), stats_cpd.max(), pvals_cpd.max())
@@ -782,14 +800,16 @@ def main_mesonet(storm_name='center'):
         #                                                 dim=None, # deprecated
         #                                                 thresholds=all_thresholds
         #                                                 )
+        
         lrt_result_cpd, detect_result_cpd = amoc_lrt_vals(stats_cpd, first_possible_detect_time=first_d_time, last_possible_detect_time=last_d_time, thresholds=None, p_values=False)
         lrt_result_kesh, detect_result_kesh = amoc_lrt_vals(kesh_vals, first_possible_detect_time=first_d_time, last_possible_detect_time=last_d_time, thresholds=None, p_values=False)
         lrt_result_cai, detect_result_cai = amoc_lrt_vals(cai_vals, first_possible_detect_time=first_d_time, last_possible_detect_time=last_d_time, thresholds=None, p_values=False)
+        print(detect_result_cpd.min(), detect_result_cpd.max(), detect_result_cpd.mean())
         # lrt_result_cpd, detect_result_cpd = amoc_lrt_vals(pvals_cpd, first_possible_detect_time=first_d_time, last_possible_detect_time=last_d_time, thresholds=None, p_values=True)
         # lrt_result_kesh, detect_result_kesh = amoc_lrt_vals(pvals_kesh, first_possible_detect_time=first_d_time, last_possible_detect_time=last_d_time, thresholds=None, p_values=True)
         # lrt_result_cai, detect_result_cai = amoc_lrt_vals(pvals_cai, first_possible_detect_time=first_d_time, last_possible_detect_time=last_d_time, thresholds=None, p_values=True)
         
-        print(pvals_cpd.shape, stats_cpd.shape, kesh_vals.shape, cai_vals.shape)
+        #print(pvals_cpd.shape, stats_cpd.shape, kesh_vals.shape, cai_vals.shape)
         # plt.plot(lrt_result_cpd)
         # plt.savefig('./fpr_temp_{}.png'.format(num))
         # plt.close()
@@ -831,13 +851,12 @@ def main_mesonet(storm_name='center'):
         plt.legend(loc='best')
         plt.savefig(os.path.join(curr_storm_save_path, 'amoc_{}_{}.png'.format(storm_name, num)))
         plt.close()
-
     #means_per_threshold_ours, thresholds_ours, fpr_dict_ours = average_AMOC(fpr_detect_pairs_ours)
     #means_per_threshold_cai, thresholds_cai, fpr_dict_cai = average_AMOC(fpr_detect_pairs_cai)
     #means_per_threshold_kesh, thresholds_kesh, fpr_dict_kesh = average_AMOC(fpr_detect_pairs_kesh)
-    means_per_threshold_ours, thresholds_ours, fpr_dict_ours = average_AMOC_new(fprs=lol_ours_fprs, dts=lol_ours_dts)
-    means_per_threshold_cai, thresholds_cai, fpr_dict_cai = average_AMOC_new(fprs=lol_cai_fprs, dts=lol_cai_dts)
-    means_per_threshold_kesh, thresholds_kesh, fpr_dict_kesh = average_AMOC_new(fprs=lol_kesh_fprs, dts=lol_kesh_dts)
+    means_per_threshold_ours, thresholds_ours, fpr_dict_ours = average_AMOC_new(fprs=lol_ours_fprs, dts=lol_ours_dts, debug_title='Ours')
+    means_per_threshold_cai, thresholds_cai, fpr_dict_cai = average_AMOC_new(fprs=lol_cai_fprs, dts=lol_cai_dts, debug_title='Cai')
+    means_per_threshold_kesh, thresholds_kesh, fpr_dict_kesh = average_AMOC_new(fprs=lol_kesh_fprs, dts=lol_kesh_dts, debug_title='Kesh')
 
     
     plot_idx_counter = 1

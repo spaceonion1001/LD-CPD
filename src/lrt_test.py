@@ -11,6 +11,10 @@ sns.set()
 
 from sklearn.covariance import GraphicalLasso
 from sklearn.preprocessing import StandardScaler
+from scipy.stats import chi2, multivariate_normal
+from sklearn.metrics import silhouette_score, pairwise_distances as pairwise_d
+from sklearn.utils.extmath import fast_logdet
+
 
 from tqdm import tqdm
 from simulate import generate_matrices_orthogonal, sim_data, collect_precision_matrix
@@ -104,6 +108,159 @@ def clime_init_fn(lam, data_minimal):
     
     # clime_est = np.array(select_soln['icov'])
     return clime_est
+
+def anderson_lrt(cluster_precision, C, N):
+    """
+    Anderson LRT for goodness-of-fit
+
+    -2*log of 4.10
+
+    -Nlogdet(C)-Nlogdet(precision)
+    """
+    
+    # calculate likelihood ratio criterion eq 4.10
+    #print("C {} Prec {}".format(C.shape, cluster_precision.shape))
+    first_term = 0.5*N*fast_logdet(C)
+    second_term = 0.5*N*fast_logdet(cluster_precision)
+    res = -2*(first_term + second_term)
+    #print("First Term {} Second Term {} Res {}".format(first_term, second_term, res))
+
+    return res
+
+def recursive_split(basis_mat, dim):
+    performed_split = True
+    orig_nonzero_cols = np.nonzero(np.any(basis_mat != 0, axis=0))[0]
+    basis_mat_reduced = basis_mat[:, ~np.all(basis_mat == 0, axis=0)]
+    basis_mat_reduced = basis_mat_reduced[~np.all(basis_mat_reduced == 0, axis=1), :]
+    #clust_dist_mat = np.abs(basis_mat)
+    clust_dist_mat = basis_mat_reduced
+    np.fill_diagonal(clust_dist_mat, 0.0)
+    ###########
+    clust_dist_mat = (clust_dist_mat.max()+1e-5) - clust_dist_mat
+    np.fill_diagonal(clust_dist_mat, 0.0)
+    ###########
+    pairwise_distances = sch.distance.pdist(clust_dist_mat)
+    Z = linkage(pairwise_distances, method='complete')
+    # BREAK INTO 2 NEW CLUSTERS
+    cutree = hierarchy.cut_tree(Z, n_clusters=2).squeeze()
+    #print(np.nonzero(np.any(basis_mat != 0, axis=0))[0])
+    #print(cutree)
+    #print(len(np.nonzero(np.any(basis_mat != 0, axis=0))[0]))
+    #print(len(cutree))
+    new_basis_matrices = []
+    for i in range(min(set(cutree)), max(set(cutree))+1): # iterate over clusters
+        idxs = np.where(cutree == i)[0] # indexes for given cluster
+        A = np.zeros(basis_mat.shape) # blank A matrix
+        for idx in idxs: # loop over indexes
+            for idx2 in idxs: # loop over indexes
+                first_idx = orig_nonzero_cols[idx] # remap back to original space
+                second_idx = orig_nonzero_cols[idx2] # remap back to original space
+                A[first_idx][second_idx] = basis_mat[first_idx][second_idx].copy() # set i,j entry to be the entry from precision matrix for given cluster
+        if len(np.nonzero(A)[0]) > 0: # checking for 0 entries
+            new_basis_matrices.append(vectorize_matrix(A))
+    new_basis_matrices = np.array(new_basis_matrices)
+    if new_basis_matrices.shape[0] <= 1:
+        #print("...Recursion Complete for Dendrogram Criterion...")
+        performed_split = False
+        return new_basis_matrices, performed_split
+    
+    for i in range(new_basis_matrices.shape[0]):
+        curr_mat = symmetrize_from_vector(new_basis_matrices[i], dim)
+        nonzero_cols = np.nonzero(np.any(curr_mat != 0, axis=0))[0]
+        #print(nonzero_cols)
+        #print("NONZERO COLS {}".format(nonzero_cols))
+        if len(nonzero_cols) < 2: # don't split into a singleton cluster - not informative - 3x3 is the minimum for splitting
+            #print("...Recursion Complete for Cluster Size {}...".format(len(nonzero_cols)))
+            performed_split = False
+            pass
+        #print("Matrix {} Len {} Channels Contained {}".format(i, len(nonzero_cols), nonzero_cols))
+        #print()
+    #print("NEW BASIS MATRICES SHAPE", new_basis_matrices.shape)
+
+    
+    # if new_basis_matrices.shape[0] <= 1:
+    #     performed_split = False
+
+    return new_basis_matrices, performed_split
+
+def bfs_basis_mats(data_train, curr_basis_mats, curr_silhoutte_score, dim, recursion_min, cutree, root_dist_mat):
+    #print("###################################### RECURSION BLOCK LEVEL ######################################")
+    C_full = np.cov(data_train.copy(), bias=True)
+    level_basis_mats = []
+    #g_prob = create_global_problem(curr_basis_mats, dim=self.dim)
+    #alphas = solve_optim_global(curr_C=C_full, g_prob=g_prob)
+    for i, mat in enumerate(curr_basis_mats):
+        #print("TRAIN DATA {}".format(data_train.shape))
+        orig_mat = mat.copy()
+        mat = symmetrize_from_vector(mat, dim=dim)
+        # if mat.shape[0] <= 4: # suitable localization - treat 4x4 or less as leaf nodes -> keep original matrix instead
+        #     level_basis_mats.append(orig_mat)
+        #     continue
+        nonzero_cols = np.nonzero(np.any(mat != 0, axis=0))[0]
+        if len(nonzero_cols) <= recursion_min:
+            #print("...Recursion Complete for Singleton Cluster...")
+            level_basis_mats.append(orig_mat)
+            continue
+        #print("NONZERO COLS {}".format(nonzero_cols))
+        data_train_curr = data_train[nonzero_cols, :]
+        #print("Data Train Curr {}".format(data_train_curr.shape))
+        train_C = np.cov(data_train_curr.copy(), bias=True)
+        #print("Train C {}".format(train_C.shape))
+        train_C = train_C + np.eye(train_C.shape[0])*1e-8
+
+        # fit current level of recursion on training data
+        alphas = optim_boyd(C=C_full, H_s=curr_basis_mats)
+        #print("ALPHAS BOYD {}".format(alphas))
+        #print("Train C Shape {}".format(train_C.shape))
+        #print("Alphas {}".format(alphas))
+        cluster_precision = mat[~np.all(mat == 0, axis=1)]
+        cluster_precision = alphas[i]*cluster_precision[:, ~np.all(cluster_precision == 0, axis=0)]
+        anderson_lrt_value = anderson_lrt(cluster_precision=cluster_precision, C=train_C, N=data_train.shape[1])
+        dof = 0.5*train_C.shape[0]*(train_C.shape[0]+1) - 1 # q here is just 1 since we are cluster specific
+        chisquare_val = chi2.sf(anderson_lrt_value, dof)
+        #print("CHISQUARE P-VAL {} DOF {}".format(chisquare_val, dof))
+        new_mats, performed_split = recursive_split(mat, dim=dim)
+        #print(new_mats.shape, performed_split)
+        if performed_split:
+            #print("BASIS MATS SHAPE {}".format(curr_basis_mats.shape))
+            reduced_basis_mats = np.delete(curr_basis_mats, i, axis=0)
+            #print("REDUCED MATS SHAPE {}".format(reduced_basis_mats.shape))
+            updated_basis_matrices = np.concatenate((reduced_basis_mats, new_mats), axis=0)
+            #print("UPDATED MATS SHAPE {}".format(updated_basis_matrices.shape))
+            nonzero_cols_one = np.nonzero(np.any(symmetrize_from_vector(updated_basis_matrices[-2], dim) != 0, axis=0))[0]
+            nonzero_cols_two = np.nonzero(np.any(symmetrize_from_vector(updated_basis_matrices[-1], dim) != 0, axis=0))[0]
+            #print("***********************\nTesting Split of {}\nInto {}\nand {}\n***********************".format(nonzero_cols, nonzero_cols_one, nonzero_cols_two))
+            silhoutte_labels = cutree
+            silhoutte_labels[nonzero_cols_two] = int(cutree.max() + 1)
+            new_silhoutte_score = silhouette_score(root_dist_mat, silhoutte_labels, metric='precomputed')
+            #print("SILHOUETTE DIFFERENCE CURR {} NEW {}".format(curr_silhoutte_score, new_silhoutte_score))
+            #print("CHISQUARE VAL {}".format(chisquare_val))
+            #print("Silhoutte Scores", new_silhoutte_score, self.curr_silhoutte_score)
+            condition_one = len(nonzero_cols_one) >= recursion_min and len(nonzero_cols_two) >= recursion_min
+            condition_two = new_silhoutte_score > curr_silhoutte_score
+            condition_three = chisquare_val >= 1e-5
+            
+
+            if condition_one and (condition_two or condition_three): # we split and the scores improved or didn't degrade (p-value) -> take new 2 matrices!
+                #print("ADDING BASIS MATS")
+                #print("NEW MATS SHAPE", new_mats.shape)
+                curr_silhoutte_score = new_silhoutte_score
+                for matr in new_mats:
+                    level_basis_mats.append(matr)
+            else: # both of these are false -> keep original matrix instead
+                #print("...Recursion Complete for Fit-Check and Silhouette Score...")
+                level_basis_mats.append(orig_mat)
+        else: # split didn't take place -> keep original matrix instead
+            level_basis_mats.append(orig_mat)
+    #print(np.concatenate(level_basis_mats, axis=1).shape)
+    level_basis_mats = np.array(level_basis_mats)
+    if level_basis_mats.shape[0] > curr_basis_mats.shape[0]: # splits took place
+        #print("$$$$$$$$$$$$$ RECURSING $$$$$$$$$$$$$$")
+        #print("###################################### END OF RECURSION BLOCK LEVEL ######################################")
+        level_basis_mats = bfs_basis_mats(data_train, level_basis_mats, curr_silhoutte_score, dim, recursion_min, silhoutte_labels, root_dist_mat) # recurse down a level
+
+
+    return level_basis_mats
 
 
 def collect_test_results(M, dim, w):
@@ -308,11 +465,22 @@ def collect_prec_rec_results(M, w):
                 second_prec_coeffs[0] = second_prec_coeffs[0] - curr_change_mag
                 prec_two = collect_precision_matrix(H_s=H_s, prec_coeffs=second_prec_coeffs, P=dim)
                 data_one, _ = sim_data(covar=inv(prec_one), dim=dim, N=100)
+                if dim == 20:
+                    data_one_train, _ = sim_data(covar=inv(prec_one), dim=dim, N=100) # identical to data_one, used for fitting the initial Glasso/Clime estimates
+                elif dim == 40:
+                    data_one_train, _ = sim_data(covar=inv(prec_one), dim=dim, N=200) # identical to data_one, used for fitting the initial Glasso/Clime estimates
+                elif dim == 60:
+                    data_one_train, _ = sim_data(covar=inv(prec_one), dim=dim, N=300) # identical to data_one, used for fitting the initial Glasso/Clime estimates
+                elif dim == 80:
+                    data_one_train, _ = sim_data(covar=inv(prec_one), dim=dim, N=400) # identical to data_one, used for fitting the initial Glasso/Clime estimates
                 data_two, _ = sim_data(covar=inv(prec_two), dim=dim, N=100)
                 data_full = np.concatenate((data_one, data_two), axis=1)
+                data_full_train = np.concatenate((data_one_train, data_two), axis=1)
                 C_one = np.cov(data_one, bias=True)
+                C_one_train = np.cov(data_one_train, bias=True)
                 C_two = np.cov(data_two, bias=True)
                 C_full = np.cov(data_full, bias=True)
+                C_full_train = np.cov(data_full_train, bias=True)
                 coeffs_hat_total = optim_boyd(C=C_full, H_s=H_s)
                 alpha_i_change_pre = coeffs_hat_total.copy()
                 alpha_i_change_post = coeffs_hat_total.copy()
@@ -376,7 +544,8 @@ def collect_prec_rec_results(M, w):
 
                 """"""
                 # est H LRT
-                glasso = GraphicalLasso(max_iter=1000, alpha=5e-2, tol=1e-5, verbose=False).fit(data_one.T)
+                #glasso = GraphicalLasso(max_iter=1000, alpha=5e-2, tol=1e-5, verbose=False).fit(data_one.T)
+                glasso = GraphicalLasso(max_iter=1000, alpha=5e-2, tol=1e-5, verbose=False).fit(data_one_train.T) # this one has more data used
                 precision = glasso.precision_.copy()
                 clust_dist_mat = np.abs(precision)
                 np.fill_diagonal(clust_dist_mat, 0.0)
@@ -398,43 +567,57 @@ def collect_prec_rec_results(M, w):
                     if len(np.nonzero(A)[0]) > 0:
                         basis_matrices.append(vectorize_matrix(A))
                 basis_matrices = np.array(basis_matrices)
-                assert is_pos_def(symmetrize_from_vector(basis_matrices.sum(axis=0), dim=dim)), "Not PosDef"
+                curr_silhoutte_score = silhouette_score(clust_dist_mat, cutree1, metric='precomputed')
 
+                basis_matrices = bfs_basis_mats(data_one_train, basis_matrices, curr_silhoutte_score, dim=dim, recursion_min=2, cutree=cutree1, root_dist_mat=clust_dist_mat)
+                assert is_pos_def(symmetrize_from_vector(basis_matrices.sum(axis=0), dim=dim)), "Not PosDef"
+                
                 coeffs_hat_total = optim_boyd(C=C_full, H_s=basis_matrices)
-                alpha_i_change_pre = coeffs_hat_total.copy()
-                alpha_i_change_post = coeffs_hat_total.copy()
-                curr_alpha_i_pre = optim_boyd_dc(C=C_one, H=basis_matrices[0])
-                curr_alpha_i_post = optim_boyd_dc(C=C_two, H=basis_matrices[0])
-                alpha_i_change_pre[0] = curr_alpha_i_pre
-                alpha_i_change_post[0] = curr_alpha_i_post
-                null_likelihood = full_likelihood(coeffs_hat_total, basis_matrices, C_full, N=data_full.shape[1], 
-                                                    lam=5e-2, include_l1=False, debug_title='global')
-                # # likelihood on pre data, alpha_one change
-                alt_likelihood_alpha_i_pre = full_likelihood(alpha_i_change_pre, basis_matrices, C_one, N=data_one.shape[1], 
-                                                                lam=5e-2, include_l1=False, debug_title='Pre')
-                # likelihood on post data, alpha_one change
-                alt_likelihood_alpha_i_post = full_likelihood(alpha_i_change_post, basis_matrices, C_two, N=data_two.shape[1], 
-                                                                lam=5e-2, include_l1=False, debug_title='Post')
-                alt_likelihood_alpha_i = alt_likelihood_alpha_i_pre + alt_likelihood_alpha_i_post
-                dof = 2
-                test_stat_i, p_val_i = likelihood_ratio_test(null_likelihood, 
-                                                    alt_likelihood_alpha_i, dof, log_pvals=1)
-                curr_mat = symmetrize_from_vector(basis_matrices[0], dim)
-                nonzero_cols = np.nonzero(np.any(curr_mat != 0, axis=0))[0]
-                C_val = len(nonzero_cols)
-                if C_val > 0:
-                    correction_factor = dim/C_val
-                    #print(correction_factor)
-                    # correct p_vals for cluster at all time points independently
-                    p_val_i = p_val_i*correction_factor
-                else:
-                    p_val_i = 1.0
-                p_vals_curr_est.append(p_val_i)
-                lrt_vals_curr_est.append(test_stat_i)
-                coeff_diffs_curr_est.append(alpha_i_change_pre[0]-alpha_i_change_post[0])
+                coeffs_hat_total_train = optim_boyd(C=C_full_train, H_s=basis_matrices)
+                p_val_min = np.inf
+                test_stat_max = 0
+                for i in range(M):
+                    alpha_i_change_pre = coeffs_hat_total_train.copy()
+                    alpha_i_change_post = coeffs_hat_total_train.copy()
+                    curr_alpha_i_pre = optim_boyd_dc(C=C_one_train, H=basis_matrices[i])
+                    curr_alpha_i_post = optim_boyd_dc(C=C_two, H=basis_matrices[i])
+                    alpha_i_change_pre[i] = curr_alpha_i_pre
+                    alpha_i_change_post[i] = curr_alpha_i_post
+                    null_likelihood = full_likelihood(coeffs_hat_total_train, basis_matrices, C_full_train, N=data_full_train.shape[1], 
+                                                        lam=5e-2, include_l1=False, debug_title='global')
+                    # # likelihood on pre data, alpha_one change
+                    alt_likelihood_alpha_i_pre = full_likelihood(alpha_i_change_pre, basis_matrices, C_one_train, N=data_one_train.shape[1], 
+                                                                    lam=5e-2, include_l1=False, debug_title='Pre')
+                    # likelihood on post data, alpha_one change
+                    alt_likelihood_alpha_i_post = full_likelihood(alpha_i_change_post, basis_matrices, C_two, N=data_two.shape[1], 
+                                                                    lam=5e-2, include_l1=False, debug_title='Post')
+                    alt_likelihood_alpha_i = alt_likelihood_alpha_i_pre + alt_likelihood_alpha_i_post
+                    dof = 2
+                    test_stat_i, p_val_i = likelihood_ratio_test(null_likelihood, 
+                                                        alt_likelihood_alpha_i, dof, log_pvals=1)
+                    curr_mat = symmetrize_from_vector(basis_matrices[i], dim)
+                    nonzero_cols = np.nonzero(np.any(curr_mat != 0, axis=0))[0]
+                    C_val = len(nonzero_cols)
+                    if C_val > 0:
+                        correction_factor = dim/C_val
+                        #print(correction_factor)
+                        # correct p_vals for cluster at all time points independently
+                        p_val_i = p_val_i*correction_factor
+                    else:
+                        p_val_i = 1.0
+                    if p_val_i < p_val_min:
+                        p_val_min = p_val_i
+                        test_stat_max = test_stat_i
+                p_vals_curr_est.append(p_val_min)
+                lrt_vals_curr_est.append(test_stat_max)
+                coeff_diffs_curr_est.append(alpha_i_change_pre[0]-alpha_i_change_post[0]) # this shouldn't be used for anything really
+
+
+
                 """"""
 
-                clime_init = clime_init_fn(5e-2, data_one.T)
+                #clime_init = clime_init_fn(5e-2, data_one.T)
+                clime_init = clime_init_fn(5e-2, data_one_train.T) # this one has more data used
                 g1 = calc_g1(w)
                 g2 = calc_g2(w)
                 rhat0 = calc_rhat(clime_init, dim)

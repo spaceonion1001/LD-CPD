@@ -69,6 +69,7 @@ def get_args():
     parser.add_argument('--sim_scale', type=float, default=0.8)
     parser.add_argument('--random_seed', type=int, default=42)
     parser.add_argument('--window_size', type=int, default=100)
+    parser.add_argument('--post_window_size', type=int, default=20)
     parser.add_argument('--step_size', type=int, default=1)
     parser.add_argument('--burn_in', type=int, default=100)
     parser.add_argument('--buffer_size', type=int, default=50)

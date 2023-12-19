@@ -61,6 +61,7 @@ def get_args():
     parser.add_argument('--random_seed', type=int, default=42)
     parser.add_argument('--train_percent', type=float, default=0.25)
     parser.add_argument('--window_size', type=int, default=100)
+    parser.add_argument('--post_window_size', type=int, default=20)
     parser.add_argument('--step_size', type=int, default=1)
     parser.add_argument('--num_coeffs_change', type=int, default=2)
     parser.add_argument('--results_path', type=str, default='/home/dink/Documents/Research/Correlation-Changepoint-Detection/results')
