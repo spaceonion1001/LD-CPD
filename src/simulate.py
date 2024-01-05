@@ -1,9 +1,10 @@
 from re import L
 from venv import create
 import numpy as np
-from sklearn.datasets import make_spd_matrix
+from sklearn.datasets import make_spd_matrix, make_sparse_spd_matrix
 from sklearn.preprocessing import scale
-from utils import is_pos_def, is_symmetric, symmetrize_from_vector, symmetrize_from_vector_alt
+from sklearn.covariance import GraphicalLasso, GraphicalLassoCV
+from utils import is_pos_def, is_symmetric, symmetrize_from_vector, symmetrize_from_vector_alt, scale_data
 from numpy.linalg import inv as inv
 from statsmodels.tsa.vector_ar.var_model import VARProcess
 import matplotlib.pyplot as plt
@@ -12,22 +13,86 @@ from scipy.cluster.hierarchy import dendrogram, linkage, fcluster
 import os
 
 from utils import vectorize_matrix, symmetrize_from_vector
+import networkx as nx
+import copy
 
-def generate_matrices_orthogonal(prec_coeffs=None, M=2, dim=4, to_print=True):
+def gilbert_graph(dim, seed):
+    gr = nx.fast_gnp_random_graph(n=dim, p=3/dim, seed=seed, directed=False)
+    A = nx.adjacency_matrix(gr).todense()
+    #np.fill_diagonal(A, 1)
+    return A
+
+def lacz_sampling(adj):
+    """
+    adj: adjacency matrix
+    """
+    A = adj.astype(float)
+    dim = A.shape[0]
+    for j in range(1, dim):
+        for i in range(j):
+            if A[i, j] == 1:
+                val_neg = np.random.uniform(-0.9, -0.5)
+                val_pos = np.random.uniform(0.5, 0.9)
+                pos_neg = np.random.choice([-1, 1])
+                if pos_neg < 0:
+                    chosen_val = val_neg
+                else:
+                    chosen_val = val_pos
+                A[i][j] = chosen_val
+                A[j][i] = A[i][j]
+    min_eigval = -np.round(np.linalg.eig(A)[0].min(), decimals=1) + 0.05
+    A = A + min_eigval*np.eye(dim)
+    A = 1/(min_eigval) * A
+
+    return A
+
+
+def generate_matrices_orthogonal(prec_coeffs=None, M=2, dim=4, to_print=True, lam=1e-1, seed=42, linkage_type='single'):
+    print(">>  Generating H Matrices - M {}; Dim {}; Lambda {}  <<".format(M, dim, lam))
     H_s = []
     if not prec_coeffs:
         prec_coeffs = np.random.rand(M)
     if (prec_coeffs <= 0.).sum() > 0:
         prec_coeffs = prec_coeffs + np.abs(prec_coeffs.min()) + 0.5 # add adjustment so non-negative
-    precision = make_spd_matrix(dim)
-    precision = (precision+precision.T)/2
+    """"""
+    #precision = make_spd_matrix(dim)
+    #precision = make_sparse_spd_matrix(dim=dim, alpha=0.9, norm_diag=True, random_state=seed)
+    #delta = np.abs(np.min(np.linalg.eig(precision)[0])) + 0.01
+    #delta_times_I = np.eye(dim)*delta
+    #precision = precision + delta_times_I
+    """"""
+
+    adj = gilbert_graph(dim=dim, seed=seed)
+    precision = lacz_sampling(adj)
+
+
+
+    #print((precision == 0).sum()/len(precision.flatten()))
+    #####
+    # data_temp, _ = sim_data(covar=inv(precision), dim=dim, N=20000)
+    # #glasso = GraphicalLasso(max_iter=1500, alpha=0.05, tol=1e-4, verbose=False).fit(data_temp.T)
+    # glasso = GraphicalLassoCV(alphas=[1e-1, 1e-2, 5e-1, 5e-2, 1.0], n_refinements=4, tol=1e-4, max_iter=1500, cv=5).fit(data_temp.T)
+    # precision = glasso.precision_.copy()
+    ####
+
+    # precision = (precision+precision.T)/2
+    # precision = (precision - precision.min())/(precision.max() - precision.min())*2 - 1
+    # eps_mask = (np.abs(precision) <= 0.2)
+    # precision[eps_mask] = 0.0
+    # np.fill_diagonal(precision, 1.0)
+    # precision = get_near_psd(precision)
+    # precision = precision/precision.max()
+    # print(np.linalg.eig(precision)[0].max())
+    ####
+    
+    #print(precision.max(), precision.min(), np.diag(precision))
     assert is_pos_def(precision), "Not Positive Definite Precision Matrix"
     clust_dist_mat = np.abs(precision)
     np.fill_diagonal(clust_dist_mat, 0.0)
     clust_dist_mat = (clust_dist_mat.max()+1e-5) - clust_dist_mat
     np.fill_diagonal(clust_dist_mat, 0.0)
     pairwise_distances = hierarchy.distance.pdist(clust_dist_mat)
-    Z = linkage(pairwise_distances, method='average')
+    Z = linkage(pairwise_distances, method=linkage_type)
     cutree1 = hierarchy.cut_tree(Z, n_clusters=M).squeeze()
     for i in range(max(set(cutree1))+1): # iterate over clusters
         idxs = np.where(cutree1 == i)[0] # indexes for given cluster
@@ -84,7 +149,7 @@ def collect_precision_matrix(H_s, prec_coeffs, P):
     psi_hat = np.sum(np.expand_dims(prec_coeffs, 1)*H_s, 0)
     psi_hat = symmetrize_from_vector(psi_hat, P)
     #precision = (prec_coeffs.reshape(-1, 1, 1)*H_s).sum(0)
-    
+    assert is_pos_def(psi_hat), "Not Pos Def"
     return psi_hat
 
 def slow_permutations(upper_indices, nonzero_cols):
@@ -276,7 +341,7 @@ def sim_changepoint_mv_normal_orthogonal_mult_coeff(sim_scale=0.8, M=2, dim=4, N
 def get_near_psd(A):
     C = (A + A.T)/2
     eigval, eigvec = np.linalg.eig(C)
-    eigval[eigval < 0] = 0
+    eigval[eigval <= 0.0] = 1e-8
 
     return eigvec.dot(np.diag(eigval)).dot(eigvec.T)
 
@@ -287,7 +352,7 @@ def sim_data(covar, dim, N=1000):
     
     assert is_symmetric(covar), is_pos_def(covar)
     data_sim = np.random.multivariate_normal(np.zeros(dim), covar, N).T
-    data_sim = data_sim - data_sim.mean()
+    #data_sim = (data_sim - data_sim.mean())/data_sim.std()
     C = np.cov(data_sim)
     
     return data_sim, C

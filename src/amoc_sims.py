@@ -25,6 +25,7 @@ matplotlib.use('Agg')
 
 def plot_confidence_interval(x, values, z=1.96, color='#2187bb', horizontal_line_width=0.25, constrain=False):
     mean = statistics.mean(values)
+    median = statistics.median(values)
     stdev = statistics.stdev(values)
     confidence_interval = z * stdev / sqrt(len(values))
 
@@ -39,7 +40,7 @@ def plot_confidence_interval(x, values, z=1.96, color='#2187bb', horizontal_line
     plt.plot([left, right], [top, top], color=color)
     plt.plot([left, right], [bottom, bottom], color=color)
     plt.plot(x, mean, 'o', color='#f44336')
-
+    plt.plot(x, median, 'o', color='yellow')
     return mean, confidence_interval
 
 def kesh_p_value(test_statistics):
@@ -596,11 +597,11 @@ def main_sims():
                 sorted_detect_result_kesh = detect_result_kesh #sorted(detect_result_kesh, reverse=False)
 
                 plt.step(sorted_lrt_result_cpd, sorted_detect_result_cpd, '-.r', 
-                        label='Cai', where='post')
+                        label='Ours', where='post')
                 plt.step(sorted_lrt_result_kesh, sorted_detect_result_kesh, '-.g', 
                         label='Kesh', where='post')
                 plt.step(sorted_lrt_result_cai, sorted_detect_result_cai, '-.b', 
-                        label='Ours', where='post')
+                        label='Cai', where='post')
                 plt.ylabel("Detect Time")
                 plt.xlabel("FPR")
                 plt.title("{} Seed {}".format(sim_type, curr_seed))
@@ -712,7 +713,8 @@ def main_mesonet(storm_name='center'):
 
     Will be more involved. Mainly for CP location identification with storm pairings
     """
-    window_size = 400 # this is fixed currently
+    window_size = 600 # this is fixed currently
+    post_window_size = 20 # this is fixed currently
     dim = 35 # this is fixed currently
     curr_path = os.getcwd()
     save_path = os.path.join(curr_path, 'amoc_figs/')
@@ -750,7 +752,7 @@ def main_mesonet(storm_name='center'):
         pvals_cpd = cpd_vals[:, cutoff:][window_size:] # just the p-values, exclude first window size
         stats_cpd = cpd_vals[:, 0:cutoff][window_size:] # just the stats, exclude first window size
         kesh_vals = np.loadtxt(os.path.join(kesh_path, "{}_storm_{}_final_data.csv_global_test_vals.csv".format(storm_name, num)), delimiter=',')
-        cai_vals = np.loadtxt(os.path.join(cai_path, "{}_storm_{}_final_data.csv_global_test_vals.csv".format(storm_name, num)), delimiter=',')
+        #cai_vals = np.loadtxt(os.path.join(cai_path, "{}_storm_{}_final_data.csv_global_test_vals.csv".format(storm_name, num)), delimiter=',')
         actual_final_data = pd.read_csv(os.path.join(storm_data_path, '{}_storm_{}_final_data.csv').format(storm_name, num))
         actual_final_data['YYYYMMDDhhmm'] = pd.to_datetime(actual_final_data['YYYYMMDDhhmm'])
         actual_storm_data = pd.read_csv(os.path.join(storm_data_path, '{}_storm_{}_storm_data.csv').format(storm_name, num))
@@ -769,29 +771,32 @@ def main_mesonet(storm_name='center'):
                 unique_tuples.append(curr_tuple)
         cp_location = storm_start_idx
         # subtract off window_size to handle the sliding window edges at start/end of data
-        first_d_time = cp_location - window_size + 1 - window_size
-        last_d_time = cp_location + storm_end_idx - storm_start_idx + 1 - window_size# how long is the storm contained in the window as it slides over the data - at least window_size times (right to left)
+        first_d_time = cp_location - post_window_size + 1 - post_window_size
+        last_d_time = cp_location + storm_end_idx - storm_start_idx + 1 - post_window_size # how long is the storm contained in the window as it slides over the data - at least window_size times (right to left)
         print("Storm type {}; Duration {}".format(storm_type, storm_end_idx-storm_start_idx))
+        print("Storm Start {} End {}".format(storm_start_idx, storm_end_idx))
+        print("Final Data shape {}".format(actual_final_data.shape))
         #print(pvals_cpd.shape, stats_cpd.shape, kesh_vals.shape, actual_final_data.shape)
         
         
         #print(stats_cpd.min(), stats_cpd.max(), pvals_cpd.max())
         pvals_cpd = pvals_cpd.min(axis=1)
         pvals_kesh = kesh_p_value(kesh_vals)
-        pvals_cai = cai_p_value(cai_vals, dim)
+        #pvals_cai = cai_p_value(cai_vals, dim)
 
         """
         Cut out points after storm
         """
         pvals_cpd = pvals_cpd[0:last_d_time+1]
         pvals_kesh = pvals_kesh[0:last_d_time+1]
-        pvals_cai = pvals_cai[0:last_d_time+1]
+        #pvals_cai = pvals_cai[0:last_d_time+1]
         stats_cpd = stats_cpd.max(axis=1)[0:last_d_time+1]
         kesh_vals = kesh_vals[0:last_d_time+1]
-        cai_vals = cai_vals[0:last_d_time+1]
+        #cai_vals = cai_vals[0:last_d_time+1]
         """
         """
-
+        print(pvals_cpd.shape, kesh_vals.shape)
+        #exit()
         all_thresholds = sorted(list(set(np.concatenate((pvals_cpd, pvals_kesh)))))
 
         # lrt_result_cpd, detect_result_cpd = amoc_p_vals(pvals_cpd, 
@@ -801,9 +806,9 @@ def main_mesonet(storm_name='center'):
         #                                                 thresholds=all_thresholds
         #                                                 )
         
-        lrt_result_cpd, detect_result_cpd = amoc_lrt_vals(stats_cpd, first_possible_detect_time=first_d_time, last_possible_detect_time=last_d_time, thresholds=None, p_values=False)
+        lrt_result_cpd, detect_result_cpd = amoc_lrt_vals(pvals_cpd, first_possible_detect_time=first_d_time, last_possible_detect_time=last_d_time, thresholds=None, p_values=True)
         lrt_result_kesh, detect_result_kesh = amoc_lrt_vals(kesh_vals, first_possible_detect_time=first_d_time, last_possible_detect_time=last_d_time, thresholds=None, p_values=False)
-        lrt_result_cai, detect_result_cai = amoc_lrt_vals(cai_vals, first_possible_detect_time=first_d_time, last_possible_detect_time=last_d_time, thresholds=None, p_values=False)
+        #lrt_result_cai, detect_result_cai = amoc_lrt_vals(cai_vals, first_possible_detect_time=first_d_time, last_possible_detect_time=last_d_time, thresholds=None, p_values=False)
         print(detect_result_cpd.min(), detect_result_cpd.max(), detect_result_cpd.mean())
         # lrt_result_cpd, detect_result_cpd = amoc_lrt_vals(pvals_cpd, first_possible_detect_time=first_d_time, last_possible_detect_time=last_d_time, thresholds=None, p_values=True)
         # lrt_result_kesh, detect_result_kesh = amoc_lrt_vals(pvals_kesh, first_possible_detect_time=first_d_time, last_possible_detect_time=last_d_time, thresholds=None, p_values=True)
@@ -817,34 +822,34 @@ def main_mesonet(storm_name='center'):
         # plt.savefig('./detect_temp_{}.png'.format(num))
         # plt.close()
         sorted_lrt_result_cpd = lrt_result_cpd  # sorted(lrt_result_cpd, reverse=True) # 
-        sorted_lrt_result_cai = lrt_result_cai #sorted(lrt_result_cai, reverse=True)
+        #sorted_lrt_result_cai = lrt_result_cai #sorted(lrt_result_cai, reverse=True)
         sorted_lrt_result_kesh = lrt_result_kesh  #sorted(lrt_result_kesh, reverse=True) #
         sorted_detect_result_cpd = detect_result_cpd  #sorted(detect_result_cpd, reverse=False) # 
-        sorted_detect_result_cai = detect_result_cai #sorted(detect_result_cai, reverse=False)
+        #sorted_detect_result_cai = detect_result_cai #sorted(detect_result_cai, reverse=False)
         sorted_detect_result_kesh = detect_result_kesh  # sorted(detect_result_kesh, reverse=False) #
 
         merged_list_ours = [(sorted_lrt_result_cpd[i], 
                             sorted_detect_result_cpd[i]) for i in range(0, len(lrt_result_cpd))]
-        merged_list_cai = [(sorted_lrt_result_cai[i], 
-                            sorted_detect_result_cai[i]) for i in range(0, len(lrt_result_cai))]
+        # merged_list_cai = [(sorted_lrt_result_cai[i], 
+        #                     sorted_detect_result_cai[i]) for i in range(0, len(lrt_result_cai))]
         merged_list_kesh = [(sorted_lrt_result_kesh[i], 
                             sorted_detect_result_kesh[i]) for i in range(0, len(lrt_result_kesh))]
         fpr_detect_pairs_ours.append(merged_list_ours)
-        fpr_detect_pairs_cai.append(merged_list_cai)
+        #fpr_detect_pairs_cai.append(merged_list_cai)
         fpr_detect_pairs_kesh.append(merged_list_kesh)
         lol_ours_fprs.append(sorted_lrt_result_cpd)
         lol_ours_dts.append(sorted_detect_result_cpd)
-        lol_cai_fprs.append(sorted_lrt_result_cai)
-        lol_cai_dts.append(sorted_detect_result_cai)
+        #lol_cai_fprs.append(sorted_lrt_result_cai)
+        #lol_cai_dts.append(sorted_detect_result_cai)
         lol_kesh_fprs.append(sorted_lrt_result_kesh)
         lol_kesh_dts.append(sorted_detect_result_kesh)
 
         plt.step(sorted_lrt_result_cpd, sorted_detect_result_cpd, '-.r', 
-                        label='Cai', where='post')
+                        label='Ours', where='post')
         plt.step(sorted_lrt_result_kesh, sorted_detect_result_kesh, '-.g', 
                 label='Kesh', where='post')
-        plt.step(sorted_lrt_result_cai, sorted_detect_result_cai, '-.b', 
-                label='Ours', where='post')
+        # plt.step(sorted_lrt_result_cai, sorted_detect_result_cai, '-.b', 
+        #         label='Cai', where='post')
         plt.ylabel("Detect Time (5min Intervals)")
         plt.xlabel("FPR")
         plt.title("{} Storm_{}".format(storm_name, num))
@@ -855,30 +860,33 @@ def main_mesonet(storm_name='center'):
     #means_per_threshold_cai, thresholds_cai, fpr_dict_cai = average_AMOC(fpr_detect_pairs_cai)
     #means_per_threshold_kesh, thresholds_kesh, fpr_dict_kesh = average_AMOC(fpr_detect_pairs_kesh)
     means_per_threshold_ours, thresholds_ours, fpr_dict_ours = average_AMOC_new(fprs=lol_ours_fprs, dts=lol_ours_dts, debug_title='Ours')
-    means_per_threshold_cai, thresholds_cai, fpr_dict_cai = average_AMOC_new(fprs=lol_cai_fprs, dts=lol_cai_dts, debug_title='Cai')
+    #means_per_threshold_cai, thresholds_cai, fpr_dict_cai = average_AMOC_new(fprs=lol_cai_fprs, dts=lol_cai_dts, debug_title='Cai')
     means_per_threshold_kesh, thresholds_kesh, fpr_dict_kesh = average_AMOC_new(fprs=lol_kesh_fprs, dts=lol_kesh_dts, debug_title='Kesh')
 
     
     plot_idx_counter = 1
     ylim_max = 0.0
     for fpr_r in [0.01, 0.05, 0.1]:
-        plt.xticks([1, 2, 3], ["{}_ours".format(fpr_r), "{}_cai".format(fpr_r), "{}_kesh".format(fpr_r)])
+        #plt.xticks([1, 2, 3], ["{}_ours".format(fpr_r), "{}_cai".format(fpr_r), "{}_kesh".format(fpr_r)])
+        plt.xticks([1, 2], ["{}_ours".format(fpr_r), "{}_kesh".format(fpr_r)])
         plt.xticks(rotation=45, ha='right')
         our_d_vals = fpr_dict_ours[fpr_r]
-        cai_d_vals = fpr_dict_cai[fpr_r]
+        #cai_d_vals = fpr_dict_cai[fpr_r]
         kesh_d_vals = fpr_dict_kesh[fpr_r]
         our_max = max(our_d_vals)
-        cai_max = max(cai_d_vals)
+        #cai_max = max(cai_d_vals)
         kesh_max = max(kesh_d_vals)
-        glob_max = max([our_max, cai_max, kesh_max])
+        #glob_max = max([our_max, cai_max, kesh_max])
+        glob_max = max([our_max, kesh_max])
         if glob_max > ylim_max:
             ylim_max = glob_max
         plot_confidence_interval(x=1, values=our_d_vals, z=1.96, color='#2187bb', horizontal_line_width=0.25)
         plot_idx_counter += 1
-        plot_confidence_interval(x=2, values=cai_d_vals, z=1.96, color='#2187bb', horizontal_line_width=0.25)
+        #plot_confidence_interval(x=2, values=cai_d_vals, z=1.96, color='#2187bb', horizontal_line_width=0.25)
         plot_idx_counter += 1
-        plot_confidence_interval(x=3, values=kesh_d_vals, z=1.96, color='#2187bb', horizontal_line_width=0.25)
+        #plot_confidence_interval(x=3, values=kesh_d_vals, z=1.96, color='#2187bb', horizontal_line_width=0.25)
         plot_idx_counter += 1
+        plot_confidence_interval(x=2, values=kesh_d_vals, z=1.96, color='#2187bb', horizontal_line_width=0.25)
         plt.ylim(0.0, ylim_max)
         plt.title("Confidence Intervals {} Storm".format(storm_name))
         plt.ylabel("Detect Time (5min Intervals)")
@@ -889,10 +897,10 @@ def main_mesonet(storm_name='center'):
 
     threshold_idx_mask = np.where(thresholds_ours <= 0.2) # THESE ARE IDENTICAL INDICES ACROSS THE ALGORITHMS
     means_per_threshold_ours = means_per_threshold_ours[threshold_idx_mask]
-    means_per_threshold_cai = means_per_threshold_cai[threshold_idx_mask]
+    #means_per_threshold_cai = means_per_threshold_cai[threshold_idx_mask]
     means_per_threshold_kesh = means_per_threshold_kesh[threshold_idx_mask]
     thresholds_ours = thresholds_ours[threshold_idx_mask]
-    thresholds_cai = thresholds_cai[threshold_idx_mask]
+    #thresholds_cai = thresholds_cai[threshold_idx_mask]
     thresholds_kesh = thresholds_kesh[threshold_idx_mask]
 
     #detect_idx_mask_ours = np.where(means_per_threshold_ours <= 200) # maximum detection time, 2*window_size
@@ -913,7 +921,7 @@ def main_mesonet(storm_name='center'):
     ###########################
     """
     plt.plot(thresholds_ours, means_per_threshold_ours, '.b-', label='Ours')
-    plt.plot(thresholds_cai, means_per_threshold_cai, '.r-', label='Cai')
+    #plt.plot(thresholds_cai, means_per_threshold_cai, '.r-', label='Cai')
     plt.plot(thresholds_kesh, means_per_threshold_kesh, '.g-', label='Kesh')
     plt.xlabel('FPR')
     plt.ylabel('Detection Time (5min Intervals)')

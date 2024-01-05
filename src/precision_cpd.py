@@ -56,6 +56,9 @@ class PrecisionCPD:
     def fit_glasso(self, data):
         print("GLASSO DATA {}".format(data.shape))
         self.glasso = GraphicalLasso(max_iter=500, alpha=self.lam, tol=1e-5, verbose=False).fit(data)
+        #print(np.count_nonzero(self.glasso.precision_)/len(self.glasso.precision_.flatten()))
+        #exit()
+        
         #self.inv_cov = inv(np.cov(data.T, bias=True))
         #self.inv_cov += np.eye(self.inv_cov.shape[0])*np.abs(np.linalg.eig(self.inv_cov)[0].min()) + 0.05
         #assert(is_pos_def(self.inv_cov))
@@ -227,9 +230,10 @@ class PrecisionCPD:
         ######
         # plot the dendrogram 
         # plt.figure()
-        #dn = hierarchy.dendrogram(Z)
-        #plt.savefig(os.path.join(self.fig_dir_path, "dendrogram.png"))
-        #plt.close()
+        # dn = hierarchy.dendrogram(Z)
+        # #plt.savefig(os.path.join(self.fig_dir_path, "dendrogram.png"))
+        # plt.savefig(os.path.join('debugging_figs', "dendrogram.png"))
+        # plt.close()
         ######
         cutree1 = hierarchy.cut_tree(Z, n_clusters=self.args.base_M).squeeze()
         if self.args.recursion:
@@ -385,7 +389,9 @@ class PrecisionCPD:
     
     def fit_optim_candidate_point(self, C_one, C_two, C_full, H_s, window_size, lam):
         coeffs_hat_total = optim_boyd(C=C_full, H_s=H_s)
-        null_likelihood = full_likelihood(coeffs_hat_total, H_s, C_full, N=window_size*2, 
+        # null_likelihood = full_likelihood(coeffs_hat_total, H_s, C_full, N=window_size*2, 
+        #                                   lam=lam, include_l1=False, debug_title='global')
+        null_likelihood = full_likelihood(coeffs_hat_total, H_s, C_full, N=window_size+self.post_window_size, 
                                           lam=lam, include_l1=False, debug_title='global')
         test_stats_m = []
         p_vals_m = []
@@ -405,7 +411,7 @@ class PrecisionCPD:
             alt_likelihood_alpha_i_pre = full_likelihood(alpha_i_change_pre, H_s, C_one, N=window_size, 
                                                          lam=lam, include_l1=False, debug_title='Pre')
             # likelihood on post data, alpha_one change
-            alt_likelihood_alpha_i_post = full_likelihood(alpha_i_change_post, H_s, C_two, N=window_size, 
+            alt_likelihood_alpha_i_post = full_likelihood(alpha_i_change_post, H_s, C_two, N=self.post_window_size, 
                                                           lam=lam, include_l1=False, debug_title='Post')
             alt_likelihood_alpha_i = alt_likelihood_alpha_i_pre + alt_likelihood_alpha_i_post
             #alt_likelihood_alpha_i_alt = alt_likelihood_alpha_i_pre_alt + alt_likelihood_alpha_i_post_alt
@@ -435,7 +441,7 @@ class PrecisionCPD:
 
         # store data for recursion - cp identification
         data_one = data_full[:, 0:self.args.window_size]
-        data_two = data_full[:, candidate_point:(candidate_point + self.args.window_size)]
+        data_two = data_full[:, candidate_point:(candidate_point + self.post_window_size)]
         data_total_window = np.concatenate((data_one, data_two), axis=1)
         C_one = np.cov(data_one, bias=True)
         C_one = C_one + np.eye(C_one.shape[0])*1e-8
@@ -541,6 +547,7 @@ class PrecisionCPD:
         """
         """
         self.print_clusters_rv()
+        exit()
         # if bool(self.full_basis):
         #     basis_mats = self.basis_matrices_full
         lrt_vals_all, p_vals_all = LRT_individual_coeffs_full_likelihood(data_full, M=basis_mats.shape[0], dim=data_full.shape[0], H_s=basis_mats, 

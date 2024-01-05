@@ -9,11 +9,14 @@ from math import sqrt
 matplotlib.use("Agg")
 sns.set()
 
-from sklearn.covariance import GraphicalLasso
+from sklearn.covariance import GraphicalLasso, GraphicalLassoCV
 from sklearn.preprocessing import StandardScaler
 from scipy.stats import chi2, multivariate_normal
-from sklearn.metrics import silhouette_score, pairwise_distances as pairwise_d
+from sklearn.metrics import f1_score, accuracy_score, precision_score, recall_score, silhouette_score, pairwise_distances as pairwise_d
 from sklearn.utils.extmath import fast_logdet
+from sklearn.preprocessing import StandardScaler
+
+from inverse_covariance import QuicGraphicalLasso
 
 
 from tqdm import tqdm
@@ -62,18 +65,20 @@ import scipy
 def get_args():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--lam', type=float, default=5e-2)
+    parser.add_argument('--lam', type=float, default=1e-1)
     parser.add_argument('--M', type=int, default=8)
     parser.add_argument('--dim', type=int, default=80)
     parser.add_argument('--w', type=int, default=100)
     parser.add_argument('--prec_rec', type=int, default=0)
     parser.add_argument('--load_results', type=int, default=0)
+    parser.add_argument('--linkage', type=str, default='single')
     args = parser.parse_args()
 
     return args
 
 def plot_confidence_interval(x, values, z=1.96, color='#2187bb', horizontal_line_width=0.25, constrain=False):
     mean = statistics.mean(values)
+    #median = statistics.median(values)
     stdev = statistics.stdev(values)
     confidence_interval = z * stdev / sqrt(len(values))
 
@@ -88,6 +93,7 @@ def plot_confidence_interval(x, values, z=1.96, color='#2187bb', horizontal_line
     plt.plot([left, right], [top, top], color=color)
     plt.plot([left, right], [bottom, bottom], color=color)
     plt.plot(x, mean, 'o', color='#f44336')
+    #plt.plot(x, median, 'o', color='yellow')
 
     return mean, confidence_interval
 
@@ -140,7 +146,7 @@ def recursive_split(basis_mat, dim):
     np.fill_diagonal(clust_dist_mat, 0.0)
     ###########
     pairwise_distances = sch.distance.pdist(clust_dist_mat)
-    Z = linkage(pairwise_distances, method='complete')
+    Z = linkage(pairwise_distances, method='single')
     # BREAK INTO 2 NEW CLUSTERS
     cutree = hierarchy.cut_tree(Z, n_clusters=2).squeeze()
     #print(np.nonzero(np.any(basis_mat != 0, axis=0))[0])
@@ -169,7 +175,7 @@ def recursive_split(basis_mat, dim):
         nonzero_cols = np.nonzero(np.any(curr_mat != 0, axis=0))[0]
         #print(nonzero_cols)
         #print("NONZERO COLS {}".format(nonzero_cols))
-        if len(nonzero_cols) < 2: # don't split into a singleton cluster - not informative - 3x3 is the minimum for splitting
+        if len(nonzero_cols) < 1: # don't split into a singleton cluster - not informative - 3x3 is the minimum for splitting
             #print("...Recursion Complete for Cluster Size {}...".format(len(nonzero_cols)))
             performed_split = False
             pass
@@ -197,7 +203,7 @@ def bfs_basis_mats(data_train, curr_basis_mats, curr_silhoutte_score, dim, recur
         #     level_basis_mats.append(orig_mat)
         #     continue
         nonzero_cols = np.nonzero(np.any(mat != 0, axis=0))[0]
-        if len(nonzero_cols) <= recursion_min:
+        if len(nonzero_cols) <= 2:
             #print("...Recursion Complete for Singleton Cluster...")
             level_basis_mats.append(orig_mat)
             continue
@@ -219,6 +225,7 @@ def bfs_basis_mats(data_train, curr_basis_mats, curr_silhoutte_score, dim, recur
         dof = 0.5*train_C.shape[0]*(train_C.shape[0]+1) - 1 # q here is just 1 since we are cluster specific
         chisquare_val = chi2.sf(anderson_lrt_value, dof)
         #print("CHISQUARE P-VAL {} DOF {}".format(chisquare_val, dof))
+        #print("Splitting")
         new_mats, performed_split = recursive_split(mat, dim=dim)
         #print(new_mats.shape, performed_split)
         if performed_split:
@@ -356,6 +363,7 @@ def collect_test_results(M, dim, w):
             """"""
             # est H LRT
             glasso = GraphicalLasso(max_iter=1000, alpha=5e-2, tol=1e-5, verbose=False).fit(data_one.T)
+            #glasso = QuicGraphLasso(lam=5e-2).fit(data_one.T)
             precision = glasso.precision_.copy()
             clust_dist_mat = np.abs(precision)
             np.fill_diagonal(clust_dist_mat, 0.0)
@@ -365,7 +373,7 @@ def collect_test_results(M, dim, w):
             ###########
             pairwise_distances = sch.distance.pdist(clust_dist_mat)
             #pairwise_distances = squareform(clust_dist_mat)
-            Z = linkage(pairwise_distances, method='complete')
+            Z = linkage(pairwise_distances, method='single')
             cutree1 = hierarchy.cut_tree(Z, n_clusters=M).squeeze()
             basis_matrices = []
             for i in range(max(set(cutree1))+1): # iterate over clusters
@@ -438,16 +446,28 @@ def collect_test_results(M, dim, w):
     
     return total_results
 
-def collect_prec_rec_results(M, w):
+def collect_prec_rec_results(M, lam, linkage_type='single'):
     # collect results
+    post_window_size = 200
+    w = post_window_size
     seed_list = np.arange(0, 100)
     coeff_change_mags = np.round(np.arange(0.0, 1.0, 0.1), 2).tolist()
     dim_results = {}
     dims = [20, 40, 60, 80]
+    #dims = [80]
+    dim_counter = 0
     for dim in dims:
-        H_s = generate_matrices_orthogonal(M=M, dim=dim, to_print=False)[0]
-        prec_one = collect_precision_matrix(H_s=H_s, prec_coeffs=np.ones(M), P=dim)
+        M = M + 2*dim_counter # scale M with the dimensionality
+        H_s, prec_temp, _ = generate_matrices_orthogonal(M=M, dim=dim, to_print=False, lam=lam, linkage_type=linkage_type)
+        H_s_true = H_s.copy()
+        first_prec_coeffs = np.ones(M)
+        prec_one = collect_precision_matrix(H_s=H_s_true, prec_coeffs=first_prec_coeffs, P=dim)
+        print("Sparsity {}".format((prec_one == 0).sum()/len(prec_one.flatten())))
         total_results = {}
+        dim_precisions = []
+        dim_f1 = []
+        dim_recall = []
+        dim_accuracy = []
         for curr_change_mag in coeff_change_mags:
             coeff_diffs_curr = []
             coeff_diffs_curr_est = []
@@ -461,46 +481,59 @@ def collect_prec_rec_results(M, w):
             test_vals_kesh_true_curr = []
             mag_results = {}
             for curr_seed in tqdm(seed_list):
-                second_prec_coeffs = np.ones(M)
+                np.random.seed(curr_seed)
+                second_prec_coeffs = first_prec_coeffs.copy()
                 second_prec_coeffs[0] = second_prec_coeffs[0] - curr_change_mag
                 prec_two = collect_precision_matrix(H_s=H_s, prec_coeffs=second_prec_coeffs, P=dim)
-                data_one, _ = sim_data(covar=inv(prec_one), dim=dim, N=100)
+                #data_one, _ = sim_data(covar=inv(prec_one), dim=dim, N=200)
                 if dim == 20:
                     data_one_train, _ = sim_data(covar=inv(prec_one), dim=dim, N=100) # identical to data_one, used for fitting the initial Glasso/Clime estimates
                 elif dim == 40:
-                    data_one_train, _ = sim_data(covar=inv(prec_one), dim=dim, N=200) # identical to data_one, used for fitting the initial Glasso/Clime estimates
+                    data_one_train, _ = sim_data(covar=inv(prec_one), dim=dim, N=100) # identical to data_one, used for fitting the initial Glasso/Clime estimates
                 elif dim == 60:
-                    data_one_train, _ = sim_data(covar=inv(prec_one), dim=dim, N=300) # identical to data_one, used for fitting the initial Glasso/Clime estimates
+                    data_one_train, _ = sim_data(covar=inv(prec_one), dim=dim, N=100) # identical to data_one, used for fitting the initial Glasso/Clime estimates
                 elif dim == 80:
-                    data_one_train, _ = sim_data(covar=inv(prec_one), dim=dim, N=400) # identical to data_one, used for fitting the initial Glasso/Clime estimates
-                data_two, _ = sim_data(covar=inv(prec_two), dim=dim, N=100)
-                data_full = np.concatenate((data_one, data_two), axis=1)
+                    data_one_train, _ = sim_data(covar=inv(prec_one), dim=dim, N=100) # identical to data_one, used for fitting the initial Glasso/Clime estimates
+                data_two, _ = sim_data(covar=inv(prec_two), dim=dim, N=post_window_size)
+                data_full = np.concatenate((data_one_train, data_two), axis=1)
                 data_full_train = np.concatenate((data_one_train, data_two), axis=1)
-                C_one = np.cov(data_one, bias=True)
+                scaler = StandardScaler().fit(data_one_train.T)
+                data_one_train = scaler.transform(data_one_train.T).T
+                data_two = scaler.transform(data_two.T).T
+                data_full_train = scaler.transform(data_full_train.T).T
+                C_one = np.cov(data_one_train, bias=True)
                 C_one_train = np.cov(data_one_train, bias=True)
                 C_two = np.cov(data_two, bias=True)
-                C_full = np.cov(data_full, bias=True)
+                C_full = np.cov(data_full_train, bias=True)
                 C_full_train = np.cov(data_full_train, bias=True)
-                coeffs_hat_total = optim_boyd(C=C_full, H_s=H_s)
+                #coeffs_hat_total = optim_boyd(C=C_full, H_s=H_s_true)
+                coeffs_hat_total = optim_boyd(C=C_full_train, H_s=H_s_true)
+                alpha_one = optim_boyd(C=C_one, H_s=H_s_true)
+                alpha_two = optim_boyd(C=C_two, H_s=H_s_true)
+
+                r_max = np.max(np.abs(C_one_train[np.triu_indices(dim, k=1)]))
+                lambda_search = [0.05 + (j*(r_max-0.05))/40 for j in range(1, 41, 1)]
+                """"""
+                # given true H's, estimate coefficients
                 alpha_i_change_pre = coeffs_hat_total.copy()
                 alpha_i_change_post = coeffs_hat_total.copy()
-                curr_alpha_i_pre = optim_boyd_dc(C=C_one, H=H_s[0])
-                curr_alpha_i_post = optim_boyd_dc(C=C_two, H=H_s[0])
+                curr_alpha_i_pre = optim_boyd_dc(C=C_one, H=H_s_true[0])
+                curr_alpha_i_post = optim_boyd_dc(C=C_two, H=H_s_true[0])
                 alpha_i_change_pre[0] = curr_alpha_i_pre
                 alpha_i_change_post[0] = curr_alpha_i_post
-                null_likelihood = full_likelihood(coeffs_hat_total, H_s, C_full, N=data_full.shape[1], 
-                                                    lam=5e-2, include_l1=False, debug_title='global')
+                null_likelihood = full_likelihood(coeffs_hat_total, H_s_true, C_full, N=data_full.shape[1], 
+                                                    lam=lam, include_l1=False, debug_title='global')
                 # # likelihood on pre data, alpha_one change
-                alt_likelihood_alpha_i_pre = full_likelihood(alpha_i_change_pre, H_s, C_one, N=data_one.shape[1], 
-                                                                lam=5e-2, include_l1=False, debug_title='Pre')
+                alt_likelihood_alpha_i_pre = full_likelihood(alpha_i_change_pre, H_s_true, C_one, N=data_one_train.shape[1], 
+                                                                lam=lam, include_l1=False, debug_title='Pre')
                 # likelihood on post data, alpha_one change
-                alt_likelihood_alpha_i_post = full_likelihood(alpha_i_change_post, H_s, C_two, N=data_two.shape[1], 
-                                                                lam=5e-2, include_l1=False, debug_title='Post')
+                alt_likelihood_alpha_i_post = full_likelihood(alpha_i_change_post, H_s_true, C_two, N=data_two.shape[1], 
+                                                                lam=lam, include_l1=False, debug_title='Post')
                 alt_likelihood_alpha_i = alt_likelihood_alpha_i_pre + alt_likelihood_alpha_i_post
                 dof = 2
                 test_stat_i, p_val_i = likelihood_ratio_test(null_likelihood, 
                                                     alt_likelihood_alpha_i, dof, log_pvals=1)
-                curr_mat = symmetrize_from_vector(H_s[0], dim)
+                curr_mat = symmetrize_from_vector(H_s_true[0], dim)
                 nonzero_cols = np.nonzero(np.any(curr_mat != 0, axis=0))[0]
                 C_val = len(nonzero_cols)
                 if C_val > 0:
@@ -513,22 +546,23 @@ def collect_prec_rec_results(M, w):
                 p_vals_curr.append(p_val_i)
                 lrt_vals_curr.append(test_stat_i)
                 coeff_diffs_curr.append(alpha_i_change_pre[0]-alpha_i_change_post[0])
+                """"""
 
                 """"""
                 # true LRT
-                null_likelihood_true = full_likelihood(coeffs_hat_total, H_s, C_full, N=data_full.shape[1], 
-                                                    lam=5e-2, include_l1=False, debug_title='global')
+                null_likelihood_true = full_likelihood(coeffs_hat_total, H_s_true, C_full, N=data_full.shape[1], 
+                                                    lam=lam, include_l1=False, debug_title='global')
                 # # likelihood on pre data, alpha_one change
-                alt_likelihood_alpha_i_pre_true = full_likelihood(np.ones(M), H_s, C_one, N=data_one.shape[1], 
-                                                                lam=5e-2, include_l1=False, debug_title='Pre')
+                alt_likelihood_alpha_i_pre_true = full_likelihood(first_prec_coeffs, H_s_true, C_one, N=data_one_train.shape[1], 
+                                                                lam=lam, include_l1=False, debug_title='Pre')
                 # likelihood on post data, alpha_one change
-                alt_likelihood_alpha_i_post_true = full_likelihood(second_prec_coeffs, H_s, C_two, N=data_two.shape[1], 
-                                                                lam=5e-2, include_l1=False, debug_title='Post')
+                alt_likelihood_alpha_i_post_true = full_likelihood(second_prec_coeffs, H_s_true, C_two, N=data_two.shape[1], 
+                                                                lam=lam, include_l1=False, debug_title='Post')
                 alt_likelihood_alpha_i_true = alt_likelihood_alpha_i_pre_true + alt_likelihood_alpha_i_post_true
                 dof = 2
                 test_stat_i_true, p_val_i_true = likelihood_ratio_test(null_likelihood_true, 
                                                     alt_likelihood_alpha_i_true, dof, log_pvals=1)
-                curr_mat = symmetrize_from_vector(H_s[0], dim)
+                curr_mat = symmetrize_from_vector(H_s_true[0], dim)
                 nonzero_cols = np.nonzero(np.any(curr_mat != 0, axis=0))[0]
                 C_val = len(nonzero_cols)
                 if C_val > 0:
@@ -545,8 +579,25 @@ def collect_prec_rec_results(M, w):
                 """"""
                 # est H LRT
                 #glasso = GraphicalLasso(max_iter=1000, alpha=5e-2, tol=1e-5, verbose=False).fit(data_one.T)
-                glasso = GraphicalLasso(max_iter=1000, alpha=5e-2, tol=1e-5, verbose=False).fit(data_one_train.T) # this one has more data used
+                #glasso = QuicGraphicalLasso(max_iter=500, lam=5e-2, tol=1e-4).fit(data_one_train.T)
+                #glasso = GraphicalLasso(max_iter=1500, alpha=lam, tol=1e-4, verbose=False).fit(data_one_train.T) # this one has more data used
+                glasso = GraphicalLassoCV(alphas=lambda_search, n_refinements=4, tol=1e-4, max_iter=1500, cv=5).fit(data_one_train.T)
                 precision = glasso.precision_.copy()
+                precision[np.abs(precision) <= 0.05] = 0.0
+                #print("Sparsity Est {}".format((precision == 0).sum()/len(precision.flatten())))
+                first_idces = np.sign(np.abs(precision[np.triu_indices(dim, k=1)]))
+                second_indces = np.sign(np.abs(prec_one[np.triu_indices(dim, k=1)]))
+                curr_f1 = f1_score(y_true=second_indces, y_pred=first_idces)
+                curr_precision = precision_score(y_true=second_indces, y_pred=first_idces)
+                curr_recall = recall_score(y_true=second_indces, y_pred=first_idces)
+                curr_acc = accuracy_score(y_true=second_indces, y_pred=first_idces)
+                dim_f1.append(curr_f1)
+                dim_precisions.append(curr_precision)
+                dim_recall.append(curr_recall)
+                dim_accuracy.append(curr_acc)
+                #print(first_idces)
+                ##print(second_indces)
+                #print((first_idces == second_indces).sum()/len(precision[np.triu_indices(dim, k=1)].flatten()))
                 clust_dist_mat = np.abs(precision)
                 np.fill_diagonal(clust_dist_mat, 0.0)
                 ###########
@@ -555,7 +606,7 @@ def collect_prec_rec_results(M, w):
                 ###########
                 pairwise_distances = sch.distance.pdist(clust_dist_mat)
                 #pairwise_distances = squareform(clust_dist_mat)
-                Z = linkage(pairwise_distances, method='complete')
+                Z = linkage(pairwise_distances, method=linkage_type)
                 cutree1 = hierarchy.cut_tree(Z, n_clusters=M).squeeze()
                 basis_matrices = []
                 for i in range(max(set(cutree1))+1): # iterate over clusters
@@ -569,9 +620,50 @@ def collect_prec_rec_results(M, w):
                 basis_matrices = np.array(basis_matrices)
                 curr_silhoutte_score = silhouette_score(clust_dist_mat, cutree1, metric='precomputed')
 
-                basis_matrices = bfs_basis_mats(data_one_train, basis_matrices, curr_silhoutte_score, dim=dim, recursion_min=2, cutree=cutree1, root_dist_mat=clust_dist_mat)
+                #basis_matrices = bfs_basis_mats(data_one_train, basis_matrices, curr_silhoutte_score, dim=dim, recursion_min=1, cutree=cutree1, root_dist_mat=clust_dist_mat)
                 assert is_pos_def(symmetrize_from_vector(basis_matrices.sum(axis=0), dim=dim)), "Not PosDef"
-                
+
+
+                # for i in range(H_s_true.shape[0]):
+                #     curr_mat = symmetrize_from_vector(H_s_true[i], dim)
+                #     #curr_mat = H_s[i]
+                #     nonzero_cols = np.nonzero(np.any(curr_mat != 0, axis=0))[0]
+                #     print("****************************************")
+                #     print("SIMULATION MATRICES")
+                #     if i == (H_s_true.shape[0] - 1):
+                #         print("Sim Basis Matrix {}".format(i))
+                #     else:
+                #         print("Sim Basis Matrix {}".format(i))
+                #     print("Sim Channels Contained {}".format(nonzero_cols))
+                #     #print("Diag: ", set(list(np.diag(curr_mat))))
+                #     #print("OffDiag: ", set(list(curr_mat[np.triu_indices(dim, k=1)])))
+                #     print("****************************************")
+                #     print()
+                # for i in range(basis_matrices.shape[0]):
+                #     curr_mat = symmetrize_from_vector(basis_matrices[i], dim)
+                #     #curr_mat = H_s[i]
+                #     nonzero_cols = np.nonzero(np.any(curr_mat != 0, axis=0))[0]
+                #     print("****************************************")
+                #     print("EST MATRICES")
+                #     if i == (basis_matrices.shape[0] - 1):
+                #         print("Est Basis Matrix {}".format(i))
+                #     else:
+                #         print("Est Basis Matrix {}".format(i))
+                #     print("Est Channels Contained {}".format(nonzero_cols))
+                #     #print("Diag: ", set(list(np.diag(curr_mat))))
+                #     #print("OffDiag: ", set(list(curr_mat[np.triu_indices(dim, k=1)])))
+                #     print("****************************************")
+                #     print()
+                # print("True Precision Matrix", prec_one[0, :]) 
+                # print("Glasso Precision Matrix", precision[0, :])
+                # # print(np.abs(prec_one[0, :] - precision[0, :]))
+                # # print()
+                # # print()
+                # print(symmetrize_from_vector(H_s_true[0], dim=dim)[0, :])
+                # print(symmetrize_from_vector(basis_matrices[0], dim=dim)[0, :])
+                # # print(symmetrize_from_vector(np.abs(H_s_true[0] - basis_matrices[0]), dim=dim)[0, :])
+                # exit()
+
                 coeffs_hat_total = optim_boyd(C=C_full, H_s=basis_matrices)
                 coeffs_hat_total_train = optim_boyd(C=C_full_train, H_s=basis_matrices)
                 p_val_min = np.inf
@@ -584,13 +676,13 @@ def collect_prec_rec_results(M, w):
                     alpha_i_change_pre[i] = curr_alpha_i_pre
                     alpha_i_change_post[i] = curr_alpha_i_post
                     null_likelihood = full_likelihood(coeffs_hat_total_train, basis_matrices, C_full_train, N=data_full_train.shape[1], 
-                                                        lam=5e-2, include_l1=False, debug_title='global')
+                                                        lam=lam, include_l1=False, debug_title='global')
                     # # likelihood on pre data, alpha_one change
                     alt_likelihood_alpha_i_pre = full_likelihood(alpha_i_change_pre, basis_matrices, C_one_train, N=data_one_train.shape[1], 
-                                                                    lam=5e-2, include_l1=False, debug_title='Pre')
+                                                                    lam=lam, include_l1=False, debug_title='Pre')
                     # likelihood on post data, alpha_one change
                     alt_likelihood_alpha_i_post = full_likelihood(alpha_i_change_post, basis_matrices, C_two, N=data_two.shape[1], 
-                                                                    lam=5e-2, include_l1=False, debug_title='Post')
+                                                                    lam=lam, include_l1=False, debug_title='Post')
                     alt_likelihood_alpha_i = alt_likelihood_alpha_i_pre + alt_likelihood_alpha_i_post
                     dof = 2
                     test_stat_i, p_val_i = likelihood_ratio_test(null_likelihood, 
@@ -611,20 +703,17 @@ def collect_prec_rec_results(M, w):
                 p_vals_curr_est.append(p_val_min)
                 lrt_vals_curr_est.append(test_stat_max)
                 coeff_diffs_curr_est.append(alpha_i_change_pre[0]-alpha_i_change_post[0]) # this shouldn't be used for anything really
-
-
-
                 """"""
 
                 #clime_init = clime_init_fn(5e-2, data_one.T)
-                clime_init = clime_init_fn(5e-2, data_one_train.T) # this one has more data used
+                clime_init = clime_init_fn(lam, data_one_train.T) # this one has more data used
                 g1 = calc_g1(w)
                 g2 = calc_g2(w)
                 rhat0 = calc_rhat(clime_init, dim)
                 T0 = calc_T_t(X=data_two.T, omega_hat=clime_init, r_hat=rhat0, w=w, p=dim, t=0, g1=g1, g2=g2)
                 test_vals_kesh_curr.append(T0)
 
-                clime_init_true = prec_one
+                clime_init_true = prec_one.copy()
                 rhat0_true = calc_rhat(clime_init_true, dim)
                 T0_true = calc_T_t(X=data_two.T, omega_hat=clime_init_true, r_hat=rhat0_true, w=w, p=dim, t=0, g1=g1, g2=g2)
                 test_vals_kesh_true_curr.append(T0_true)
@@ -641,7 +730,11 @@ def collect_prec_rec_results(M, w):
             total_results[str(curr_change_mag)] = mag_results
             #print(mag_results['our_p_vals'].shape, mag_results['our_p_vals_true'].shape, mag_results['our_p_vals_est'].shape)
         dim_results[dim] = total_results
-    
+        dim_counter += 1
+        print("Dim {} F1 {}".format(dim, np.array(dim_f1).mean()))
+        print("Dim {} Prec {}".format(dim, np.array(dim_precisions).mean()))
+        print("Dim {} Rec {}".format(dim, np.array(dim_recall).mean()))
+        print("Dim {} Acc {}".format(dim, np.array(dim_accuracy).mean()))
     with open('lrt_test_figs/dim_results.pkl', 'wb') as fp:
         pickle.dump(dim_results, fp)
 
@@ -725,6 +818,7 @@ def process_prec_rec_results(dim_results):
     print("Plotting Results...")
     seed_list = np.arange(0, 100)
     coeff_change_mags = np.round(np.arange(0.1, 1.0, 0.1), 2).tolist() # just iterate over the actual changes, compare vs no change
+    all_coeff_change_mags = np.round(np.arange(0.0, 1.0, 0.1), 2).tolist()
     dims = [20, 40, 60, 80]
     for dim in dims:
         curr_dim_no_change_ours = dim_results[dim][0.0]['our_p_vals'] # with H given
@@ -771,6 +865,20 @@ def process_prec_rec_results(dim_results):
 
             plot_precision_recall_comparison(prec_ours_true, rec_ours_true, prec_kesh_true, rec_kesh_true, dim=dim, labl='Ours_True_Kesh_Magnitude_{}'.format(mag))
             plot_roc_comparison(tprate_ours=rec_ours_true, fprate_ours=fprate_ours_true, tprate_other=rec_kesh_true, fprate_other=fprate_kesh_true, dim=dim, labl='Ours_True_Kesh_Magnitude_{}'.format(mag))
+
+        plt.xticks([1, 2, 3, 4, 5, 6, 7, 8, 9, 10], ["0.0", "0.1", "0.2", "0.3", "0.4", "0.5", "0.6", "0.7", "0.8", "0.9"])
+        plt.xticks(rotation=45, ha='right')
+        ylim_max = 10.0
+        for i in range(1, 11):
+            #print(dim_results[dim][all_coeff_change_mags[i-1]]['est_diff'])
+            plot_confidence_interval(x=i, values=dim_results[dim][all_coeff_change_mags[i-1]]['est_diff'], z=1.96, color='#2187bb', horizontal_line_width=0.25)
+        #plt.ylim(0, ylim_max)
+        plt.title("Confidence Intervals {}".format("Differences"))
+        plt.ylabel("Estimated Difference")
+        plt.xlabel("Coefficient Difference")
+        plt.tight_layout()
+        plt.savefig('lrt_test_figs/{}'.format("conf_int_diff_total_est_{}.png".format(dim)))
+        plt.close()
     
 
 def plot_results(res):
@@ -877,7 +985,7 @@ def main(args):
                         res[dim][round(k, 2)] = vals
                 print("> Results Loaded! <")            
         else:
-            res = collect_prec_rec_results(M=args.M, w=args.w)
+            res = collect_prec_rec_results(M=args.M, lam=args.lam, linkage_type=args.linkage)
         prec_rec_res = process_prec_rec_results(dim_results=res)
     else:
         res = collect_test_results(M=args.M, dim=args.dim, w=args.w)

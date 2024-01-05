@@ -155,6 +155,7 @@ class KeshOnline:
         self.data_full = data
         self.N = args.burn_in
         self.w = args.window_size
+        self.post_window_size = args.post_window_size
         self.buffer = args.buffer_size
         self.pi_0 = args.pi_0
         self.p = self.data_full.shape[1]
@@ -170,7 +171,7 @@ class KeshOnline:
         #print(self.prec_mat, end='\n\n')
         #print(self.prec_est, end='\n\n')
         #print(self.glasso_est.precision_)
-        self.glasso = GraphicalLasso(max_iter=100, alpha=self.lam, tol=1e-5, verbose=False).fit(self.data_full[0:self.N, :])
+        #self.glasso = GraphicalLasso(max_iter=100, alpha=self.lam, tol=1e-5, verbose=False).fit(self.data_full[0:self.N, :])
         #self.clime_init = self.glasso.precision_
         self.g1 = calc_g1(self.w)
         #print("G1 {}".format(self.g1))
@@ -248,8 +249,8 @@ class KeshOnline:
         test_stats = []
         t = 0
         #while t+self.w <= data.shape[0]:
-        for t in tqdm(range(0, data.shape[0]-self.w, self.args.step_size)):
-            T_t = calc_T_t(X=data, omega_hat=curr_clime, r_hat=curr_rhat, w=self.w, p=self.p, t=t, g1=self.g1, g2=self.g2)
+        for t in tqdm(range(0, data.shape[0]-self.post_window_size, self.args.step_size)):
+            T_t = calc_T_t(X=data, omega_hat=curr_clime, r_hat=curr_rhat, w=self.post_window_size, p=self.p, t=t, g1=self.g1, g2=self.g2)
             test_stats.append(T_t)
             #T_t = calc_T_t(X=data, omega_hat=self.prec_mat, r_hat=self.rhat0, w=self.w, p=self.p, t=t, g1=self.g1, g2=self.g2)
             #print("Test Stat {} Critical Val {}".format(T_t, self.critical_value))
@@ -332,15 +333,6 @@ def calc_hw(r_hat):
 def calc_f(x):
     return x - 1 - np.log(x)
 
-def calc_y_s_t_w(X, omega_hat, w, s, t):
-    div = 1/(w*omega_hat[s, s])
-    summand = 0
-    for r in range(1, w):
-        val = np.inner(X[t+r, :], omega_hat[:, s])**2
-        summand += val
-    
-    return div*summand
-
 @jit(nopython=True)
 def calc_l4_norm(mat):
     sum = 0
@@ -349,6 +341,15 @@ def calc_l4_norm(mat):
             sum += np.abs(mat[i, j])**4
     
     return sum ** (1./4)
+
+def calc_y_s_t_w(X, omega_hat, w, s, t):
+    div = 1/(w*omega_hat[s, s])
+    summand = 0
+    for r in range(1, w):
+        val = np.inner(X[t+r, :], omega_hat[:, s])**2
+        summand += val
+    
+    return div*summand
 
 def calc_T_t(X, omega_hat, r_hat, w, p, t, g1, g2):
     top = 0
@@ -437,8 +438,9 @@ def perform_simulation_batch(args):
     print("Done!")
 
 def main():
-    np.random.seed(24)
+    #np.random.seed(24)
     args = get_args()
+    print("Window Size {} Post Window Size {} Lamba {} Train Percent {}".format(args.window_size, args.post_window_size, args.lam, args.train_percent))
     if args.single_test:
         perform_single_run(args)
     else:

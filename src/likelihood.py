@@ -185,11 +185,11 @@ def LRT_individual_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=5
     # # likelihood on pre data, alpha_one change
     # alt_likelihood_alpha_i_pre = full_likelihood(alpha_i_change_pre, H_s, C_one, N=data_one.shape[1], 
     #                                                 lam=lam, include_l1=include_l1, debug_title='Pre')
-    for i in tqdm(range(0, data_total.shape[1]-window_size, step_size)):
+    for i in tqdm(range(0, data_total.shape[1]-post_window_size, step_size)):
         start_win_indx = i
-        first_end_indx = i+window_size
-        last_end_indx = i+2*window_size
-        data_two = data_total[:, i:i+window_size]
+        first_end_indx = i+post_window_size
+        last_end_indx = i+2*post_window_size
+        data_two = data_total[:, i:i+post_window_size]
         #data_two = data_total[:, i+window_size:i+2*window_size]
         data_full = np.concatenate((data_one, data_two), axis=1)
         #C_one = np.cov(data_one, bias=True)

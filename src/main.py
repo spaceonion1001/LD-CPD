@@ -57,7 +57,7 @@ def get_args():
     parser.add_argument('--num_indices', type=int, default=4)
     parser.add_argument('--recursion', type=int, default=1)
     parser.add_argument('--results_fldr_name', type=str, default=None)
-    parser.add_argument('--linkage', type=str, default='complete')
+    parser.add_argument('--linkage', type=str, default='single')
     parser.add_argument('--base_M', type=int, default=2, help='Default value for M at base level of recursion - only valid with recursion==True')
     parser.add_argument('--candidate_recursion', type=int, default=0, help='DFS recursion on candidate point. Better used with --recursion 0')
     parser.add_argument('--log_pvals', type=int, default=0)
@@ -459,6 +459,7 @@ def precision_recall_sims_runtimes(args):
 
 if __name__ == '__main__':
     args = get_args()
+    print("Window Size {} Post Window Size {} Lamba {} Train Percent {}".format(args.window_size, args.post_window_size, args.lam, args.train_percent))
     if bool(args.single_test):
         perform_single_test(args)
     elif bool(args.prec_recall):

@@ -149,13 +149,13 @@ def loss_func(x, data, i=0, lam=1e-4):
     return func+l1_reg
 
 
-def perform_regression(data, kd=2):
+def perform_regression(X_data, Y_data, kd=2):
     """
     Split data in half and perform the regression process on each column
     """
-    half = data.shape[0]//2
-    X_data = data[:half, :]
-    Y_data = data[half:, :]
+    #half = data.shape[0]//2
+    #X_data = data[:half, :]
+    #Y_data = data[half:, :]
     dim = X_data.shape[1]
     x_0 = np.random.normal(0, 1, dim-1)
     x_log_dim = np.log(dim)/X_data.shape[0]
@@ -349,20 +349,20 @@ def apply_cai_algorithm_windowed(args, data):
         data_window = data[i:i+2*args.window_size, :]
         if args.fix_pre:
             first_data_window = data[0:args.window_size, :]
-            second_data_window = data[i+args.window_size:i+2*args.window_size, :]
+            second_data_window = data[i+args.post_window_size:i+2*args.post_window_size, :]
             data_window = np.concatenate((first_data_window, second_data_window), axis=0)
         #beta_hats_x, beta_hats_y = perform_regression(data)
-        residuals_x, residuals_y, beta_hats_x, beta_hats_y  = perform_regression(data_window)
+        residuals_x, residuals_y, beta_hats_x, beta_hats_y  = perform_regression(X_data=first_data_window, Y_data=second_data_window)
         middle = data_window.shape[0]//2
         #residuals_x = calculate_residuals(beta_hats_x, data_window[:middle, :])
         residuals_x_cov_corrected = bias_corrected_residual_covariance(residuals_x, beta_hats_x)
         T_x = calculate_T(residuals_x_cov_corrected)
-        theta_x = calculate_theta(residuals_x_cov_corrected, beta_hats_x, N=data_window[:middle, :].shape[0])
+        theta_x = calculate_theta(residuals_x_cov_corrected, beta_hats_x, N=first_data_window.shape[0])
 
-        residuals_y = calculate_residuals(beta_hats_y, data_window[middle:, :])
+        #residuals_y = calculate_residuals(beta_hats_y, data_window[middle:, :])
         residuals_y_cov_corrected = bias_corrected_residual_covariance(residuals_y, beta_hats_y)
         T_y = calculate_T(residuals_y_cov_corrected)
-        theta_y = calculate_theta(residuals_y_cov_corrected, beta_hats_y, N=data_window[middle:, :].shape[0])
+        theta_y = calculate_theta(residuals_y_cov_corrected, beta_hats_y, N=second_data_window.shape[0])
 
         W = calculate_standardized_stat(T_x, T_y, theta_x, theta_y)
         M = calculate_global_stat(W)
@@ -759,6 +759,7 @@ def main():
 if __name__ == '__main__':
     #main()
     args = get_args()
+    print("Window Size {} Post Window Size {} Lamba {} Train Percent {}".format(args.window_size, args.post_window_size, args.lam, args.train_percent))
     #data = resolve_data(args)
     #apply_cai_variance_windowed(args, data)
     if args.single_test:
