@@ -1345,7 +1345,7 @@ def plot_precision_recall(prec, rec, dim, labl='Ours'):
     plt.savefig('lrt_test_figs/prec_rec/{}'.format("prec_rec_{}_{}.png".format(dim, labl)))
     plt.close()
 
-def plot_precision_recall_comparison(prec_ours, rec_ours, prec_other, rec_other, dim, labl='Ours', third_prec=None, third_rec=None, dfs_prec=None, dfs_rec=None):
+def plot_precision_recall_comparison(prec_ours, rec_ours, prec_other, rec_other, dim, labl='Ours', mag=0.1, third_prec=None, third_rec=None, dfs_prec=None, dfs_rec=None):
     plt.plot(rec_ours, prec_ours, label='Ours')
     plt.plot(rec_other, prec_other, label='Kesh')
     if third_prec is not None and third_rec is not None:
@@ -1355,7 +1355,7 @@ def plot_precision_recall_comparison(prec_ours, rec_ours, prec_other, rec_other,
     
     plt.xlim(-0.1, 1.1)
     plt.ylim(-0.1, 1.1)
-    plt.title("Precision Recall Dim {} {}".format(dim, labl))
+    plt.title("Precision Recall Dim {} Magnitude {}".format(dim, str(mag)))
     plt.xlabel('Recall')
     plt.ylabel('Precision')
     plt.tight_layout()
@@ -1495,13 +1495,14 @@ def process_prec_rec_results(dim_results, dims=[20, 40, 60, 80]):
             plot_roc(rec_cai, fprate_cai, dim=dim, labl='Cai_Magnitude_{}'.format(mag))
 
             # comparisons, the important part
-            plot_precision_recall_comparison(prec_ours, rec_ours, prec_kesh, rec_kesh, dim=dim, labl='Ours_Kesh_Magnitude_{}'.format(mag))
+            plot_precision_recall_comparison(prec_ours, rec_ours, prec_kesh, rec_kesh, dim=dim, labl='Ours_Kesh_Magnitude_{}'.format(mag), mag=mag)
             plot_roc_comparison(tprate_ours=rec_ours, fprate_ours=fprate_ours, tprate_other=rec_kesh, fprate_other=fprate_kesh, dim=dim, labl='Ours_Kesh_Magnitude_{}'.format(mag))
 
-            plot_precision_recall_comparison(prec_ours_est, rec_ours_est, prec_kesh, rec_kesh, dim=dim, labl='PR_Comparison_Magnitude_{}'.format(mag), third_prec=prec_cai, third_rec=rec_cai, dfs_prec=prec_ours_dfs, dfs_rec=rec_ours_dfs)
+            #plot_precision_recall_comparison(prec_ours_est, rec_ours_est, prec_kesh, rec_kesh, dim=dim, labl='PR_Comparison_Magnitude_{}'.format(mag), third_prec=prec_cai, third_rec=rec_cai, dfs_prec=prec_ours_dfs, dfs_rec=rec_ours_dfs)
+            plot_precision_recall_comparison(prec_ours_est, rec_ours_est, prec_kesh, rec_kesh, dim=dim, labl='PR_Comparison_Magnitude_{}'.format(mag), mag=mag, third_prec=prec_cai, third_rec=rec_cai, dfs_prec=None, dfs_rec=None)
             plot_roc_comparison(tprate_ours=rec_ours_est, fprate_ours=fprate_ours_est, tprate_other=rec_kesh, fprate_other=fprate_kesh, dim=dim, labl='Ours_Estimate_Kesh_Magnitude_{}'.format(mag))
 
-            plot_precision_recall_comparison(prec_ours_true, rec_ours_true, prec_kesh_true, rec_kesh_true, dim=dim, labl='Ours_True_Kesh_Magnitude_{}'.format(mag))
+            plot_precision_recall_comparison(prec_ours_true, rec_ours_true, prec_kesh_true, rec_kesh_true, dim=dim, labl='Ours_True_Kesh_Magnitude_{}'.format(mag), mag=mag)
             plot_roc_comparison(tprate_ours=rec_ours_true, fprate_ours=fprate_ours_true, tprate_other=rec_kesh_true, fprate_other=fprate_kesh_true, dim=dim, labl='Ours_True_Kesh_Magnitude_{}'.format(mag))
 
         plt.xticks([1, 2, 3, 4, 5, 6, 7, 8, 9, 10], ["0.0", "0.1", "0.2", "0.3", "0.4", "0.5", "0.6", "0.7", "0.8", "0.9"])
