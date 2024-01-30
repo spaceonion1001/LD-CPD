@@ -22,6 +22,8 @@ from scipy.cluster.hierarchy import dendrogram, linkage, fcluster
 import scipy.cluster.hierarchy as sch
 import scipy
 
+from thav_gl import thav_gl_fn
+
 
 from statsmodels.tsa.seasonal import STL
 
@@ -55,7 +57,22 @@ class PrecisionCPD:
     # data assumed to be cleaned and normalized, passed in shape: [T, dim]
     def fit_glasso(self, data):
         print("GLASSO DATA {}".format(data.shape))
-        self.glasso = GraphicalLasso(max_iter=500, alpha=self.lam, tol=1e-5, verbose=False).fit(data)
+        #lambda_search = [5e-2, 8e-2, 1e-1, 3e-1, 5e-1]
+        C_train = np.cov(data.T)
+        r_max = np.max(np.abs(C_train[np.triu_indices(C_train.shape[0], k=1)]))
+        lambda_search = [0.05 + (j*(r_max-0.05))/40 for j in range(1, 41, 1)]
+        #precision, chosen_lamb = thav_gl_fn(data_train=data.T, lambda_search=lambda_search, C=0.5, threshold=1.0)
+        #print("Precision Shape Thav {} Chosen Lambda {}".format(precision.shape, chosen_lamb))
+        glasso = GraphicalLassoCV(alphas=lambda_search, n_refinements=4, tol=1e-4, max_iter=1500, cv=5).fit(data)
+        precision = glasso.precision_
+        chosen_lamb = glasso.alpha_
+        tthresh = 0.8*chosen_lamb
+        print("Precision Shape Glasso {} Chosen Lambda {} Thresh {}".format(precision.shape, chosen_lamb, tthresh))
+        precision[np.abs(precision) <= tthresh] = 0.0
+        #precision[np.abs(precision) <= 0.1] = 0.0
+        self.precision = precision
+
+        #self.glasso = GraphicalLasso(max_iter=500, alpha=self.lam, tol=1e-5, verbose=False).fit(data)
         #print(np.count_nonzero(self.glasso.precision_)/len(self.glasso.precision_.flatten()))
         #exit()
         
@@ -63,7 +80,70 @@ class PrecisionCPD:
         #self.inv_cov += np.eye(self.inv_cov.shape[0])*np.abs(np.linalg.eig(self.inv_cov)[0].min()) + 0.05
         #assert(is_pos_def(self.inv_cov))
 
+    def top_down_search(self, Z, precision, dim, clust_dist_mat):
+        """
+        Z: linkage matrix
+        precision: precision matrix
+        C: covariance matrix
+        N: number of samples
+        dim: dimensionality
+        """
 
+        ordered_dists = sorted(Z[:, 2], reverse=True)[1:] # skip the first distance of all one cluster
+        best_basis_mats = None
+        best_silhoutte_score = -np.inf
+        best_cutree = None
+        for dist in ordered_dists:
+            #print(dist)
+            cutree1 = hierarchy.fcluster(Z, t=dist, criterion='distance').squeeze()
+            #print(cutree1)
+            basis_matrices = []
+            for i in range(max(set(cutree1))+1): # iterate over clusters
+                idxs = np.where(cutree1 == i)[0] # indexes for given cluster
+                A = np.zeros(precision.shape) # blank A matrix
+                for idx in idxs: # loop over indexes
+                    for idx2 in idxs: # loop over indexes
+                        A[idx][idx2] = precision[idx][idx2].copy() # set i,j entry to be the entry from precision matrix for given cluster
+                if len(np.nonzero(A)[0]) > 0:
+                    basis_matrices.append(vectorize_matrix(A))
+            basis_matrices = np.array(basis_matrices)
+            to_deletes = []
+            singleton_idxs = []
+            singleton_cluster = np.zeros(precision.shape)
+            for i in range(basis_matrices.shape[0]): # iterate over clusters
+                curr_mat = symmetrize_from_vector(basis_matrices[i], dim=dim)
+                nonzero_cols = np.nonzero(np.any(curr_mat != 0, axis=0))[0]
+                if len(nonzero_cols) <= 1:
+                    # copy over singletons to their own cluster
+                    singleton_cluster[nonzero_cols[0]][nonzero_cols[0]] = curr_mat[nonzero_cols[0]][nonzero_cols[0]]
+                    # delete the corresponding matrix from the basis matrices
+                    to_deletes.append(i)
+                    singleton_idxs.append(nonzero_cols[0])
+            if len(to_deletes) > 0:
+                basis_matrices = np.delete(basis_matrices, to_deletes, axis=0)
+                basis_matrices = np.append(basis_matrices, np.expand_dims(vectorize_matrix(singleton_cluster), 0), axis=0)
+                curr_idxs_min = cutree1[singleton_idxs].min()
+                cutree1[singleton_idxs] = curr_idxs_min
+                #cutree1 = np.delete(cutree1, singleton_idxs)
+            cutree_set = list(set(cutree1))
+            cutree_new = cutree1.copy()
+            for i, cval in enumerate(cutree_set):
+                cutree_new[cutree1 == cval] = i+1
+            assert is_pos_def(symmetrize_from_vector(basis_matrices.sum(axis=0), dim=dim)), "Not PosDef"
+            if len(list(set(cutree_new))) > 1:
+                #clust_dist_mat_reduced = np.delete(clust_dist_mat, singleton_idxs, axis=0)
+                #clust_dist_mat_reduced = np.delete(clust_dist_mat_reduced, singleton_idxs, axis=1)
+                #print(clust_dist_mat_reduced.shape)
+                #print(cutree_new.shape)
+                #print(cutree_new)
+                curr_silhoutte_score = silhouette_score(clust_dist_mat, cutree_new, metric='precomputed')
+                if curr_silhoutte_score > best_silhoutte_score:
+                    best_basis_mats = basis_matrices.copy()
+                    best_silhoutte_score = curr_silhoutte_score
+                    best_cutree = cutree_new
+
+        return best_basis_mats, best_cutree
+    
     def recursive_split(self, basis_mat):
         performed_split = True
         orig_nonzero_cols = np.nonzero(np.any(basis_mat != 0, axis=0))[0]
@@ -76,7 +156,8 @@ class PrecisionCPD:
         clust_dist_mat = (clust_dist_mat.max()+1e-5) - clust_dist_mat
         np.fill_diagonal(clust_dist_mat, 0.0)
         ###########
-        pairwise_distances = sch.distance.pdist(clust_dist_mat)
+        #pairwise_distances = sch.distance.pdist(clust_dist_mat)
+        pairwise_distances = squareform(clust_dist_mat)
         Z = linkage(pairwise_distances, method=self.args.linkage)
         # BREAK INTO 2 NEW CLUSTERS
         cutree = hierarchy.cut_tree(Z, n_clusters=2).squeeze()
@@ -208,7 +289,8 @@ class PrecisionCPD:
             
 
     def construct_basis_matrices(self):
-        precision = self.glasso.precision_.copy()
+        #precision = self.glasso.precision_.copy()
+        precision = self.precision.copy()
         #precision = self.inv_cov
 
         #####################
@@ -224,8 +306,8 @@ class PrecisionCPD:
         clust_dist_mat = (clust_dist_mat.max()+1e-5) - clust_dist_mat
         np.fill_diagonal(clust_dist_mat, 0.0)
         ###########
-        pairwise_distances = sch.distance.pdist(clust_dist_mat)
-        #pairwise_distances = squareform(clust_dist_mat)
+        #pairwise_distances = sch.distance.pdist(clust_dist_mat)
+        pairwise_distances = squareform(clust_dist_mat)
         Z = linkage(pairwise_distances, method=self.args.linkage)
         ######
         # plot the dendrogram 
@@ -334,7 +416,8 @@ class PrecisionCPD:
         clust_dist_mat = (clust_dist_mat.max()+1e-5) - clust_dist_mat
         np.fill_diagonal(clust_dist_mat, 0.0)
         ###########
-        pairwise_distances = sch.distance.pdist(clust_dist_mat)
+        #pairwise_distances = sch.distance.pdist(clust_dist_mat)
+        pairwise_distances = squareform(clust_dist_mat)
         Z = linkage(pairwise_distances, method=self.args.linkage)
         # BREAK INTO 2 NEW CLUSTERS
         cutree = hierarchy.cut_tree(Z, n_clusters=2).squeeze()
@@ -542,12 +625,13 @@ class PrecisionCPD:
         ADD BFS RECURSION HERE
         """
         if self.args.recursion:
-            basis_mats = self.bfs_basis_mats(data_full, basis_mats)
+            print("*** -----> TOP DOWN SEARCH <----- ***")
+            basis_mats, cutree1 = self.top_down_search(Z=self.Z, precision=self.precision, dim=self.dim, clust_dist_mat=self.root_dist_mat)
+            #basis_mats = self.bfs_basis_mats(data_full, basis_mats)
             self.basis_matrices = basis_mats
         """
         """
         self.print_clusters_rv()
-        exit()
         # if bool(self.full_basis):
         #     basis_mats = self.basis_matrices_full
         lrt_vals_all, p_vals_all = LRT_individual_coeffs_full_likelihood(data_full, M=basis_mats.shape[0], dim=data_full.shape[0], H_s=basis_mats, 

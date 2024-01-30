@@ -3,7 +3,7 @@ from utils import is_symmetric, is_pos_def, vectorize_matrix, symmetrize_from_ve
 
 def meinshausen_correction(H_s, p_vals_all, dim, log_pvals=None):
     t, M = p_vals_all.shape
-    print(t, M, dim)
+    #print(t, M, dim)
     p_vals_corrected = np.zeros_like(p_vals_all)
     for i in range(M):
         curr_mat = symmetrize_from_vector(H_s[i], dim)

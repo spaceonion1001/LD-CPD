@@ -52,11 +52,13 @@ def boyd_likelihood(x, H_s, C, dim):
 
     return -likelihood
 
+#@jit(nopython=True)
 def boyd_likelihood_dc(x, H, C, dim):
     psi_hat = x*H
     P = dim
 
     first_term = fast_logdet(psi_hat)
+    #first_term = np.linalg.slogdet(psi_hat)[1]
     likelihood = first_term - np.trace(psi_hat@C) - P*np.log(2*np.pi)
 
     return -likelihood
@@ -119,6 +121,7 @@ def calc_jacobian_hessian_dc(x, H, C, dim):
 
     return jacobian, hess
 
+#@jit(nopython=True)
 def perform_line_search_dc(local_slope, newton_direction, alpha, H, C, dim, tau, control_factor):
     t = -control_factor*local_slope
     #print("t {}".format(t))

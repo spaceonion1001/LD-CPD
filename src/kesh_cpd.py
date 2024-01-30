@@ -209,7 +209,7 @@ class KeshOnline:
     def clime_init_fn(self, args, data_minimal):
         nrow, ncol = data_minimal.shape
         X = r.matrix(data_minimal, nrow=nrow, ncol=ncol)
-        reg_soln = scalreg.scalreg(X, lam0=args.lam)
+        reg_soln = scalreg.scalreg(X, lam0="univ")
         reg_soln_dict = dict(zip(reg_soln.names, list(reg_soln)))
         clime_est = reg_soln_dict['precision']
         # nrow, ncol = data_minimal.shape
@@ -223,6 +223,7 @@ class KeshOnline:
         
         # clime_est = np.array(select_soln['icov'])
         return clime_est
+    
 
     def critical_value_init(self, pi_0, p, w):
         """

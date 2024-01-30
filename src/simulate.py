@@ -10,16 +10,39 @@ from statsmodels.tsa.vector_ar.var_model import VARProcess
 import matplotlib.pyplot as plt
 from scipy.cluster import hierarchy
 from scipy.cluster.hierarchy import dendrogram, linkage, fcluster
+from scipy.spatial.distance import squareform
 import os
 
 from utils import vectorize_matrix, symmetrize_from_vector
 import networkx as nx
 import copy
+import seaborn as sns
+
+sns.set()
 
 def gilbert_graph(dim, seed):
+    print("Generating Using Gilbert")
     gr = nx.fast_gnp_random_graph(n=dim, p=3/dim, seed=seed, directed=False)
     A = nx.adjacency_matrix(gr).todense()
+    print(A.shape)
     #np.fill_diagonal(A, 1)
+    return A
+
+def block_model(dim, seed):
+    sizes = [dim//4, dim//4, dim//4, dim//4]
+    probs = [[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 1.0]]
+    gr = nx.stochastic_block_model(sizes=sizes, p=probs, seed=seed)
+    A = nx.adjacency_matrix(gr).todense()
+    print(A.shape)
+
+    return A
+
+def grid_graph(dim, seed):
+    print("Generating Using Grid")
+    gr = nx.grid_2d_graph(m=4, n=dim//4)
+    A = nx.adjacency_matrix(gr).todense()
+    print(A.shape)
+
     return A
 
 def lacz_sampling(adj):
@@ -31,8 +54,8 @@ def lacz_sampling(adj):
     for j in range(1, dim):
         for i in range(j):
             if A[i, j] == 1:
-                val_neg = np.random.uniform(-0.9, -0.5)
-                val_pos = np.random.uniform(0.5, 0.9)
+                val_neg = np.random.uniform(-0.6, -0.2)
+                val_pos = np.random.uniform(0.2, 0.6)
                 pos_neg = np.random.choice([-1, 1])
                 if pos_neg < 0:
                     chosen_val = val_neg
@@ -40,14 +63,15 @@ def lacz_sampling(adj):
                     chosen_val = val_pos
                 A[i][j] = chosen_val
                 A[j][i] = A[i][j]
+    np.fill_diagonal(A, 1.0)
     min_eigval = -np.round(np.linalg.eig(A)[0].min(), decimals=1) + 0.05
     A = A + min_eigval*np.eye(dim)
-    A = 1/(min_eigval) * A
+    #A = 1/(min_eigval) * A
 
     return A
 
 
-def generate_matrices_orthogonal(prec_coeffs=None, M=2, dim=4, to_print=True, lam=1e-1, seed=42, linkage_type='single'):
+def generate_matrices_orthogonal(prec_coeffs=None, M=2, dim=4, to_print=True, lam=1e-1, seed=42, linkage_type='single', plotting=False):
     print(">>  Generating H Matrices - M {}; Dim {}; Lambda {}  <<".format(M, dim, lam))
     H_s = []
     if not prec_coeffs:
@@ -62,8 +86,15 @@ def generate_matrices_orthogonal(prec_coeffs=None, M=2, dim=4, to_print=True, la
     #precision = precision + delta_times_I
     """"""
 
-    adj = gilbert_graph(dim=dim, seed=seed)
+    #adj = gilbert_graph(dim=dim, seed=seed)
+    #adj = grid_graph(dim=dim, seed=seed)
+    adj = block_model(dim=dim, seed=seed)
     precision = lacz_sampling(adj)
+
+    """"""
+    #ADD IN THRESHOLDING HERE
+    precision[np.abs(precision) <= 0.1] = 0.0
+    """"""
 
 
 
@@ -89,11 +120,35 @@ def generate_matrices_orthogonal(prec_coeffs=None, M=2, dim=4, to_print=True, la
     assert is_pos_def(precision), "Not Positive Definite Precision Matrix"
     clust_dist_mat = np.abs(precision)
     np.fill_diagonal(clust_dist_mat, 0.0)
+    print("MAX", clust_dist_mat.max())
+    #clust_dist_mat = 1.0 - clust_dist_mat
     clust_dist_mat = (clust_dist_mat.max()+1e-5) - clust_dist_mat
     np.fill_diagonal(clust_dist_mat, 0.0)
-    pairwise_distances = hierarchy.distance.pdist(clust_dist_mat)
+    #clust_dist_mat[clust_dist_mat == clust_dist_mat.max()] = 1e8
+    #pairwise_distances = hierarchy.distance.pdist(clust_dist_mat)
+    pairwise_distances = squareform(clust_dist_mat)
     Z = linkage(pairwise_distances, method=linkage_type)
+    clust_distances = sorted(Z[:, 2])
+
+    
+    """
+    Plotting
+    """
+    if plotting:
+        plt.figure()
+        dn = hierarchy.dendrogram(Z)
+        plt.savefig(os.path.join('debugging_figs', "true_dendrogram.png"))
+        plt.close()
+        
+        sns.heatmap(clust_dist_mat)
+        plt.savefig(os.path.join('debugging_figs', "dist_mat_true.png"))
+        plt.close()
+    """
+    End Plotting
+    """
+
     cutree1 = hierarchy.cut_tree(Z, n_clusters=M).squeeze()
+    #cutree1 = hierarchy.fcluster(Z, t=clust_distances[-M], criterion='distance')
     for i in range(max(set(cutree1))+1): # iterate over clusters
         idxs = np.where(cutree1 == i)[0] # indexes for given cluster
         A = np.zeros(precision.shape) # blank A matrix
@@ -103,6 +158,7 @@ def generate_matrices_orthogonal(prec_coeffs=None, M=2, dim=4, to_print=True, la
         if len(np.nonzero(A)[0]) > 0:
             H_s.append(vectorize_matrix(A))
     H_s = np.array(H_s)
+
     ##############
     # precision = np.zeros((dim, dim))
     # H_s_stacked = np.zeros((dim**2, M))
@@ -143,6 +199,18 @@ def generate_matrices_orthogonal(prec_coeffs=None, M=2, dim=4, to_print=True, la
             print("****************************************")
             print()
 
+
+    """
+    Plotting
+    """
+    if plotting:
+        for idx in range(H_s.shape[0]):
+            sns.heatmap(symmetrize_from_vector(H_s[idx], dim=dim))
+            plt.savefig('./debugging_figs/heatmap_h{}_true.png'.format(idx))
+            plt.close()
+    """
+    End Plotting
+    """
     return H_s, precision, prec_coeffs
 
 def collect_precision_matrix(H_s, prec_coeffs, P):

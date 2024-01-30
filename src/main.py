@@ -459,7 +459,7 @@ def precision_recall_sims_runtimes(args):
 
 if __name__ == '__main__':
     args = get_args()
-    print("Window Size {} Post Window Size {} Lamba {} Train Percent {}".format(args.window_size, args.post_window_size, args.lam, args.train_percent))
+    print("Window Size {} Post Window Size {} Train Percent {}".format(args.window_size, args.post_window_size, args.train_percent))
     if bool(args.single_test):
         perform_single_test(args)
     elif bool(args.prec_recall):
