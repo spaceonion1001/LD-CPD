@@ -6,6 +6,7 @@ from numba import jit
 from scipy.optimize import line_search
 from sklearn.utils.extmath import fast_logdet
 import pdb
+import copy
 
 class JacWrapper(object):
     def __init__(self, H_s, C, dim):
@@ -94,6 +95,24 @@ def calc_jacobian(x, *args, H_s, C, dim):
     
     return jacobian
 
+
+@jit(nopython=True, cache=True)
+def np_all_axis0(x):
+    """Numba compatible version of np.all(x, axis=0)."""
+    out = np.ones(x.shape[1], dtype=np.bool8)
+    for i in range(x.shape[0]):
+        out = np.logical_and(out, x[i, :])
+    return out
+
+@jit(nopython=True, cache=True)
+def np_all_axis1(x):
+    """Numba compatible version of np.all(x, axis=1)."""
+    out = np.ones(x.shape[0], dtype=np.bool8)
+    for i in range(x.shape[1]):
+        out = np.logical_and(out, x[:, i])
+    return out
+
+@jit(nopython=True, cache=True)
 def calc_jacobian_hessian_dc(x, H, C, dim):
     """
     Divide and conquer derivative of likelihood function
@@ -104,14 +123,18 @@ def calc_jacobian_hessian_dc(x, H, C, dim):
     """
     psi_hat = x*H
     psi_hat = symmetrize_from_vector(psi_hat, dim)
-    psi_hat = psi_hat[:, ~np.all(psi_hat == 0, axis=0)]
-    psi_hat = psi_hat[~np.all(psi_hat == 0, axis=1), :]
+    #psi_hat = psi_hat[:, ~np.all(psi_hat == 0, axis=0)]
+    psi_hat = psi_hat[:, ~np_all_axis0(psi_hat == 0)]
+    #psi_hat = psi_hat[~np.all(psi_hat == 0, axis=1), :]
+    psi_hat = psi_hat[~np_all_axis1(psi_hat == 0), :]
     assert psi_hat.shape[0] == C.shape[0]
 
     inv_psi_hat = inv(psi_hat)
     H_curr = symmetrize_from_vector(H, dim)
-    H_curr = H_curr[:, ~np.all(H_curr == 0, axis=0)]
-    H_curr = H_curr[~np.all(H_curr == 0, axis=1), :]
+    #H_curr = H_curr[:, ~np.all(H_curr == 0, axis=0)]
+    #H_curr = H_curr[~np.all(H_curr == 0, axis=1), :]
+    H_curr = H_curr[:, ~np_all_axis0(H_curr == 0)]
+    H_curr = H_curr[~np_all_axis1(H_curr == 0), :]
 
     first_term = np.trace(inv_psi_hat.dot(H_curr))
     second_term = np.trace(H_curr.dot(C))
@@ -132,7 +155,7 @@ def perform_line_search_dc(local_slope, newton_direction, alpha, H, C, dim, tau,
     if not new_alph_temp <= 0:
         lr_val = 1.0
     else:
-        while (alpha + lr_val*newton_direction <= 1e-8).any():
+        while np.array(alpha + lr_val*newton_direction <= 1e-8).any():
             lr_val = lr_val*0.95
         # alph_diff = alphas - new_alph_temp
         # min_val = np.min(new_alph_temp) # most negative value
@@ -206,7 +229,7 @@ def optim_boyd_dc(C, H, tolerance=0.5, iters=200, tau=0.95, control_factor=0.5):
         # if likelihood_diff < 0.0:
         #     print("NEGATIVE LIKELIHOOD UPDATE")
         #     pdb.set_trace()
-        alphas_imo = new_alphas.copy()
+        alphas_imo = copy.copy(new_alphas)
         #print("New Alphas", new_alphas)
         #print('***********')
         #print()
@@ -239,7 +262,7 @@ def calculate_local_slope(newton_direction, jacobian):
 def perform_line_search(local_slope, newton_direction, alphas, H_s, C, dim, tau, control_factor):
     t = -control_factor*local_slope
     #print("t {}".format(t))
-    max_iters = 500
+    max_iters = 200
     # calculate maximum step size heuristic
     new_alph_temp = alphas + 1.0*newton_direction
     lr_val = 1.0

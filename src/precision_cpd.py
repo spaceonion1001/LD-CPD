@@ -53,22 +53,25 @@ class PrecisionCPD:
         self.eps_matrices = args.eps_matrices
         self.num_eps_matrices = args.num_eps_mats
         self.fig_dir_path = args.fig_dir_path
+        self.thresh_const = args.thresh_const
 
     # data assumed to be cleaned and normalized, passed in shape: [T, dim]
-    def fit_glasso(self, data):
+    def fit_glasso(self, data, use_thav=False):
         print("GLASSO DATA {}".format(data.shape))
         #lambda_search = [5e-2, 8e-2, 1e-1, 3e-1, 5e-1]
         C_train = np.cov(data.T)
         r_max = np.max(np.abs(C_train[np.triu_indices(C_train.shape[0], k=1)]))
         lambda_search = [0.05 + (j*(r_max-0.05))/40 for j in range(1, 41, 1)]
-        #precision, chosen_lamb = thav_gl_fn(data_train=data.T, lambda_search=lambda_search, C=0.5, threshold=1.0)
-        #print("Precision Shape Thav {} Chosen Lambda {}".format(precision.shape, chosen_lamb))
-        glasso = GraphicalLassoCV(alphas=lambda_search, n_refinements=4, tol=1e-4, max_iter=1500, cv=5).fit(data)
-        precision = glasso.precision_
-        chosen_lamb = glasso.alpha_
-        tthresh = 0.8*chosen_lamb
-        print("Precision Shape Glasso {} Chosen Lambda {} Thresh {}".format(precision.shape, chosen_lamb, tthresh))
-        precision[np.abs(precision) <= tthresh] = 0.0
+        if use_thav:
+            precision, chosen_lamb = thav_gl_fn(data_train=data.T, lambda_search=lambda_search, C=0.7, threshold=1.0)
+            print("Precision Shape Thav {} Chosen Lambda {}".format(precision.shape, chosen_lamb))
+        else:     
+            glasso = GraphicalLassoCV(alphas=lambda_search, n_refinements=4, tol=1e-4, max_iter=1500, cv=5).fit(data)
+            precision = glasso.precision_
+            chosen_lamb = glasso.alpha_
+            tthresh = self.thresh_const*chosen_lamb
+            print("Precision Shape Glasso {} Chosen Lambda {} Thresh {}".format(precision.shape, chosen_lamb, tthresh))
+            precision[np.abs(precision) <= tthresh] = 0.0
         #precision[np.abs(precision) <= 0.1] = 0.0
         self.precision = precision
 
@@ -311,16 +314,22 @@ class PrecisionCPD:
         Z = linkage(pairwise_distances, method=self.args.linkage)
         ######
         # plot the dendrogram 
-        # plt.figure()
-        # dn = hierarchy.dendrogram(Z)
-        # #plt.savefig(os.path.join(self.fig_dir_path, "dendrogram.png"))
-        # plt.savefig(os.path.join('debugging_figs', "dendrogram.png"))
-        # plt.close()
+        if self.args.sap:
+            plt.figure()
+            dn = hierarchy.dendrogram(Z)
+            #plt.savefig(os.path.join(self.fig_dir_path, "dendrogram.png"))
+            plt.savefig(os.path.join('debugging_figs/sap_figs/', "dendrogram_{}.png".format(self.args.linkage)))
+            plt.close()
+            sns.heatmap(precision)
+            plt.savefig(os.path.join('debugging_figs/sap_figs/', "precision_{}.png".format(self.args.linkage)))
+            plt.close()
         ######
-        cutree1 = hierarchy.cut_tree(Z, n_clusters=self.args.base_M).squeeze()
         if self.args.recursion:
             print("*** Utilizing Recursion... ***")
             cutree1 = hierarchy.cut_tree(Z, n_clusters=self.args.base_M).squeeze() # start with just 2 or whatever the base is specified as
+        else:
+            print("*** NOT Utilizing Recursion... ***")
+            cutree1 = hierarchy.cut_tree(Z, n_clusters=self.args.M).squeeze()
         root, nodelist = hierarchy.to_tree(Z, rd=True)
         #self.dendrogram = dn
         self.Z = Z

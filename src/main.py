@@ -9,7 +9,7 @@ sns.set()
 
 from precision_cpd import PrecisionCPD
 from simulate import *
-from utils import difference_data, load_alaska_data, scale_data, load_hjandrews_data, create_fig_dir, load_holiday_farm_data, load_tohoku_data, load_stock_market_data, load_mesonet_data
+from utils import difference_data, load_alaska_data, scale_data, load_hjandrews_data, create_fig_dir, load_holiday_farm_data, load_tohoku_data, load_stock_market_data, load_mesonet_data, load_sap_data
 import time
 from datetime import timedelta
 
@@ -62,15 +62,21 @@ def get_args():
     parser.add_argument('--candidate_recursion', type=int, default=0, help='DFS recursion on candidate point. Better used with --recursion 0')
     parser.add_argument('--log_pvals', type=int, default=0)
     parser.add_argument('--recursion_min', type=int, default=2)
-    parser.add_argument('--condition_number_thresh', type=float, default=10.0)
+    parser.add_argument('--condition_number_thresh', type=float, default=2.5)
+    parser.add_argument('--thav', type=int, default=0)
+    parser.add_argument('--thresh_const', type=float, default=0.8)
+    parser.add_argument('--sap', type=int, default=0)
+    parser.add_argument('--fix_pre', type=int, default=1)
     args = parser.parse_args()
 
     return args
 
-def resolve_data(args, save_path=None):
+def resolve_data(args, save_path=None, data_seed=42):
     if bool(args.sim):
         if args.sim_type == 'orthogonal_small':
-            return sim_changepoint_mv_normal_orthogonal(sim_scale=args.sim_scale, M=args.M, dim=args.dim, N=args.N, save_path=save_path)[1].T
+            return sim_changepoint_mv_normal_orthogonal(sim_scale=args.sim_scale, M=args.M, dim=args.dim, N=args.N, save_path=save_path, data_seed=data_seed)[1].T
+        elif args.sim_type == 'orthogonal_block_fix_window': # THIS IS A PLACEHOLDER DUPLICATE JUST FOR EASE OF SAVING FOR COMPARISONS
+            return sim_changepoint_mv_normal_orthogonal(sim_scale=args.sim_scale, M=args.M, dim=args.dim, N=args.N, save_path=save_path, data_seed=data_seed)[1].T
         elif args.sim_type == 'orthogonal_mult_coeff':
             return sim_changepoint_mv_normal_orthogonal_mult_coeff(sim_scale=args.sim_scale, num_coeffs_change=args.num_coeffs_change, M=args.M, dim=args.dim, N=args.N, save_path=save_path)[1].T
             #print("TESTING MAKE SURE TO CHANGE THIS")
@@ -83,6 +89,10 @@ def resolve_data(args, save_path=None):
             return scale_data(difference_data(sim_changepoint_var_process(dim=args.dim, N=args.N, num_coeffs_change=args.num_coeffs_change, scale=args.sim_scale, save_path=save_path)))
         elif args.sim_type == 'cai_model_one':
             return scale_data(changepoint_cai_model_one(args, dim=args.dim, N=args.N, save_path=save_path), args.train_percent)
+        elif args.sim_type == 'cai_model_one_extra':
+            return scale_data(changepoint_cai_model_one(args, dim=args.dim, N=args.N, save_path=save_path), args.train_percent)
+        elif args.sim_type == 'cai_model_one_fix_window':
+            return scale_data(changepoint_cai_model_one(args, dim=args.dim, N=args.N, save_path=save_path), args.train_percent) # PLACEHOLDER DUPLICATE AGAIN
         elif args.sim_type == 'cai_model_three':
             return scale_data(changepoint_cai_model_three(args, dim=args.dim, N=args.N, save_path=save_path), args.train_percent)
         elif args.sim_type == 'orthogonal_no_change':
@@ -122,7 +132,9 @@ def resolve_data(args, save_path=None):
             # python src/main.py --window_size 100 --sim 0 --data stocks --step 1 --window_size 100 --lam 5e-1 --full_basis 0 --M 10 --train_percent 0.4 --split_variance 0
             return scale_data(load_stock_market_data(args), args.train_percent)
         elif args.data == 'mesonet':
-            return scale_data(load_mesonet_data(args), args.train_percent)
+            return scale_data(load_mesonet_data(args), percent=None, end_idx=args.window_size)
+        elif args.data == 'sap':
+            return scale_data(load_sap_data(args), percent=None, end_idx=args.window_size)
         else:
             print("Error: Dataset not understood")
             exit(0)
@@ -207,7 +219,7 @@ def perform_simulation_batch(args):
     args.fig_dir_path = fig_dir_path
     print("\n*******************************************************************************")
     print("Performing Batch Simulation of {} with Dim = {}, M = {}, Scale = {}, Window = {}, Lam = {}".format(args.sim_type, args.dim, args.M, args.sim_scale, args.window_size, args.lam))
-    seeds_list = np.arange(50, 70)
+    seeds_list = np.arange(50, 60)
     sim_results_path = os.path.join(args.results_path, "simulation_results")
     if not os.path.isdir(sim_results_path):
         os.mkdir(sim_results_path)
@@ -217,19 +229,22 @@ def perform_simulation_batch(args):
     print(sim_type_path)
     if not os.path.isdir(sim_type_path):
         os.mkdir(sim_type_path)
+    timing = []
+    import timeit
+
     for seed in seeds_list:
         np.random.seed(seed)
         save_path = os.path.join(sim_type_path, str(seed))
         if not os.path.isdir(save_path):
             os.mkdir(save_path)
-        data_full = resolve_data(args, save_path=save_path)
+        data_full = resolve_data(args, save_path=save_path, data_seed=seed)
         # if 'orthogonal' in args.sim_type:
         #     H_s, data_full = data_full
         #     data_full = data_full.T
         print(data_full.shape)
         model = PrecisionCPD(args)
         data_train = data_full[0:args.window_size, :]
-        model.fit_glasso(data_train)
+        model.fit_glasso(data_train, use_thav=bool(args.thav))
         model.construct_basis_matrices()
 
         ############
@@ -237,8 +252,10 @@ def perform_simulation_batch(args):
         #     print("DEFINITELY CHANGE THIS THIS IS JUST A SANITY CHECK")
         #     model.basis_matrices = H_s
         ############
-
+        t0 = timeit.default_timer()
         lrt_vals_all, p_vals_all = model.perform_lrt_local(data_full.T)
+        t1 = timeit.default_timer()
+        timing.append(round(t1-t0, 3))
         test_results = np.hstack([lrt_vals_all, p_vals_all])
         model.save_matrices_simulations(save_path)
         print()
@@ -255,6 +272,7 @@ def perform_simulation_batch(args):
 
         #np.savetxt(os.path.join(save_path, "p_vals.csv"), p_vals_all, delimiter=',')
         model.print_clusters_rv()
+    np.savetxt('debugging_figs/timing_ours_{}.csv'.format(args.dim), np.array(timing))
     print("*******************************************************************************")
     print("Done!")
 
@@ -456,6 +474,67 @@ def precision_recall_sims_runtimes(args):
     print("***************************")
     print("Done!")
 
+def perform_sap_batch(args):
+    # run a batch of SAP500 data
+    # batch constitutes a random sample of a subset of tickers
+    fig_dir_path = create_fig_dir(args.fig_path)
+    args.fig_dir_path = fig_dir_path
+    print("\n*******************************************************************************")
+    print("Performing SAP Run with Dim = {}, Window = {}, Post Window {}".format(args.dim, args.window_size, args.post_window_size))
+    seeds_list = np.arange(50, 60)
+    sim_results_path = os.path.join(args.results_path, "sap_results")
+    if not os.path.isdir(sim_results_path):
+        os.mkdir(sim_results_path)
+    sim_type_path = os.path.join(sim_results_path, "sap_500"+"_"+str(args.dim))
+    print(sim_type_path)
+    if not os.path.isdir(sim_type_path):
+        os.mkdir(sim_type_path)
+    for seed in seeds_list:
+        print("Curr Seed {}".format(seed))
+        np.random.seed(seed)
+        save_path = os.path.join(sim_type_path, str(seed))
+        if not os.path.isdir(save_path):
+            os.mkdir(save_path)
+        data_full = resolve_data(args, save_path=save_path, data_seed=seed)
+        # if 'orthogonal' in args.sim_type:
+        #     H_s, data_full = data_full
+        #     data_full = data_full.T
+        print(data_full.shape)
+        dim_list = np.arange(0, data_full.shape[1])
+        chosen_idxs = np.random.choice(dim_list, size=args.dim, replace=False)
+        data_full = data_full[:, chosen_idxs]
+        model = PrecisionCPD(args)
+        data_train = data_full[0:args.window_size, :]
+        model.fit_glasso(data_train, use_thav=bool(args.thav))
+        model.construct_basis_matrices()
+
+        ############
+        # if 'orthogonal' in args.sim_type:
+        #     print("DEFINITELY CHANGE THIS THIS IS JUST A SANITY CHECK")
+        #     model.basis_matrices = H_s
+        ############
+
+        lrt_vals_all, p_vals_all = model.perform_lrt_local(data_full.T)
+        test_results = np.hstack([lrt_vals_all, p_vals_all])
+        model.save_matrices_simulations(save_path)
+        print()
+        np.savetxt(os.path.join(save_path, "lrt_vals.csv"), test_results, delimiter=',')
+        np.savetxt(os.path.join(save_path, "chosen_idxs.csv"), chosen_idxs, delimiter=',')
+        model.save_matrices_simulations(save_path)
+        for i in range(lrt_vals_all.shape[1]):
+            plt.plot(lrt_vals_all[:, i])
+            plt.xlabel('Time')
+            plt.ylabel('Test Statistic {}'.format(i))
+            plt.savefig(os.path.join(save_path, 'lrt_local_i{}_M{}_win{}_step{}_lam{}_full{}_sim{}.png'.format(i, args.M, args.window_size, 
+                                                                                                                args.step_size, args.lam, 
+                                                                                                                args.full_basis, args.sim)))
+            plt.close()
+
+        #np.savetxt(os.path.join(save_path, "p_vals.csv"), p_vals_all, delimiter=',')
+        model.print_clusters_rv()
+    print("*******************************************************************************")
+    print("Done!")
+
 
 if __name__ == '__main__':
     args = get_args()
@@ -466,6 +545,8 @@ if __name__ == '__main__':
         precision_recall_sims(args)
     elif bool(args.runtimes):
         precision_recall_sims_runtimes(args)
+    elif bool(args.sap):
+        perform_sap_batch(args)
     else:
         perform_simulation_batch(args)
 

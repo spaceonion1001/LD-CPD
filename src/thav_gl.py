@@ -40,20 +40,20 @@ def thav_gl_fn(data_train, lambda_search, C=0.5, threshold=0.5):
     while r > lambda_search[0]:
         #glasso_r = GraphicalLasso(max_iter=1500, alpha=r, tol=1e-4, verbose=False).fit(data_train.T)
         try:
-            glasso_r = GraphicalLasso(max_iter=1500, alpha=r, tol=1e-4, verbose=False, covariance='precomputed').fit(data_cov)
+            glasso_r = GraphicalLasso(max_iter=1500, alpha=r, tol=1e-4, verbose=False, covariance='precomputed', eps=1e-3).fit(data_cov)
         except FloatingPointError:
-            continue
+            print("ILL CONDITIONED")
         theta_hat_r = glasso_r.precision_
         j_prime = len(lambda_search) - 1
         r_prime = lambda_search[j_prime]
         while r_prime > r:
             #glasso_rprime = GraphicalLasso(max_iter=1500, alpha=r_prime, tol=1e-4, verbose=False).fit(data_train.T)
             try:
-                glasso_rprime = GraphicalLasso(max_iter=1500, alpha=r_prime, tol=1e-4, verbose=False, covariance='precomputed').fit(data_cov)
+                glasso_rprime = GraphicalLasso(max_iter=1500, alpha=r_prime, tol=1e-4, verbose=False, covariance='precomputed', eps=1e-3).fit(data_cov)
             except FloatingPointError:
-                continue
+                print("ILL CONDITIONED")
             theta_hat_rprime = glasso_rprime.precision_
-            if np.linalg.norm(theta_hat_r-theta_hat_rprime, ord=np.inf) > threshold*(r+r_prime):
+            if np.linalg.norm(theta_hat_r-theta_hat_rprime, ord=np.inf) > C*(r+r_prime):
                 r_hat = lambda_search[j+1]
                 break
             else:
@@ -62,7 +62,7 @@ def thav_gl_fn(data_train, lambda_search, C=0.5, threshold=0.5):
         j = j - 1
         r = lambda_search[j]
     #glasso_rhat = GraphicalLasso(max_iter=1500, alpha=r_hat, tol=1e-4, verbose=False).fit(data_train.T)
-    glasso_rhat = GraphicalLasso(max_iter=1500, alpha=r_hat, tol=1e-4, verbose=False, covariance='precomputed').fit(data_cov)
+    glasso_rhat = GraphicalLasso(max_iter=1500, alpha=r_hat, tol=1e-4, verbose=False, covariance='precomputed', eps=1e-3).fit(data_cov)
     theta_hat_rhat = glasso_rhat.precision_
     a_v = theta_hat_rhat
     t = threshold*C*r_hat

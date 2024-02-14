@@ -51,17 +51,44 @@ def load_mesonet_data(args):
     print('Loading MesoNet Data...')
     data = pd.read_csv(os.path.join(args.data_path, args.data_fname), delimiter=',')
     data = data.drop('YYYYMMDDhhmm', axis=1)
+    
+    #data = data.loc[:,~data.columns.str.contains('GUTH', case=False)] 
+    data = data.values.astype(np.float64)
+    data[np.abs(data) >= 5*data.std(axis=0)] = np.nan
+    data = pd.DataFrame(data).interpolate('linear', axis=0).fillna(0.0).values # interpolate
+    #data_df = pd.DataFrame(data).diff(1).dropna() # first differencing
+    #data = data_df.values
+    
+    # scaler = StandardScaler()
+    # data = scaler.fit_transform(data)
+    # quantiles = pd.DataFrame(data).quantile(0.95).values
+    # for col in range(data.shape[1]):
+    #     curr_col = data[:, col]
+    #     std_col = curr_col.std()
+    #     #curr_col[np.abs(curr_col) >= 3*std_col] = 3*std_col
+    #     curr_col[np.abs(curr_col) >= quantiles[col]] = quantiles[col]
+    #     data[:, col] = curr_col.copy()
+    
+    
     #sns.histplot(data.values, bins=40, legend=False)
     #plt.savefig('mesonet_hist.png')
     #plt.close()
 
-    return data.astype(np.float64)
+    return data
+
+def load_sap_data(args):
+    print('Loading SAP500 Data...')
+    data = pd.read_csv(os.path.join(args.data_path, 'sap_scaled_returns.csv'), delimiter='\t')
+    data = data.drop('Date', axis=1)
+
+    return data.values
 
 
 
-def scale_data(data, percent=1.0):
+def scale_data(data, percent=1.0, end_idx=None):
     scaler = StandardScaler()
-    end_idx = int(percent*data.shape[0])
+    if percent is not None:
+        end_idx = int(percent*data.shape[0])
     scaler = scaler.fit(data[:end_idx])
     data_scaled = scaler.transform(data)
 

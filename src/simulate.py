@@ -18,6 +18,8 @@ import networkx as nx
 import copy
 import seaborn as sns
 
+from sklearn.preprocessing import StandardScaler
+
 sns.set()
 
 def gilbert_graph(dim, seed):
@@ -72,7 +74,7 @@ def lacz_sampling(adj):
 
 
 def generate_matrices_orthogonal(prec_coeffs=None, M=2, dim=4, to_print=True, lam=1e-1, seed=42, linkage_type='single', plotting=False):
-    print(">>  Generating H Matrices - M {}; Dim {}; Lambda {}  <<".format(M, dim, lam))
+    print(">>  Generating H Matrices - M {}; Dim {} <<".format(M, dim))
     H_s = []
     if not prec_coeffs:
         prec_coeffs = np.random.rand(M)
@@ -334,23 +336,26 @@ def anderson_sim_with_residual(M=2, dim=4, N=500, num_indices=4, resid_type='uns
     print("Finished Simulation")
     return data_total.T
 
-def sim_changepoint_mv_normal_orthogonal(sim_scale=0.8, M=2, dim=4, N=500, save_path=None):
+def sim_changepoint_mv_normal_orthogonal(sim_scale=0.8, M=2, dim=4, N=500, save_path=None, linkage_type='single', data_seed=42):
     print("Simulating Anderson Decomp Data")
     #assert dim % M == 0, "Need dim divisible by M for sake of sampling at the moment"
-    H_s, precision_one, prec_coeffs_one = generate_matrices_orthogonal(M=M, dim=dim)
+    H_s, prec_temp, _ = generate_matrices_orthogonal(M=M, dim=dim, to_print=False, linkage_type=linkage_type, seed=42) # remove this source of randomness for consistency
     prec_coeffs_one = np.ones(M)
-    precision_one = collect_precision_matrix(H_s, prec_coeffs_one, dim)
-    data_one, C_one = sim_data(covar=inv(precision_one), dim=dim, N=N)
+    precision_one = collect_precision_matrix(H_s=H_s, prec_coeffs=prec_coeffs_one, P=dim)
+    np.random.seed(data_seed)
+    data_one, _ = sim_data(covar=inv(precision_one), dim=dim, N=N)
     
     prec_coeffs_two = prec_coeffs_one.copy()
     rand_idx = np.random.choice(np.arange(M))
-    prec_coeffs_two[rand_idx] += sim_scale
+    prec_coeffs_two[rand_idx] = prec_coeffs_two[rand_idx] + sim_scale
     precision_two = collect_precision_matrix(H_s, prec_coeffs_two, dim)
-    data_two, C_two = sim_data(covar=inv(precision_two), dim=dim, N=N)
+    data_two, _ = sim_data(covar=inv(precision_two), dim=dim, N=N)
     
     data_total = np.concatenate((data_one, data_two), axis=1)
-    C_total = np.cov(data_total)
+    scaler = StandardScaler().fit(data_one.T)
+    data_total = scaler.transform(data_total.T).T
     print("Finished Simulation")
+    print("Total Shape {}".format(data_total.shape))
     neq_indices = np.where(precision_one != precision_two)
     neq_indices_arr = np.concatenate((np.expand_dims(neq_indices[0],1), np.expand_dims(neq_indices[1], 1)), 1)
     if save_path is not None:
@@ -818,6 +823,13 @@ def simulate_changepoint_cai(omega, U, N=1000):
     mat_shift = np.eye(dim)*delta
     precision_one = omega + mat_shift
     precision_two = omega + U + mat_shift
+    # sns.heatmap(precision_one)
+    # plt.savefig('debugging_figs/cai_heatmap_one.png')
+    # plt.close()
+    # sns.heatmap(precision_two)
+    # plt.savefig('debugging_figs/cai_heatmap_two.png')
+    # plt.close()
+    # exit()
     assert(is_pos_def(precision_one))
     assert(is_pos_def(precision_two))
     data_one = np.random.multivariate_normal(np.zeros(dim), inv(precision_one), N)
@@ -826,7 +838,7 @@ def simulate_changepoint_cai(omega, U, N=1000):
     return data_full, precision_one, precision_two
 
 def changepoint_cai_model_one(args, dim, N=100, save_path=None):
-    print("Simulating Cai Model One")
+    #print("Simulating Cai Model One")
     omega = sim_changepoint_cai_model_one(dim=dim)
     U = create_U_cai(omega, dim=dim, N=N, num_indices=args.num_indices)
     data_full, precision_one, precision_two = simulate_changepoint_cai(omega, U, N=N)
@@ -834,11 +846,11 @@ def changepoint_cai_model_one(args, dim, N=100, save_path=None):
     neq_indices_arr = np.concatenate((np.expand_dims(neq_indices[0],1), np.expand_dims(neq_indices[1], 1)), 1)
     if save_path is not None:
         np.savetxt(os.path.join(save_path, 'changed_indx.csv'), neq_indices_arr)
-    print("Finished Simulation")
+    #print("Finished Simulation")
     return data_full
 
 def changepoint_cai_model_one_no_change(dim, N=100, save_path=None):
-    print("Simulating Cai Model One")
+    #print("Simulating Cai Model One")
     omega = sim_changepoint_cai_model_one(dim=dim)
     U = create_U_cai_no_change(omega, dim=dim, N=N)
     data_full, precision_one, precision_two = simulate_changepoint_cai(omega, U, N=N)
@@ -846,8 +858,8 @@ def changepoint_cai_model_one_no_change(dim, N=100, save_path=None):
     neq_indices_arr = np.concatenate((np.expand_dims(neq_indices[0],1), np.expand_dims(neq_indices[1], 1)), 1)
     if save_path is not None:
         np.savetxt(os.path.join(save_path, 'changed_indx.csv'), neq_indices_arr)
-    print("Finished Simulation")
-    return data_full, precision_one
+    #print("Finished Simulation")
+    return data_full
 
 
 def changepoint_cai_model_three(args, dim, N=100, save_path=None):

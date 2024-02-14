@@ -178,21 +178,36 @@ def LRT_individual_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=5
     print("Creating Cluster Specific CVX Problems...")
     prob_dict_clust = create_all_optim_problems_cluster(H_s, dim=dim)
     g_prob = create_global_problem(H_s, dim=dim)
-    data_one = data_total[:, 0:window_size]
-    C_one = np.cov(data_one, bias=True)
-    C_one = C_one + np.eye(C_one.shape[0])*1e-8 # correct numerical instability
+
+    if args.fix_pre:
+        print("----> Fixing Pre Window <----")
+        data_one = data_total[:, 0:window_size]
+        C_one = np.cov(data_one, bias=True)
+        C_one = C_one + np.eye(C_one.shape[0])*1e-8 # correct numerical instability
+        end_idx = data_total.shape[1]-post_window_size
+    else: 
+        print("---> NOT Fixing Pre Window <---")
+        end_idx = data_total.shape[1]-2*window_size
     # alpha_i_change_pre = solve_optim_global(curr_C=C_one, g_prob=g_prob)
     # # likelihood on pre data, alpha_one change
     # alt_likelihood_alpha_i_pre = full_likelihood(alpha_i_change_pre, H_s, C_one, N=data_one.shape[1], 
     #                                                 lam=lam, include_l1=include_l1, debug_title='Pre')
-    for i in tqdm(range(0, data_total.shape[1]-post_window_size, step_size)):
-        start_win_indx = i
-        first_end_indx = i+post_window_size
-        last_end_indx = i+2*post_window_size
-        data_two = data_total[:, i:i+post_window_size]
-        #data_two = data_total[:, i+window_size:i+2*window_size]
+    #for i in tqdm(range(window_size, end_idx, step_size)):
+    for i in tqdm(range(0, end_idx, step_size)): # this is still running over the training data, just needs adjustment afterward
+        # start_win_indx = i
+        # first_end_indx = i+post_window_size
+        # last_end_indx = i+2*post_window_size
+        if args.fix_pre:
+            data_two = data_total[:, i:i+post_window_size]
+        else:
+            data_one = data_total[:, i:i+window_size]
+            C_one = np.cov(data_one, bias=True)
+            C_one = C_one + np.eye(C_one.shape[0])*1e-8
+            #print(data_one.shape, i, i+window_size)
+            data_two = data_total[:, i+window_size:i+2*window_size]
+            #print(data_two.shape, i+window_size, i+2*window_size)
         data_full = np.concatenate((data_one, data_two), axis=1)
-        #C_one = np.cov(data_one, bias=True)
+
         C_two = np.cov(data_two, bias=True)
         C_two = C_two + np.eye(C_two.shape[0])*1e-8 # correct numerical instability
         C_full = np.cov(data_full, bias=True)
@@ -266,6 +281,14 @@ def LRT_individual_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=5
         # post_results = dask.compute(*dask_list_post, scheduler='threads', num_workers=N_cpus)
         #TODO
         # iterate over each coefficient
+
+        """"""
+        # alpha_i_change_pre = coeffs_hat_total.copy()
+        # alpha_i_change_post = coeffs_hat_total.copy()
+        # lazy_results_pre = Parallel(n_jobs=2)(delayed(optim_boyd_dc)(C_one, H_s[k]) for k in range(M))
+        # lazy_results_post = Parallel(n_jobs=2)(delayed(optim_boyd_dc)(C_two, H_s[k]) for k in range(M))
+        """"""
+
         for k in range(M):
             ####################################
             #alpha_i_change_pre = np.ones(M)
@@ -376,10 +399,15 @@ def LRT_individual_coeffs_full_likelihood(data_total, M, dim, H_s, window_size=5
                 # alpha_i_change_pre[k] = alpha_i_change_pre_temp[k]
                 # alpha_i_change_post[k] = alpha_i_change_post_temp[k]
                 #***************
+
                 alpha_i_change_pre = coeffs_hat_total.copy()
                 alpha_i_change_post = coeffs_hat_total.copy()
                 curr_alpha_i_pre = optim_boyd_dc(C=C_one, H=H_s[k])
                 curr_alpha_i_post = optim_boyd_dc(C=C_two, H=H_s[k])
+                #########################################
+                # curr_alpha_i_pre = lazy_results_pre[k]
+                # curr_alpha_i_post = lazy_results_post[k]
+                #########################################
                 alpha_i_change_pre[k] = curr_alpha_i_pre
                 alpha_i_change_post[k] = curr_alpha_i_post
 

@@ -15,7 +15,7 @@ from sklearn.covariance import graphical_lasso, GraphicalLasso, GraphicalLassoCV
 import seaborn as sns
 
 from simulate import *
-from utils import difference_data, load_alaska_data, scale_data, load_hjandrews_data, create_fig_dir, load_holiday_farm_data, load_tohoku_data, load_stock_market_data
+from utils import difference_data, load_alaska_data, scale_data, load_hjandrews_data, create_fig_dir, load_holiday_farm_data, load_tohoku_data, load_stock_market_data, load_sap_data
 from numba import jit
 import time
 from datetime import timedelta
@@ -84,14 +84,16 @@ def get_args():
     parser.add_argument('--single_test', type=int, default=0)
     parser.add_argument('--results_fldr_name', type=str, default=None)
     parser.add_argument('--results_filename', type=str, default=None)
+    parser.add_argument('--sap', type=int, default=0)
+    parser.add_argument('--alt', type=int, default=0)
     args = parser.parse_args()
 
     return args
 
-def resolve_data(args, save_path=None):
+def resolve_data(args, save_path=None, data_seed=42):
     if bool(args.sim):
         if args.sim_type == 'orthogonal_small':
-            return sim_changepoint_mv_normal_orthogonal(sim_scale=args.sim_scale, M=args.M, dim=args.dim, N=args.N, save_path=save_path)[1].T
+            return sim_changepoint_mv_normal_orthogonal(sim_scale=args.sim_scale, M=args.M, dim=args.dim, N=args.N, save_path=save_path, data_seed=data_seed)[1].T
         elif args.sim_type == 'orthogonal_mult_coeff':
             return sim_changepoint_mv_normal_orthogonal_mult_coeff(sim_scale=args.sim_scale, num_coeffs_change=args.num_coeffs_change, M=args.M, dim=args.dim, N=args.N, save_path=save_path)[1].T
         elif args.sim_type == 'cholesky':
@@ -102,6 +104,8 @@ def resolve_data(args, save_path=None):
             return scale_data(difference_data(sim_changepoint_var_process(dim=args.dim, N=args.N, num_coeffs_change=args.num_coeffs_change, scale=args.sim_scale, save_path=save_path)), percent=args.percent)
         elif args.sim_type == 'cai_model_one':
             return scale_data(changepoint_cai_model_one(args, dim=args.dim, N=args.N, save_path=save_path), percent=args.percent)
+        elif args.sim_type == 'cai_model_one_extra':
+            return scale_data(changepoint_cai_model_one(args, dim=args.dim, N=args.N, save_path=save_path), args.train_percent)
         elif args.sim_type == 'cai_model_three':
             return scale_data(changepoint_cai_model_three(args, dim=args.dim, N=args.N, save_path=save_path), percent=args.percent)
         elif args.sim_type == 'orthogonal_no_change':
@@ -143,7 +147,9 @@ def resolve_data(args, save_path=None):
             # stocks need a low lambda value I think
             return load_stock_market_data(args)
         elif args.data == 'mesonet':
-            return scale_data(load_mesonet_data(args), args.train_percent)
+            return scale_data(load_mesonet_data(args), percent=None, end_idx=args.window_size)
+        elif args.data == 'sap':
+            return scale_data(load_sap_data(args), percent=None, end_idx=args.window_size)
         else:
             print("Error: Dataset not understood")
             exit(0)
@@ -182,7 +188,11 @@ class KeshOnline:
         self.T0 = calc_T_t(X=self.data_full, omega_hat=self.clime_init, r_hat=self.rhat0, w=self.w, p=self.p, t=0, g1=self.g1, g2=self.g2)
         self.critical_value = inv_Q_func(self.pi_0)
 
-        self.test_stats = self.iterate(self.data)
+        if self.args.alt:
+            print("*** ALT VERSION ***")
+            self.test_stats = self.iterate_alt(self.data)
+        else:
+            self.test_stats = self.iterate(self.data)
         # self.rhat0 = calc_rhat(self.glasso.precision_, self.p)
         # self.T0 = calc_T_t(X=self.data, omega_hat=self.glasso.precision_, r_hat=self.rhat0, w=self.w, p=self.p, t=0, g1=self.g1, g2=self.g2)
         # print(self.T0)
@@ -246,40 +256,26 @@ class KeshOnline:
         curr_b = 0
         that_last = 0
 
-        #for t in range(data.shape[0]):
         test_stats = []
         t = 0
-        #while t+self.w <= data.shape[0]:
         for t in tqdm(range(0, data.shape[0]-self.post_window_size, self.args.step_size)):
             T_t = calc_T_t(X=data, omega_hat=curr_clime, r_hat=curr_rhat, w=self.post_window_size, p=self.p, t=t, g1=self.g1, g2=self.g2)
             test_stats.append(T_t)
-            #T_t = calc_T_t(X=data, omega_hat=self.prec_mat, r_hat=self.rhat0, w=self.w, p=self.p, t=t, g1=self.g1, g2=self.g2)
-            #print("Test Stat {} Critical Val {}".format(T_t, self.critical_value))
+
             indicator_fn = (T_t >= self.critical_value)
-            #curr_b += 1
-            # t += 1
-            # if curr_b == self.buffer:
-            #     curr_clime = self.clime_init_fn(self.args, data[that_last:t, :])
-            #     #curr_clime = GraphicalLasso(max_iter=100, alpha=self.lam, tol=1e-5, verbose=False).fit(data[that_last:t, :]).precision_
-            #     curr_rhat = calc_rhat(curr_clime, self.p)
-            #     curr_b = 0
-            # if not indicator_fn:
-            #     curr_b += 1
-            #     t += 1
-            #     if curr_b == self.buffer:
-            #         curr_clime = self.clime_init_fn(self.args, data[that_last:t, :])
-            #         #curr_clime = GraphicalLasso(max_iter=100, alpha=self.lam, tol=1e-5, verbose=False).fit(data[that_last:t, :]).precision_
-            #         curr_rhat = calc_rhat(curr_clime, self.p)
-            #         curr_b = 0
-            # else:
-            #     that_last = t
-            #     self.D_hat.append(t)
-            #     curr_clime = self.clime_init_fn(self.args, data[t:t+self.N, :])
-            #     #curr_clime = GraphicalLasso(max_iter=100, alpha=self.lam, tol=1e-5, verbose=False).fit(data[t:t+self.N, :]).precision_
-            #     curr_rhat = calc_rhat(curr_clime, self.p)
-            #     curr_b = 0
-            #     t = t + self.N
         
+        return np.array(test_stats)
+    
+    def iterate_alt(self, data):
+        curr_clime = self.clime_init
+
+        test_stats = []
+        t = 0
+        for t in tqdm(range(0, data.shape[0]-self.post_window_size, self.args.step_size)):
+            E_hat = calc_E_hat(data, omega_hat=curr_clime, t=t, p=self.p, w=self.post_window_size)
+            test_stats.append(np.linalg.norm(E_hat, ord=np.inf))
+
+
         return np.array(test_stats)
         
 
@@ -392,6 +388,8 @@ def perform_single_run(args):
     data_full = resolve_data(args, save_path=None)
     print(data_full.shape)
     save_path = os.path.join(args.results_path+"_kesh", args.data)
+    if args.alt:
+        save_path = os.path.join(args.results_path+"_kesh_alt", args.data)
     if not os.path.isdir(save_path):
         os.mkdir(save_path)
     model = KeshOnline(args, data_full)
@@ -410,8 +408,10 @@ def perform_simulation_batch(args):
     # save everything to files - I guess
     print("\n*******************************************************************************")
     print("Performing Batch Simulation of {} with Dim = {}, Window = {}".format(args.sim_type, args.dim, args.window_size))
-    seeds_list = np.arange(50, 70)
+    seeds_list = np.arange(50, 60)
     sim_results_path = os.path.join(args.results_path, "simulation_results_kesh")
+    if args.alt:
+        sim_results_path = os.path.join(args.results_path, "simulation_results_kesh_alt")
     if not os.path.isdir(sim_results_path):
         os.mkdir(sim_results_path)
     sim_type_path = os.path.join(sim_results_path, args.sim_type+"_"+str(args.dim))
@@ -420,14 +420,19 @@ def perform_simulation_batch(args):
     print(sim_type_path)
     if not os.path.isdir(sim_type_path):
         os.mkdir(sim_type_path)
+    timing = []
+    import timeit
     for seed in seeds_list:
         np.random.seed(seed)
         save_path = os.path.join(sim_type_path, str(seed))
         if not os.path.isdir(save_path):
             os.mkdir(save_path)
-        data_full = resolve_data(args, save_path=save_path)
+        data_full = resolve_data(args, save_path=save_path, data_seed=seed)
         print(data_full.shape)
+        t0 = timeit.default_timer()
         model = KeshOnline(args, data_full)
+        t1 = timeit.default_timer()
+        timing.append(round(t1-t0, 3))
         global_test_vals = model.test_stats
         print("Test Vals Shape", global_test_vals.shape)
         print()
@@ -435,6 +440,48 @@ def perform_simulation_batch(args):
         plt.plot(global_test_vals)
         plt.savefig(os.path.join(save_path, "test_stat.png"))
         plt.close()
+    np.savetxt('debugging_figs/timing_kesh_{}.csv'.format(args.dim), np.array(timing))
+    print("*******************************************************************************")
+    print("Done!")
+
+def perform_sap_batch(args):
+    # run a batch of SAP500 data
+    # batch constitutes a random sample of a subset of tickers
+    print("\n*******************************************************************************")
+    print("Performing SAP Run with Dim = {}, Window = {}, Post Window {}".format(args.dim, args.window_size, args.post_window_size))
+    seeds_list = np.arange(50, 60)
+    sim_results_path = os.path.join(args.results_path, "sap_results_kesh")
+    if args.alt:
+        sim_results_path = os.path.join(args.results_path, "sap_results_kesh_alt")
+    if not os.path.isdir(sim_results_path):
+        os.mkdir(sim_results_path)
+    sim_type_path = os.path.join(sim_results_path, "sap_500"+"_"+str(args.dim))
+    print(sim_type_path)
+    if not os.path.isdir(sim_type_path):
+        os.mkdir(sim_type_path)
+    for seed in seeds_list:
+        np.random.seed(seed)
+        save_path = os.path.join(sim_type_path, str(seed))
+        if not os.path.isdir(save_path):
+            os.mkdir(save_path)
+        data_full = resolve_data(args, save_path=save_path, data_seed=seed)
+        # if 'orthogonal' in args.sim_type:
+        #     H_s, data_full = data_full
+        #     data_full = data_full.T
+        print(data_full.shape)
+        dim_list = np.arange(0, data_full.shape[1])
+        chosen_idxs = np.random.choice(dim_list, size=args.dim, replace=False)
+        data_full = data_full[:, chosen_idxs]
+        model = KeshOnline(args, data_full)
+        global_test_vals = model.test_stats
+        print("Test Vals Shape", global_test_vals.shape)
+        print()
+        np.savetxt(os.path.join(save_path, "global_test_vals.csv"), global_test_vals, delimiter=',')
+        np.savetxt(os.path.join(save_path, "chosen_idxs.csv"), chosen_idxs, delimiter=',')
+        plt.plot(global_test_vals)
+        plt.savefig(os.path.join(save_path, "test_stat.png"))
+        plt.close()
+
     print("*******************************************************************************")
     print("Done!")
 
@@ -444,6 +491,8 @@ def main():
     print("Window Size {} Post Window Size {} Lamba {} Train Percent {}".format(args.window_size, args.post_window_size, args.lam, args.train_percent))
     if args.single_test:
         perform_single_run(args)
+    elif args.sap:
+        perform_sap_batch(args)
     else:
         perform_simulation_batch(args)
 
