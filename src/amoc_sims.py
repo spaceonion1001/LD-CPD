@@ -801,7 +801,8 @@ def main_sims():
     #seeds = np.arange(50, 54)
     #sim_types = ['anderson_residual_block', 'anderson_residual_unstructured', 'orthogonal']
     #sim_types = ['anderson_residual_unstructured']
-    sim_types = ['orthogonal_small_block']
+    #sim_types = ['orthogonal_small_block']
+    sim_types = ['orthogonal_cross_block']
     #sim_types = ['cai_model_one']
     dims = [20, 40, 60, 80]
     #dims = [20,40,60]
@@ -1066,7 +1067,7 @@ def main_sims():
             plt.xlabel('FPR', fontsize=38)
             plt.ylabel('Detection Time', fontsize=38)
             #plt.title('Average AMOC Curve for {} Dim {}'.format(sim_type, curr_dim))
-            plt.title('Average AMOC Curve ({} Dim={})'.format("Block Matrix", curr_dim), fontsize=36)
+            plt.title('Average AMOC Curve ({} Dim={})'.format("Cross Block", curr_dim), fontsize=36)
             plt.ylim(bottom=0.0)
             plt.xticks(fontsize=28)
             plt.yticks(fontsize=28)
@@ -1081,26 +1082,30 @@ def main_mesonet(storm_name='center'):
     Will be more involved. Mainly for CP location identification with storm pairings
     """
     window_size = 600 # this is fixed currently
-    post_window_size = 20 # this is fixed currently
+    post_window_size = 25 # this is fixed currently
     dim = 35 # this is fixed currently
     curr_path = os.getcwd()
     save_path = os.path.join(curr_path, 'amoc_figs/')
     curr_storm_save_path = save_path+"mesonet/"+storm_name
-    cpd_path = 'results/{}_storm_feb_2024'.format(storm_name)
-    kesh_path = 'results_kesh/mesonet_feb_2024'
-    kesh_alt_path = 'results_kesh_alt/mesonet_feb_2024'
-    cai_path = 'results_cai/mesonet_feb_2024'
-    # cpd_path = 'results/{}_storm'.format(storm_name)
-    # kesh_path = 'results_kesh/mesonet'
-    # kesh_alt_path = 'results_kesh_alt/mesonet'
-    # cai_path = 'results_cai/mesonet'
+    # cpd_path = 'results/{}_storm_feb_2024'.format(storm_name)
+    # kesh_path = 'results_kesh/mesonet_feb_2024'
+    # kesh_alt_path = 'results_kesh_alt/mesonet_feb_2024'
+    # cai_path = 'results_cai/mesonet_feb_2024'
+
+    cpd_path = 'results/{}_storm'.format(storm_name)
+
+    cpd_path = 'results/{}_storm_unprocessed'.format(storm_name)
+    kesh_path = 'results_kesh/mesonet'
+    kesh_alt_path = 'results_kesh_alt/mesonet'
+    cai_path = 'results_cai/mesonet'
     storm_data_path = '../data/out_{}'.format(storm_name)
     dir_files = os.listdir(cpd_path)
     storm_dir_files = os.listdir(storm_data_path)
-    storm_nums = []
-    for fi in dir_files:
-        if 'center_storm' in fi:
-            storm_nums.append(int(fi.split('_')[-1].split('.')[0]))
+    # storm_nums = []
+    # for fi in dir_files:
+    #     if 'center_storm' in fi:
+    #         storm_nums.append(int(fi.split('_')[-1].split('.')[0]))
+    storm_nums = [1,3,4,5,6,7,8,9,12,13,14,15,16,17,23,24,25,26,28,32,33,34,35,38]
 
     storm_files = []
     for num in storm_nums:
@@ -1130,13 +1135,19 @@ def main_mesonet(storm_name='center'):
         cutoff = cpd_vals.shape[1]//2 # split test stats and p-vals
         pvals_cpd = cpd_vals[:, cutoff:][window_size:] # just the p-values, exclude first window size
         stats_cpd = cpd_vals[:, 0:cutoff][window_size:] # just the stats, exclude first window size
-        kesh_vals = np.loadtxt(os.path.join(kesh_path, "{}_storm_{}_final_data.csv_global_test_vals.csv".format(storm_name, num)), delimiter=',')
-        kesh_vals_alt = np.loadtxt(os.path.join(kesh_alt_path, "{}_storm_{}_final_data.csv_global_test_vals.csv".format(storm_name, num)), delimiter=',')
-        cai_vals = np.loadtxt(os.path.join(cai_path, "{}_storm_{}_final_data.csv_global_test_vals.csv".format(storm_name, num)), delimiter=',')
-        print(cai_vals.shape)
-        print(kesh_vals.shape)
-        print(pvals_cpd.shape)
-        print(kesh_vals_alt.shape)
+
+        # kesh_vals = np.loadtxt(os.path.join(kesh_path, "{}_storm_{}_final_data.csv_global_test_vals.csv".format(storm_name, num)), delimiter=',')
+        # kesh_vals_alt = np.loadtxt(os.path.join(kesh_alt_path, "{}_storm_{}_final_data.csv_global_test_vals.csv".format(storm_name, num)), delimiter=',')
+        # cai_vals = np.loadtxt(os.path.join(cai_path, "{}_storm_{}_final_data.csv_global_test_vals.csv".format(storm_name, num)), delimiter=',')
+
+        kesh_vals = np.loadtxt(os.path.join(kesh_path, "{}_storm_storm_{}_unprocessed_data.csv_global_test_vals.csv".format(storm_name, num)), delimiter=',')
+        kesh_vals_alt = np.loadtxt(os.path.join(kesh_alt_path, "{}_storm_storm_{}_unprocessed_data.csv_global_test_vals.csv".format(storm_name, num)), delimiter=',')
+        cai_vals = np.loadtxt(os.path.join(cai_path, "{}_storm_storm_{}_unprocessed_data.csv_global_test_vals.csv".format(storm_name, num)), delimiter=',')
+        # print(cai_vals.shape)
+        # print(kesh_vals.shape)
+        # print(pvals_cpd.shape)
+        # print(kesh_vals_alt.shape)
+        print(num)
         actual_final_data = pd.read_csv(os.path.join(storm_data_path, '{}_storm_{}_final_data.csv').format(storm_name, num))
         actual_final_data['YYYYMMDDhhmm'] = pd.to_datetime(actual_final_data['YYYYMMDDhhmm'])
         actual_storm_data = pd.read_csv(os.path.join(storm_data_path, '{}_storm_{}_storm_data.csv').format(storm_name, num))
@@ -1156,9 +1167,15 @@ def main_mesonet(storm_name='center'):
         cp_location = storm_start_idx
         cp_location_adjustment = cp_location - window_size
         # subtract off window_size to handle the sliding window edges at start/end of data
-        first_d_time = cp_location_adjustment - post_window_size + 1
-        storm_duration = storm_end_idx - storm_start_idx
-        last_d_time = cp_location_adjustment + storm_duration + 1 - post_window_size # how long is the storm contained in the window as it slides over the data - at least window_size times (right to left)
+        first_d_time = cp_location_adjustment - post_window_size + 1 - 12
+        storm_duration = storm_end_idx - storm_start_idx + 12*2
+        last_d_time = cp_location_adjustment + storm_duration + 1 - post_window_size + 12 # how long is the storm contained in the window as it slides over the data - at least window_size times (right to left)
+
+        adjustment_window_start = first_d_time - 120
+        adjustment_window_end = last_d_time
+        #first_d_time = 120
+        #last_d_time = last_d_time - adjustment_window_start
+
         print("*** STORM NUMBER {} ***".format(num))
         print("Storm type {}; Duration {}".format(storm_type, storm_duration))
         print("Storm Start {} End {}".format(storm_start_idx, storm_end_idx))
@@ -1189,6 +1206,14 @@ def main_mesonet(storm_name='center'):
         kesh_vals = kesh_vals[0:last_d_time+1]
         kesh_vals_alt = kesh_vals_alt[0:last_d_time+1]
         cai_vals = cai_vals[0:last_d_time+1]
+
+        # pvals_cpd = pvals_cpd[adjustment_window_start:adjustment_window_end+1]
+        # pvals_kesh = pvals_kesh[adjustment_window_start:adjustment_window_end+1]
+        # pvals_cai = pvals_cai[adjustment_window_start:adjustment_window_end+1]
+        # stats_cpd = stats_cpd.max(axis=1)[adjustment_window_start:adjustment_window_end+1]
+        # kesh_vals = kesh_vals[adjustment_window_start:adjustment_window_end+1]
+        # kesh_vals_alt = kesh_vals_alt[adjustment_window_start:adjustment_window_end+1]
+        # cai_vals = cai_vals[adjustment_window_start:adjustment_window_end+1]
         """
         """
         print(pvals_cpd.shape, kesh_vals.shape, kesh_vals_alt.shape, cai_vals.shape)

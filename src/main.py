@@ -9,7 +9,7 @@ sns.set()
 
 from precision_cpd import PrecisionCPD
 from simulate import *
-from utils import difference_data, load_alaska_data, scale_data, load_hjandrews_data, create_fig_dir, load_holiday_farm_data, load_tohoku_data, load_stock_market_data, load_mesonet_data, load_sap_data
+from utils import difference_data, load_alaska_data, scale_data, load_hjandrews_data, create_fig_dir, load_holiday_farm_data, load_tohoku_data, load_stock_market_data, load_mesonet_data, load_sap_data, load_mesonet_pressure_data
 import time
 from datetime import timedelta
 
@@ -75,6 +75,10 @@ def resolve_data(args, save_path=None, data_seed=42):
     if bool(args.sim):
         if args.sim_type == 'orthogonal_small':
             return sim_changepoint_mv_normal_orthogonal(sim_scale=args.sim_scale, M=args.M, dim=args.dim, N=args.N, save_path=save_path, data_seed=data_seed)[1].T
+        elif args.sim_type == 'orthogonal_cross_block':
+            return sim_changepoint_mv_normal_orthogonal_cross_block(sim_scale=args.sim_scale, M=args.M, dim=args.dim, N=args.N, save_path=save_path, data_seed=data_seed)[1].T
+        elif args.sim_type == 'orthogonal_multiple_block':
+            return sim_changepoint_mv_normal_orthogonal_multiple_block(sim_scale=args.sim_scale, M=args.M, dim=args.dim, N=args.N, save_path=save_path, data_seed=data_seed)[1].T
         elif args.sim_type == 'orthogonal_block_fix_window': # THIS IS A PLACEHOLDER DUPLICATE JUST FOR EASE OF SAVING FOR COMPARISONS
             return sim_changepoint_mv_normal_orthogonal(sim_scale=args.sim_scale, M=args.M, dim=args.dim, N=args.N, save_path=save_path, data_seed=data_seed)[1].T
         elif args.sim_type == 'orthogonal_mult_coeff':
@@ -133,6 +137,8 @@ def resolve_data(args, save_path=None, data_seed=42):
             return scale_data(load_stock_market_data(args), args.train_percent)
         elif args.data == 'mesonet':
             return scale_data(load_mesonet_data(args), percent=None, end_idx=args.window_size)
+        elif args.data == 'mesonet_pressure':
+            return scale_data(load_mesonet_pressure_data(args), percent=None, end_idx=args.window_size)
         elif args.data == 'sap':
             return scale_data(load_sap_data(args), percent=None, end_idx=args.window_size)
         else:
@@ -178,17 +184,19 @@ def perform_single_test(args):
                 plt.plot(lrt_vals_all[:, i])
                 plt.xlabel('Time')
                 plt.ylabel('Test Statistic {}'.format(i))
-                plt.savefig(os.path.join(fig_dir_path, 'lrt_local_i{}_M{}_win{}_step{}_lam{}_full{}_sim{}.png'.format(i, args.M, args.window_size, 
-                                                                                                                    args.step_size, args.lam, 
-                                                                                                                    args.full_basis, args.sim)))
+                # plt.savefig(os.path.join(fig_dir_path, 'lrt_local_i{}_M{}_win{}_step{}_lam{}_full{}_sim{}.png'.format(i, args.M, args.window_size, 
+                #                                                                                                     args.step_size, args.lam, 
+                #                                                                                                     args.full_basis, args.sim)))
+                plt.savefig(os.path.join(fig_dir_path, 'lrt_local_i{}_{}.png'.format(i, args.results_filename)))
                 plt.close()
 
                 plt.plot(p_vals_all[:, i])
                 plt.xlabel('Time')
                 plt.ylabel('P Vals {}'.format(i))
-                plt.savefig(os.path.join(fig_dir_path, 'pvals_local_i{}_M{}_win{}_step{}_lam{}_full{}_sim{}.png'.format(i, args.M, args.window_size, 
-                                                                                                                    args.step_size, args.lam, 
-                                                                                                                    args.full_basis, args.sim)))
+                # plt.savefig(os.path.join(fig_dir_path, 'pvals_local_i{}_M{}_win{}_step{}_lam{}_full{}_sim{}.png'.format(i, args.M, args.window_size, 
+                #                                                                                                     args.step_size, args.lam, 
+                #                                                                                                     args.full_basis, args.sim)))
+                plt.savefig(os.path.join(fig_dir_path, 'pvals_local_i{}_{}.png'.format(i, args.results_filename)))
                 plt.close()
             if bool(args.save_test_stat):
                 test_results = np.hstack([lrt_vals_all, p_vals_all])
@@ -219,7 +227,7 @@ def perform_simulation_batch(args):
     args.fig_dir_path = fig_dir_path
     print("\n*******************************************************************************")
     print("Performing Batch Simulation of {} with Dim = {}, M = {}, Scale = {}, Window = {}, Lam = {}".format(args.sim_type, args.dim, args.M, args.sim_scale, args.window_size, args.lam))
-    seeds_list = np.arange(50, 60)
+    seeds_list = np.arange(60, 70)
     sim_results_path = os.path.join(args.results_path, "simulation_results")
     if not os.path.isdir(sim_results_path):
         os.mkdir(sim_results_path)

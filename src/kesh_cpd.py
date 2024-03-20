@@ -15,7 +15,7 @@ from sklearn.covariance import graphical_lasso, GraphicalLasso, GraphicalLassoCV
 import seaborn as sns
 
 from simulate import *
-from utils import difference_data, load_alaska_data, scale_data, load_hjandrews_data, create_fig_dir, load_holiday_farm_data, load_tohoku_data, load_stock_market_data, load_sap_data
+from utils import difference_data, load_alaska_data, scale_data, load_hjandrews_data, create_fig_dir, load_holiday_farm_data, load_tohoku_data, load_stock_market_data, load_sap_data, load_mesonet_pressure_data
 from numba import jit
 import time
 from datetime import timedelta
@@ -96,6 +96,10 @@ def resolve_data(args, save_path=None, data_seed=42):
             return sim_changepoint_mv_normal_orthogonal(sim_scale=args.sim_scale, M=args.M, dim=args.dim, N=args.N, save_path=save_path, data_seed=data_seed)[1].T
         elif args.sim_type == 'orthogonal_mult_coeff':
             return sim_changepoint_mv_normal_orthogonal_mult_coeff(sim_scale=args.sim_scale, num_coeffs_change=args.num_coeffs_change, M=args.M, dim=args.dim, N=args.N, save_path=save_path)[1].T
+        elif args.sim_type == 'orthogonal_cross_block':
+            return sim_changepoint_mv_normal_orthogonal_cross_block(sim_scale=args.sim_scale, M=args.M, dim=args.dim, N=args.N, save_path=save_path, data_seed=data_seed)[1].T
+        elif args.sim_type == 'orthogonal_multiple_block':
+            return sim_changepoint_mv_normal_orthogonal_multiple_block(sim_scale=args.sim_scale, M=args.M, dim=args.dim, N=args.N, save_path=save_path, data_seed=data_seed)[1].T
         elif args.sim_type == 'cholesky':
             return scale_data(sim_changepoint_mv_normal_cholesky(dim=args.dim, N=args.N, num_coeffs_change=args.num_coeffs_change, scale=args.sim_scale, save_path=save_path), percent=args.percent)
         elif args.sim_type == 'ldlt':
@@ -148,6 +152,8 @@ def resolve_data(args, save_path=None, data_seed=42):
             return load_stock_market_data(args)
         elif args.data == 'mesonet':
             return scale_data(load_mesonet_data(args), percent=None, end_idx=args.window_size)
+        elif args.data == 'mesonet_pressure':
+            return scale_data(load_mesonet_pressure_data(args), percent=None, end_idx=args.window_size)
         elif args.data == 'sap':
             return scale_data(load_sap_data(args), percent=None, end_idx=args.window_size)
         else:
@@ -408,7 +414,7 @@ def perform_simulation_batch(args):
     # save everything to files - I guess
     print("\n*******************************************************************************")
     print("Performing Batch Simulation of {} with Dim = {}, Window = {}".format(args.sim_type, args.dim, args.window_size))
-    seeds_list = np.arange(50, 60)
+    seeds_list = np.arange(50, 70)
     sim_results_path = os.path.join(args.results_path, "simulation_results_kesh")
     if args.alt:
         sim_results_path = os.path.join(args.results_path, "simulation_results_kesh_alt")

@@ -362,6 +362,86 @@ def sim_changepoint_mv_normal_orthogonal(sim_scale=0.8, M=2, dim=4, N=500, save_
         np.savetxt(os.path.join(save_path, 'changed_indx.csv'), neq_indices_arr)
     return H_s, data_total
 
+
+def sim_changepoint_mv_normal_orthogonal_cross_block(sim_scale=0.8, M=2, dim=4, N=500, save_path=None, linkage_type='single', data_seed=42):
+    H_s, prec_temp, _ = generate_matrices_orthogonal(M=M, dim=dim, to_print=False, linkage_type=linkage_type, seed=42) # remove this source of randomness for consistency
+    prec_coeffs_one = np.ones(M)
+    precision_one = collect_precision_matrix(H_s=H_s, prec_coeffs=prec_coeffs_one, P=dim)
+    np.random.seed(data_seed)
+    data_one, _ = sim_data(covar=inv(precision_one), dim=dim, N=N)
+    
+
+    #############
+    prec_coeffs_two = prec_coeffs_one.copy()
+    rand_idx = np.random.choice(np.arange(M), size=2, replace=False)
+    for idx in rand_idx:
+        prec_coeffs_two[idx] = prec_coeffs_two[idx] + sim_scale
+    
+    nonzero_cols_one = np.nonzero(np.any(symmetrize_from_vector(H_s[rand_idx[0]], dim=dim) != 0, axis=0))[0]
+    nonzero_cols_two = np.nonzero(np.any(symmetrize_from_vector(H_s[rand_idx[1]], dim=dim) != 0, axis=0))[0]
+    subset_cols_one = np.random.choice(nonzero_cols_one, size=dim//4, replace=False)
+    subset_cols_two = np.random.choice(nonzero_cols_two, size=dim//4, replace=False)
+
+    precision_two = precision_one.copy()
+    for i in subset_cols_one:
+        for j in subset_cols_one:
+            precision_two[i, j] = precision_two[i, j] * prec_coeffs_two[rand_idx[0]]
+
+    for i in subset_cols_two:
+        for j in subset_cols_two:
+            precision_two[i, j] = precision_two[i, j] * prec_coeffs_two[rand_idx[1]]
+    #############
+
+    data_two, _ = sim_data(covar=inv(precision_two), dim=dim, N=N)
+    
+    data_total = np.concatenate((data_one, data_two), axis=1)
+    scaler = StandardScaler().fit(data_one.T)
+    data_total = scaler.transform(data_total.T).T
+    print("Finished Simulation")
+    print("Total Shape {}".format(data_total.shape))
+    neq_indices = np.where(precision_one != precision_two)
+    neq_indices_arr = np.concatenate((np.expand_dims(neq_indices[0],1), np.expand_dims(neq_indices[1], 1)), 1)
+    if save_path is not None:
+        np.savetxt(os.path.join(save_path, 'changed_indx.csv'), neq_indices_arr)
+    return H_s, data_total
+
+def sim_changepoint_mv_normal_orthogonal_multiple_block(sim_scale=0.8, M=2, dim=4, N=500, save_path=None, linkage_type='single', data_seed=42):
+    H_s, prec_temp, _ = generate_matrices_orthogonal(M=M, dim=dim, to_print=False, linkage_type=linkage_type, seed=42) # remove this source of randomness for consistency
+    prec_coeffs_one = np.ones(M)
+    precision_one = collect_precision_matrix(H_s=H_s, prec_coeffs=prec_coeffs_one, P=dim)
+    np.random.seed(data_seed)
+    data_one, _ = sim_data(covar=inv(precision_one), dim=dim, N=N)
+    
+
+    #############
+    prec_coeffs_two = prec_coeffs_one.copy()
+    rand_idx = np.random.choice(np.arange(M), size=2, replace=False)
+    
+    nonzero_cols_one = np.nonzero(np.any(symmetrize_from_vector(H_s[rand_idx[0]], dim=dim) != 0, axis=0))[0]
+    nonzero_cols_two = np.nonzero(np.any(symmetrize_from_vector(H_s[rand_idx[1]], dim=dim) != 0, axis=0))[0]
+    subset_cols_one = np.random.choice(nonzero_cols_one, size=dim//4, replace=False)
+    subset_cols_two = np.random.choice(nonzero_cols_two, size=dim//4, replace=False)
+    subset_cols = np.concatenate((subset_cols_one, subset_cols_two))
+    precision_two = precision_one.copy()
+    for i in subset_cols:
+        for j in subset_cols:
+            idx = np.argmin(rand_idx)
+            precision_two[i, j] = precision_two[i, j] * (1.0+sim_scale)
+    #############
+
+    data_two, _ = sim_data(covar=inv(precision_two), dim=dim, N=N)
+    
+    data_total = np.concatenate((data_one, data_two), axis=1)
+    scaler = StandardScaler().fit(data_one.T)
+    data_total = scaler.transform(data_total.T).T
+    print("Finished Simulation")
+    print("Total Shape {}".format(data_total.shape))
+    neq_indices = np.where(precision_one != precision_two)
+    neq_indices_arr = np.concatenate((np.expand_dims(neq_indices[0],1), np.expand_dims(neq_indices[1], 1)), 1)
+    if save_path is not None:
+        np.savetxt(os.path.join(save_path, 'changed_indx.csv'), neq_indices_arr)
+    return H_s, data_total
+
 def sim_changepoint_mv_normal_orthogonal_no_change(sim_scale=0.8, M=2, dim=4, N=500, save_path=None):
     print("Simulating Anderson Decomp Data")
     #assert dim % M == 0, "Need dim divisible by M for sake of sampling at the moment"

@@ -9,7 +9,7 @@ from statsmodels.stats.multitest import fdrcorrection
 from tqdm import tqdm
 from scipy.stats import norm
 from simulate import *
-from utils import difference_data, load_alaska_data, scale_data, load_hjandrews_data, create_fig_dir, load_holiday_farm_data, load_tohoku_data, load_stock_market_data, load_mesonet_data, load_sap_data
+from utils import difference_data, load_alaska_data, scale_data, load_hjandrews_data, create_fig_dir, load_holiday_farm_data, load_tohoku_data, load_stock_market_data, load_mesonet_data, load_sap_data, load_mesonet_pressure_data
 from numba import jit
 import time
 from datetime import timedelta
@@ -87,6 +87,10 @@ def resolve_data(args, save_path=None, data_seed=42):
     if bool(args.sim):
         if args.sim_type == 'orthogonal_small':
             return sim_changepoint_mv_normal_orthogonal(sim_scale=args.sim_scale, M=args.M, dim=args.dim, N=args.N, save_path=save_path, data_seed=data_seed)[1].T
+        elif args.sim_type == 'orthogonal_cross_block':
+            return sim_changepoint_mv_normal_orthogonal_cross_block(sim_scale=args.sim_scale, M=args.M, dim=args.dim, N=args.N, save_path=save_path, data_seed=data_seed)[1].T
+        elif args.sim_type == 'orthogonal_multiple_block':
+            return sim_changepoint_mv_normal_orthogonal_multiple_block(sim_scale=args.sim_scale, M=args.M, dim=args.dim, N=args.N, save_path=save_path, data_seed=data_seed)[1].T
         elif args.sim_type == 'orthogonal_mult_coeff':
             return sim_changepoint_mv_normal_orthogonal_mult_coeff(sim_scale=args.sim_scale, num_coeffs_change=args.num_coeffs_change, M=args.M, dim=args.dim, N=args.N, save_path=save_path)[1].T
         elif args.sim_type == 'cholesky':
@@ -137,6 +141,8 @@ def resolve_data(args, save_path=None, data_seed=42):
             return scale_data(load_stock_market_data(args), args.train_percent)
         elif args.data == 'mesonet':
             return scale_data(load_mesonet_data(args), percent=None, end_idx=args.window_size)
+        elif args.data == 'mesonet_pressure':
+            return scale_data(load_mesonet_pressure_data(args), percent=None, end_idx=args.window_size)
         elif args.data == 'sap':
             return scale_data(load_sap_data(args), percent=None, end_idx=args.window_size)
         else:
@@ -386,6 +392,9 @@ def apply_cai_algorithm_windowed(args, data):
             first_data_window = data[0:args.window_size, :] # fix the training window
             second_data_window = data[i:i+args.post_window_size, :] # move forward from i post_window_size ticks forward
             #data_window = np.concatenate((first_data_window, second_data_window), axis=0)
+        else:
+            first_data_window = data[i:i+args.window_size, :]
+            second_data_window = data[i+args.window_size:i+args.window_size+args.post_window_size, :]
         #beta_hats_x, beta_hats_y = perform_regression(data)
         residuals_x, residuals_y, beta_hats_x, beta_hats_y  = perform_regression(X_data=first_data_window, Y_data=second_data_window)
         #residuals_x, residuals_y, beta_hats_x, beta_hats_y  = perform_regression_alt(X_data=first_data_window, Y_data=second_data_window)
@@ -485,7 +494,7 @@ def perform_simulation_batch(args):
     # save everything to files - I guess
     print("\n*******************************************************************************")
     print("Performing Batch Simulation of {} with Dim = {}, Window = {}".format(args.sim_type, args.dim, args.window_size))
-    seeds_list = np.arange(50, 60)
+    seeds_list = np.arange(51, 70)
     sim_results_path = os.path.join(args.results_path, "simulation_results_cai")
     if not os.path.isdir(sim_results_path):
         os.mkdir(sim_results_path)
