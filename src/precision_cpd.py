@@ -34,6 +34,11 @@ from meinshausen import meinshausen_correction
 import warnings
 warnings.filterwarnings('ignore')  # <- remember to comment this if something breaks and you get confused
 
+import matplotlib
+from matplotlib.ticker import MaxNLocator
+import matplotlib.patches as mpatches
+
+
 
 class PrecisionCPD:
     def __init__(self, args):
@@ -322,6 +327,19 @@ class PrecisionCPD:
             plt.close()
             sns.heatmap(precision)
             plt.savefig(os.path.join('debugging_figs/sap_figs/', "precision_{}.png".format(self.args.linkage)))
+            plt.close()
+        else:
+            plt.figure(figsize=(12,9))
+            dn = hierarchy.dendrogram(Z)
+            #plt.savefig(os.path.join(self.fig_dir_path, "dendrogram.png"))
+            plt.yticks([])
+            #plt.xlabel("Dimension Labels", fontsize=26)
+            #plt.title("Sample Dendrogram", fontsize=28)
+            plt.xlabel('Feature Index', fontsize=24)
+            plt.savefig(os.path.join('debugging_figs/nonsap_figs/', "dendrogram_{}.png".format(self.args.linkage)))
+            plt.close()
+            sns.heatmap(precision)
+            plt.savefig(os.path.join('debugging_figs/nonsap_figs/', "precision_{}.png".format(self.args.linkage)))
             plt.close()
         ######
         if self.args.recursion:
@@ -743,9 +761,13 @@ class PrecisionCPD:
         basis_mats = self.basis_matrices
         if bool(self.full_basis):
             basis_mats = self.basis_matrices_full
+        m = np.zeros((self.dim, self.dim))
         for i in range(basis_mats.shape[0]):
             curr_mat = symmetrize_from_vector(basis_mats[i], self.dim)
             nonzero_cols = np.nonzero(np.any(curr_mat != 0, axis=0))[0]
+            for col in nonzero_cols:
+                for col2 in nonzero_cols:
+                    m[col, col2] = i+1
             print("****************************************")
             if i == (basis_mats.shape[0] - 1):
                 print("Basis Matrix {}".format(i))
@@ -756,6 +778,20 @@ class PrecisionCPD:
             print("Channels Contained {}".format(nonzero_cols))
             print("****************************************")
             print()
+        #print(m)
+        #colors = 'blue lime yellow magenta red'.split()
+        # colors = 'whitesmoke blue lime cyan red orange'.split()
+        # values = range(basis_mats.shape[0]+1)
+        # #patches = [mpatches.Patch(color=colors[x], label="Cluster {l}".format(l=values[x]) ) for x in range(len(values)) ]
+        # cmap = matplotlib.colors.ListedColormap(colors, name='colors', N=None)
+
+        # plt.imshow(m, cmap=cmap)
+        # plt.xticks(range(0, 20), rotation=45)
+        # plt.yticks(range(0, 20), rotation=45)
+        # #plt.legend(handles=patches, bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=-1.0 )
+        # plt.grid(True)
+        # plt.savefig(os.path.join('debugging_figs/nonsap_figs/', "precision_{}.png".format(self.args.linkage)))
+        # plt.close()
     
     def save_matrices_simulations(self, save_path):
         print("Saving Basis Mats")

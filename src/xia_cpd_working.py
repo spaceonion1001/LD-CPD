@@ -91,6 +91,10 @@ def resolve_data(args, save_path=None, data_seed=42):
             return sim_changepoint_mv_normal_orthogonal_cross_block(sim_scale=args.sim_scale, M=args.M, dim=args.dim, N=args.N, save_path=save_path, data_seed=data_seed)[1].T
         elif args.sim_type == 'orthogonal_multiple_block':
             return sim_changepoint_mv_normal_orthogonal_multiple_block(sim_scale=args.sim_scale, M=args.M, dim=args.dim, N=args.N, save_path=save_path, data_seed=data_seed)[1].T
+        elif args.sim_type == 'orthogonal_hard':
+            return sim_changepoint_mv_normal_orthogonal_hard(sim_scale=args.sim_scale, M=args.M, dim=args.dim, N=args.N, save_path=save_path, data_seed=data_seed)[1].T
+        elif args.sim_type == 'orthogonal_cross_hard':
+            return sim_changepoint_mv_normal_orthogonal_cross_hard(sim_scale=args.sim_scale, M=args.M, dim=args.dim, N=args.N, save_path=save_path, data_seed=data_seed)[1].T
         elif args.sim_type == 'orthogonal_mult_coeff':
             return sim_changepoint_mv_normal_orthogonal_mult_coeff(sim_scale=args.sim_scale, num_coeffs_change=args.num_coeffs_change, M=args.M, dim=args.dim, N=args.N, save_path=save_path)[1].T
         elif args.sim_type == 'cholesky':

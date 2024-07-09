@@ -97,9 +97,9 @@ def load_mesonet_pressure_data(args):
     raw_df = raw_df.diff(1).dropna()
     raw_df = raw_df.values.astype(np.float64)
     
-    np.random.seed(42)
-    random_sampled_cols = np.random.choice(np.arange(0, raw_df.shape[1]), replace=False, size=80)
-    raw_df = raw_df[:, random_sampled_cols]
+    #np.random.seed(42)
+    #random_sampled_cols = np.random.choice(np.arange(0, raw_df.shape[1]), replace=False, size=80)
+    #raw_df = raw_df[:, random_sampled_cols]
 
     return raw_df
 

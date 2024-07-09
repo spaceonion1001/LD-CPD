@@ -12,7 +12,7 @@ sns.set()
 from sklearn.covariance import GraphicalLasso, GraphicalLassoCV
 from sklearn.preprocessing import StandardScaler
 from scipy.stats import chi2, multivariate_normal
-from sklearn.metrics import f1_score, accuracy_score, precision_score, recall_score, silhouette_score, pairwise_distances as pairwise_d
+from sklearn.metrics import f1_score, accuracy_score, precision_score, recall_score, silhouette_score, auc, pairwise_distances as pairwise_d
 from sklearn.utils.extmath import fast_logdet
 from sklearn.preprocessing import StandardScaler
 
@@ -23,7 +23,7 @@ from numba import jit
 
 
 from tqdm import tqdm
-from simulate import generate_matrices_orthogonal, sim_data, collect_precision_matrix, changepoint_cai_model_one, changepoint_cai_model_one_no_change
+from simulate import *
 from likelihood import full_likelihood, likelihood_ratio_test
 from numpy.linalg import inv as inv
 from optim import optim_boyd, optim_boyd_dc
@@ -74,15 +74,18 @@ def get_args():
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--lam', type=float, default=1e-1)
-    parser.add_argument('--M', type=int, default=8)
+    parser.add_argument('--M', type=int, default=4)
     parser.add_argument('--dim', type=int, default=80)
     parser.add_argument('--w', type=int, default=100)
     parser.add_argument('--prec_rec', type=int, default=0)
+    parser.add_argument('--prec_rec_block', type=int, default=0)
     parser.add_argument('--prec_rec_cai', type=int, default=0)
     parser.add_argument('--load_results', type=int, default=0)
     parser.add_argument('--linkage', type=str, default='single')
     parser.add_argument('--dims', type=str, default='20,40,60,80')
     parser.add_argument('--num_indices', type=int, default=4)
+    parser.add_argument('--block_model', type=str, default='cross')
+    parser.add_argument('--sim_scale', type=float, default=0.8)
 
     args = parser.parse_args()
 
@@ -1498,6 +1501,187 @@ def collect_prec_rec_cai(args):
         pickle.dump(dim_results, fp)
     return dim_results  
 
+
+def collect_prec_rec_block(args):
+    dims = args.dims
+    post_window_size = 20
+    w = post_window_size
+    seed_list = np.arange(0, 50)
+    coeff_change_mags = np.round(np.arange(0.0, 1.0, 0.1), 2).tolist()
+    dim_results = {}
+    #dims = [20, 40, 60, 80]
+    #dims = [60]
+    dim_counter = 0
+    for dim in dims:
+        total_results = {}
+        for mag in ['change', 'no_change']:
+            lrt_vals_curr_est = []
+            p_vals_curr_est = []
+            test_vals_kesh_curr = []
+            test_vals_kesh_alt_curr = []
+            cai_test_vals = []
+            mag_results = {}
+            for curr_seed in tqdm(seed_list):
+                np.random.seed(curr_seed)
+                if dim == 20:
+                    window_size = 50
+                elif dim == 40:
+                    window_size = 100
+                elif dim == 60:
+                    window_size == 150
+                elif dim == 80:
+                    window_size == 200
+                if mag == 'change':
+                    #data_full = changepoint_cai_model_one(args, dim=dim, N=window_size, save_path=None)
+                    if args.block_model == 'cross':
+                        data_full = sim_changepoint_mv_normal_orthogonal_cross_block(sim_scale=args.sim_scale, M=args.M, dim=dim, N=window_size, save_path=None, data_seed=curr_seed)[1].T
+                    elif args.block_model == 'multiple':
+                        data_full = sim_changepoint_mv_normal_orthogonal_multiple_block(sim_scale=args.sim_scale, M=args.M, dim=dim, N=window_size, save_path=None, data_seed=curr_seed)[1].T
+                    elif args.block_model == 'single':
+                        data_full = sim_changepoint_mv_normal_orthogonal(sim_scale=args.sim_scale, M=args.M, dim=dim, N=window_size, save_path=None, data_seed=curr_seed)[1].T
+                    else:
+                        print("Incorrect Model Specified")
+                        exit(1)
+                    
+                if mag == 'no_change':
+                    # just simulate enough data that the first amounts has no change
+                    if args.block_model == 'cross':
+                        data_full = sim_changepoint_mv_normal_orthogonal_cross_block(sim_scale=args.sim_scale, M=args.M, dim=dim, N=(window_size+post_window_size)*2, save_path=None, data_seed=curr_seed)[1].T
+                    elif args.block_model == 'multiple':
+                        data_full = sim_changepoint_mv_normal_orthogonal_multiple_block(sim_scale=args.sim_scale, M=args.M, dim=dim, N=(window_size+post_window_size)*2, save_path=None, data_seed=curr_seed)[1].T
+                    elif args.block_model == 'single':
+                        data_full = sim_changepoint_mv_normal_orthogonal(sim_scale=args.sim_scale, M=args.M, dim=dim, N=(window_size+post_window_size)*2, save_path=None, data_seed=curr_seed)[1].T
+                    else:
+                        print("Incorrect Model Specified")
+                        exit(1)
+                data_one = data_full[0:window_size, :]
+                data_two = data_full[window_size:window_size+post_window_size, :]
+                data_full = np.concatenate((data_one, data_two), axis=0)
+
+                scaler = StandardScaler().fit(data_one)
+                data_one = scaler.transform(data_one).T
+                data_two = scaler.transform(data_two).T
+                data_full = scaler.transform(data_full).T
+                C_one = np.cov(data_one, bias=True)
+                C_two = np.cov(data_two, bias=True)
+                C_full = np.cov(data_full, bias=True)
+
+                r_max = np.max(np.abs(C_one[np.triu_indices(dim, k=1)]))
+                lambda_search = [0.05 + (j*(r_max-0.05))/40 for j in range(1, 41, 1)]
+                glasso = GraphicalLassoCV(alphas=lambda_search, n_refinements=4, tol=1e-4, max_iter=1500, cv=5).fit(data_one.T)
+                chosen_lamb = glasso.alpha_
+                precision = glasso.precision_.copy()
+                tthresh = 0.9
+                precision[np.abs(precision) <= tthresh*chosen_lamb] = 0.0
+
+                clust_dist_mat = np.abs(precision)
+                np.fill_diagonal(clust_dist_mat, 0.0)
+                clust_dist_mat = (clust_dist_mat.max()+1e-5) - clust_dist_mat
+                np.fill_diagonal(clust_dist_mat, 0.0)
+                pairwise_distances = squareform(clust_dist_mat)
+                Z = linkage(pairwise_distances, method=args.linkage)
+                basis_matrices, cutree1 = top_down_search(Z=Z, precision=precision, C=C_one, N=data_one.shape[1], dim=dim, clust_dist_mat=clust_dist_mat)
+
+                assert is_pos_def(symmetrize_from_vector(basis_matrices.sum(axis=0), dim=dim)), "Not PosDef"
+
+                coeffs_hat_total_train = optim_boyd(C=C_full, H_s=basis_matrices)
+                p_val_min = np.inf
+                test_stat_max = 0
+                max_coeff_diff = 0
+                max_likelihood_improvement = 0
+                chosen_C_val = 0
+                p_val_argmin = 0
+                for i in range(basis_matrices.shape[0]):
+                    alpha_i_change_pre = coeffs_hat_total_train.copy()
+                    alpha_i_change_post = coeffs_hat_total_train.copy()
+                    curr_alpha_i_pre = optim_boyd_dc(C=C_one, H=basis_matrices[i], iters=100)
+                    curr_alpha_i_post = optim_boyd_dc(C=C_two, H=basis_matrices[i], iters=100)
+                    alpha_i_change_pre[i] = curr_alpha_i_pre
+                    alpha_i_change_post[i] = curr_alpha_i_post
+                    #print("Pre", alpha_i_change_pre)
+                    #print("Post", alpha_i_change_post)
+                    null_likelihood = full_likelihood(coeffs_hat_total_train, basis_matrices, C_full, N=data_full.shape[1], 
+                                                        lam=None, include_l1=False, debug_title='global')
+                    # # likelihood on pre data, alpha_one change
+                    alt_likelihood_alpha_i_pre = full_likelihood(alpha_i_change_pre, basis_matrices, C_one, N=data_one.shape[1], 
+                                                                    lam=None, include_l1=False, debug_title='Pre')
+                    # likelihood on post data, alpha_one change
+                    alt_likelihood_alpha_i_post = full_likelihood(alpha_i_change_post, basis_matrices, C_two, N=data_two.shape[1], 
+                                                                    lam=None, include_l1=False, debug_title='Post')
+                    alt_likelihood_alpha_i = alt_likelihood_alpha_i_pre + alt_likelihood_alpha_i_post
+                    
+                    dof = 2
+                    test_stat_i, p_val_i = likelihood_ratio_test(null_likelihood, 
+                                                        alt_likelihood_alpha_i, dof, log_pvals=1)
+                    curr_mat = symmetrize_from_vector(basis_matrices[i], dim)
+                    nonzero_cols = np.nonzero(np.any(curr_mat != 0, axis=0))[0]
+                    C_val = len(nonzero_cols)
+                    if C_val > 0:
+                        #correction_factor = dim/C_val
+                        #print(correction_factor)
+                        # correct p_vals for cluster at all time points independently
+                        #p_val_i = p_val_i*correction_factor
+                        correction_factor = np.log(dim) - np.log(C_val)
+                        p_val_i = p_val_i + correction_factor
+                    else:
+                        p_val_i = 0.0
+                    if p_val_i < p_val_min:
+                        p_val_min = p_val_i
+                        test_stat_max = test_stat_i
+                        chosen_C_val = C_val
+                        p_val_argmin = i
+
+                    coeff_diff = np.abs(alpha_i_change_pre - alpha_i_change_post).max()
+                    if coeff_diff > max_coeff_diff:
+                        max_coeff_diff = coeff_diff
+                    likelihood_improvement = alt_likelihood_alpha_i - null_likelihood
+                    if likelihood_improvement > max_likelihood_improvement:
+                        max_likelihood_improvement = likelihood_improvement
+                    #print("\n", p_val_i, test_stat_i,"\n")
+                p_vals_curr_est.append(p_val_min)
+                lrt_vals_curr_est.append(test_stat_max)
+                """"""
+
+                #clime_init = clime_init_fn(5e-2, data_one.T)
+                clime_init = clime_init_fn(chosen_lamb, data_one.T) # this one has more data used
+                g1 = calc_g1(w)
+                g2 = calc_g2(w)
+                rhat0 = calc_rhat(clime_init, dim)
+                T0 = calc_T_t(X=data_two.T, omega_hat=clime_init, r_hat=rhat0, w=w, p=dim, t=0, g1=g1, g2=g2)
+                test_vals_kesh_curr.append(T0)
+
+                E_hat = calc_E_hat(data=data_two.T, omega_hat=clime_init, t=0, p=dim, w=w)
+                test_vals_kesh_alt_curr.append(np.linalg.norm(E_hat, ord=np.inf))
+
+
+                """
+                Cai Algorithm
+                """
+                residuals_x, residuals_y, beta_hats_x, beta_hats_y  = perform_regression(X_data=data_one.T, Y_data=data_two.T)
+                residuals_x_cov_corrected = bias_corrected_residual_covariance(residuals_x, beta_hats_x)
+                T_x = calculate_T(residuals_x_cov_corrected)
+                theta_x = calculate_theta(residuals_x_cov_corrected, beta_hats_x, N=data_one.shape[1])
+
+                residuals_y_cov_corrected = bias_corrected_residual_covariance(residuals_y, beta_hats_y)
+                T_y = calculate_T(residuals_y_cov_corrected)
+                theta_y = calculate_theta(residuals_y_cov_corrected, beta_hats_y, N=data_two.shape[1])
+
+                W_cai = calculate_standardized_stat(T_x, T_y, theta_x, theta_y)
+                M_cai = calculate_global_stat(W_cai)
+                
+                cai_test_vals.append(M_cai)
+                """"""
+            mag_results['kesh_test'] = np.array(test_vals_kesh_curr)
+            mag_results['kesh_alt_test'] = np.array(test_vals_kesh_alt_curr)
+            mag_results['our_lrt_est'] = np.array(lrt_vals_curr_est)
+            mag_results['our_p_vals_est'] = np.array(p_vals_curr_est)
+            mag_results['cai_test'] = np.array(cai_test_vals)
+            total_results[mag] = mag_results
+        dim_results[dim] = total_results
+    with open('lrt_test_figs/dim_results_block_{}.pkl'.format(args.block_model), 'wb') as fp:
+        pickle.dump(dim_results, fp)
+    return dim_results  
+
 def process_curr_pr(change_vals, no_change_vals, pvals=True):
     all_thresholds = np.sort(np.concatenate((change_vals, no_change_vals)))
     precisions = []
@@ -1524,7 +1708,7 @@ def process_curr_pr(change_vals, no_change_vals, pvals=True):
     
     return np.array(precisions), np.array(recalls), np.array(fprates)
 
-def plot_precision_recall(prec, rec, dim, labl='Ours'):
+def plot_precision_recall(prec, rec, dim, labl='LD-CPD'):
     plt.plot(rec, prec)
     plt.xlim(-0.1, 1.1)
     plt.ylim(-0.1, 1.1)
@@ -1535,14 +1719,18 @@ def plot_precision_recall(prec, rec, dim, labl='Ours'):
     plt.savefig('lrt_test_figs/prec_rec/{}'.format("prec_rec_{}_{}.png".format(dim, labl)))
     plt.close()
 
-def plot_precision_recall_comparison(prec_ours, rec_ours, prec_other, rec_other, dim, labl='Ours', mag=0.1, third_prec=None, third_rec=None, fourth_prec=None, fourth_rec=None):
+def plot_precision_recall_comparison(prec_ours, rec_ours, prec_other, rec_other, dim, labl='LD-CPD', mag=0.1, third_prec=None, third_rec=None, fourth_prec=None, fourth_rec=None):
     plt.figure(figsize=(15,12))
-    plt.plot(rec_ours, prec_ours, '.b-', label='Ours', linewidth=5)
-    plt.plot(rec_other, prec_other, '.g-', label='KMA', linewidth=5)
+    auc_ours = auc(x=rec_ours, y=prec_ours)
+    auc_kma = auc(x=rec_other, y=prec_other)
+    plt.plot(rec_ours, prec_ours, '.b-', label='LD-CPD (AUC={})'.format(round(auc_ours, 2)), linewidth=5)
+    plt.plot(rec_other, prec_other, '.g-', label='KMA (AUC={})'.format(round(auc_kma, 2)), linewidth=5)
     if third_prec is not None and third_rec is not None:
-        plt.plot(third_rec, third_prec, '.r-', label='XCC', linewidth=5)
+        auc_xcc = auc(x=third_rec, y=third_prec)
+        plt.plot(third_rec, third_prec, '.r-', label='XCC (AUC={})'.format(round(auc_xcc, 2)), linewidth=5)
     if fourth_prec is not None and fourth_rec is not None:
-        plt.plot(fourth_rec, fourth_prec, '.k-', label='KM', linewidth=5)
+        auc_km = auc(x=fourth_rec, y=fourth_prec)
+        plt.plot(fourth_rec, fourth_prec, '.k-', label='KM (AUC={})'.format(round(auc_km, 2)), linewidth=5)
     
     plt.xlim(-0.1, 1.1)
     plt.ylim(-0.1, 1.1)
@@ -1556,28 +1744,32 @@ def plot_precision_recall_comparison(prec_ours, rec_ours, prec_other, rec_other,
     plt.savefig('lrt_test_figs/prec_rec_compare_block/{}'.format("prec_rec_{}_{}.png".format(dim, labl)))
     plt.close()
 
-def plot_precision_recall_comparison_cai(prec_ours, rec_ours, prec_other, rec_other, dim, labl='Ours', third_prec=None, third_rec=None, fourth_prec=None, fourth_rec=None):
+def plot_precision_recall_comparison_cai(prec_ours, rec_ours, prec_other, rec_other, dim, labl='LD-CPD', third_prec=None, third_rec=None, fourth_prec=None, fourth_rec=None):
     plt.figure(figsize=(15,12))
-    plt.plot(rec_ours, prec_ours, '.b-', label='Ours', linewidth=5)
-    plt.plot(rec_other, prec_other, '.g-', label='KMA', linewidth=5)
+    auc_ours = auc(x=rec_ours, y=prec_ours)
+    auc_kma = auc(x=rec_other, y=prec_other)
+    plt.plot(rec_ours, prec_ours, '.b-', label='LD-CPD (AUC={})'.format(round(auc_ours, 2)), linewidth=5)
+    plt.plot(rec_other, prec_other, '.g-', label='KMA (AUC={})'.format(round(auc_kma, 2)), linewidth=5)
     if third_prec is not None and third_rec is not None:
-        plt.plot(third_rec, third_prec, '.r-', label='XCC', linewidth=5)
+        auc_xcc = auc(x=third_rec, y=third_prec)
+        plt.plot(third_rec, third_prec, '.r-', label='XCC (AUC={})'.format(round(auc_xcc, 2)), linewidth=5)
     if fourth_prec is not None and fourth_rec is not None:
-        plt.plot(fourth_rec, fourth_prec, '.k-', label='KM', linewidth=5)
+        auc_km = auc(x=fourth_rec, y=fourth_prec)
+        plt.plot(fourth_rec, fourth_prec, '.k-', label='KM (AUC={})'.format(round(auc_km, 2)), linewidth=5)
     
     plt.xlim(-0.1, 1.1)
     plt.ylim(-0.1, 1.1)
-    plt.title("Banded Precision Recall Dim {}".format(dim), fontsize=38)
+    plt.title("{} Dim {}".format(labl, dim), fontsize=38)
     plt.xlabel('Recall', fontsize=38)
     plt.ylabel('Precision', fontsize=38)
     plt.xticks(fontsize=30)
     plt.yticks(fontsize=30)
     plt.tight_layout()
     plt.legend(loc='best', fontsize=38)
-    plt.savefig('lrt_test_figs/prec_rec_compare_cai/{}'.format("prec_rec_{}_{}.png".format(dim, labl)))
+    plt.savefig('lrt_test_figs/prec_rec_compare_cai/{}'.format("prec_rec_{}_{}.png".format(dim, 'single')))
     plt.close()
 
-def plot_roc(tprate, fprate, dim, labl='Ours'):
+def plot_roc(tprate, fprate, dim, labl='LD-CPD'):
     plt.plot(fprate, tprate)
     plt.xlim(-0.1, 1.1)
     plt.ylim(-0.1, 1.1)
@@ -1588,8 +1780,8 @@ def plot_roc(tprate, fprate, dim, labl='Ours'):
     plt.savefig('lrt_test_figs/roc/{}'.format("roc_{}_{}.png".format(dim, labl)))
     plt.close()
 
-def plot_roc_comparison(tprate_ours, fprate_ours, tprate_other, fprate_other, dim, labl='Ours'):
-    plt.plot(fprate_ours, tprate_ours, label='Ours')
+def plot_roc_comparison(tprate_ours, fprate_ours, tprate_other, fprate_other, dim, labl='LD-CPD'):
+    plt.plot(fprate_ours, tprate_ours, label='LD-CPD')
     plt.plot(fprate_other, tprate_other, label='Kesh')
     plt.xlim(-0.1, 1.1)
     plt.ylim(-0.1, 1.1)
@@ -1763,6 +1955,30 @@ def process_prec_rec_results_cai(dim_results, dims=[20, 40, 60, 80]):
         # comparisons, the important part
         plot_precision_recall_comparison_cai(prec_ours_est, rec_ours_est, prec_kesh, rec_kesh, dim=dim, labl='PR_Comparison_banded', third_prec=prec_cai, third_rec=rec_cai, fourth_prec=prec_kesh_alt, fourth_rec=rec_kesh_alt)
 
+def process_prec_rec_results_block(dim_results, dims=[20, 40, 60, 80]):
+    print("Plotting Results...")
+    seed_list = np.arange(0, 50)
+    coeff_change_mags = ['change', 'no_change']
+    for dim in dims:
+        curr_dim_no_change_ours_est = dim_results[dim]['no_change']['our_p_vals_est'] # nothing given
+        curr_dim_no_change_kesh = dim_results[dim]['no_change']['kesh_test'] # with nothing given
+        curr_dim_no_change_kesh_alt = dim_results[dim]['no_change']['kesh_alt_test'] # with nothing given
+        curr_dim_no_change_cai = dim_results[dim]['no_change']['cai_test'] # with nothing given
+
+        curr_dim_change_ours_est = dim_results[dim]['change']['our_p_vals_est'] # nothing given
+        curr_dim_change_lrt_est = dim_results[dim]['change']['our_lrt_est'] # nothing given
+        curr_dim_change_kesh = dim_results[dim]['change']['kesh_test'] # with nothing given
+        curr_dim_change_kesh_alt = dim_results[dim]['change']['kesh_alt_test'] # with nothing given
+        curr_dim_change_cai = dim_results[dim]['change']['cai_test'] # with nothing given
+
+        prec_ours_est, rec_ours_est, fprate_ours_est = process_curr_pr(change_vals=curr_dim_change_ours_est, no_change_vals=curr_dim_no_change_ours_est)
+        prec_kesh, rec_kesh, fprate_kesh = process_curr_pr(change_vals=curr_dim_change_kesh, no_change_vals=curr_dim_no_change_kesh, pvals=False)
+        prec_kesh_alt, rec_kesh_alt, fprate_kesh_alt = process_curr_pr(change_vals=curr_dim_change_kesh_alt, no_change_vals=curr_dim_no_change_kesh_alt, pvals=False)
+        prec_cai, rec_cai, fprate_cai = process_curr_pr(change_vals=curr_dim_change_cai, no_change_vals=curr_dim_no_change_cai, pvals=False)
+
+        # comparisons, the important part
+        plot_precision_recall_comparison_cai(prec_ours_est, rec_ours_est, prec_kesh, rec_kesh, dim=dim, labl='Precision/Recall {}'.format("Block - Single"), third_prec=prec_cai, third_rec=rec_cai, fourth_prec=prec_kesh_alt, fourth_rec=rec_kesh_alt)
+
     
 
 def plot_results(res):
@@ -1880,6 +2096,17 @@ def main(args):
         else:
             res = collect_prec_rec_cai(args)
         process_prec_rec_results_cai(dim_results=res, dims=args.dims)
+
+    elif args.prec_rec_block:
+        print("Collecting Prec/Rec results Block Model {}".format(args.block_model))
+        if args.load_results:
+            with open('lrt_test_figs/dim_results_block_{}.pkl'.format(args.block_model), 'rb') as fp:
+                res = pickle.load(fp)
+                print("> Results Loaded! <")            
+        else:
+            res = collect_prec_rec_block(args)
+        process_prec_rec_results_block(dim_results=res, dims=args.dims)
+
 
     else:
         res = collect_test_results(M=args.M, dim=args.dim, w=args.w)

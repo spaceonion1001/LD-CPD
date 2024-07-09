@@ -17,6 +17,9 @@ from utils import vectorize_matrix, symmetrize_from_vector
 import networkx as nx
 import copy
 import seaborn as sns
+import matplotlib
+from matplotlib import cm
+from matplotlib.colors import ListedColormap, LinearSegmentedColormap
 
 from sklearn.preprocessing import StandardScaler
 
@@ -73,7 +76,7 @@ def lacz_sampling(adj):
     return A
 
 
-def generate_matrices_orthogonal(prec_coeffs=None, M=2, dim=4, to_print=True, lam=1e-1, seed=42, linkage_type='single', plotting=False):
+def generate_matrices_orthogonal(prec_coeffs=None, M=2, dim=4, to_print=True, lam=1e-1, seed=42, linkage_type='single', plotting=True):
     print(">>  Generating H Matrices - M {}; Dim {} <<".format(M, dim))
     H_s = []
     if not prec_coeffs:
@@ -137,9 +140,13 @@ def generate_matrices_orthogonal(prec_coeffs=None, M=2, dim=4, to_print=True, la
     Plotting
     """
     if plotting:
-        plt.figure()
-        dn = hierarchy.dendrogram(Z)
-        plt.savefig(os.path.join('debugging_figs', "true_dendrogram.png"))
+        plt.figure(figsize=(12,9))
+        with plt.rc_context({'lines.linewidth': 2.0}):
+            dn = hierarchy.dendrogram(Z)
+            plt.yticks([])
+            plt.xlabel("Feature Index", fontsize=24)
+        plt.axhline(0.3, linestyle='--', color='black')
+        plt.savefig(os.path.join('debugging_figs/nonsap_figs/', "true_dendrogram.png"))
         plt.close()
         
         sns.heatmap(clust_dist_mat)
@@ -151,15 +158,42 @@ def generate_matrices_orthogonal(prec_coeffs=None, M=2, dim=4, to_print=True, la
 
     cutree1 = hierarchy.cut_tree(Z, n_clusters=M).squeeze()
     #cutree1 = hierarchy.fcluster(Z, t=clust_distances[-M], criterion='distance')
+    m = np.zeros((dim, dim))
     for i in range(max(set(cutree1))+1): # iterate over clusters
         idxs = np.where(cutree1 == i)[0] # indexes for given cluster
         A = np.zeros(precision.shape) # blank A matrix
         for idx in idxs: # loop over indexes
             for idx2 in idxs: # loop over indexes
                 A[idx][idx2] = precision[idx][idx2].copy() # set i,j entry to be the entry from precision matrix for given cluster
+                m[idx, idx2] = i+1
         if len(np.nonzero(A)[0]) > 0:
             H_s.append(vectorize_matrix(A))
     H_s = np.array(H_s)
+    if plotting:
+        from matplotlib.ticker import AutoMinorLocator
+        colors = 'whitesmoke purple red green orange'.split()
+        #values = range(H_s.shape[0]+1)
+        #patches = [mpatches.Patch(color=colors[x], label="Cluster {l}".format(l=values[x]) ) for x in range(len(values)) ]
+        cmap = matplotlib.colors.ListedColormap(colors, name='colors', N=None)
+
+        plt.imshow(m, cmap=cmap)
+        major_ticks = np.arange(0, 20)
+        minor_ticks = np.arange(0.5, 20.5, 1)
+        plt.xticks(major_ticks, rotation=45)
+        plt.xticks(minor_ticks, minor=True)
+        plt.yticks(major_ticks, rotation=45)
+        plt.yticks(minor_ticks, minor=True)
+        plt.xlabel("Feature Index", fontsize=18)
+        plt.ylabel("Feature Index", fontsize=18)
+        #plt.matshow(m, cmap=cmap)
+        #sns.heatmap(m, cmap=cmap)
+        #plt.yticks(range(0, 20), rotation=45)
+        #plt.legend(handles=patches, bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=-1.0 )
+        plt.tight_layout()
+        plt.grid(which='minor')
+        plt.grid(which='major', alpha=0.0)
+        plt.savefig(os.path.join('debugging_figs/nonsap_figs/', "true_precision.png"))
+        plt.close()
 
     ##############
     # precision = np.zeros((dim, dim))
@@ -356,8 +390,45 @@ def sim_changepoint_mv_normal_orthogonal(sim_scale=0.8, M=2, dim=4, N=500, save_
     data_total = scaler.transform(data_total.T).T
     print("Finished Simulation")
     print("Total Shape {}".format(data_total.shape))
+    m = np.zeros((dim, dim))
+    for i in range(H_s.shape[0]):
+        curr_mat = symmetrize_from_vector(H_s[i], dim)
+        nonzero_cols = np.nonzero(np.any(curr_mat != 0, axis=0))[0]
+        for col in nonzero_cols:
+            for col2 in nonzero_cols:
+                m[col, col2] = i+1
     neq_indices = np.where(precision_one != precision_two)
     neq_indices_arr = np.concatenate((np.expand_dims(neq_indices[0],1), np.expand_dims(neq_indices[1], 1)), 1)
+    for ctup in neq_indices_arr:
+        i, j = ctup
+        m[i, j] = H_s.shape[0] + 1
+
+    colors = 'whitesmoke grey grey grey grey lime'.split()
+    #values = range(H_s.shape[0]+1)
+    #patches = [mpatches.Patch(color=colors[x], label="Cluster {l}".format(l=values[x]) ) for x in range(len(values)) ]
+    cmap = matplotlib.colors.ListedColormap(colors, name='colors', N=None)
+
+    plt.figure(figsize=(8, 8))
+    plt.imshow(m, cmap=cmap)
+    major_ticks = np.arange(0, 20)
+    minor_ticks = np.arange(0.5, 20.5, 1)
+    plt.xticks(major_ticks, rotation=45)
+    plt.xticks(minor_ticks, minor=True)
+    plt.yticks(major_ticks, rotation=45)
+    plt.yticks(minor_ticks, minor=True)
+    plt.xlabel("Feature Index", fontsize=18)
+    plt.ylabel("Feature Index", fontsize=18)
+    #plt.matshow(m, cmap=cmap)
+    #sns.heatmap(m, cmap=cmap)
+    #plt.yticks(range(0, 20), rotation=45)
+    #plt.legend(handles=patches, bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=-1.0 )
+    plt.grid(which='minor')
+    plt.grid(which='major', alpha=0.0)
+    plt.title("Single Block Change", fontsize=20)
+    plt.tight_layout()
+    plt.savefig(os.path.join('debugging_figs/nonsap_figs/', "precision_orthogonal_small.png"))
+    plt.close()
+
     if save_path is not None:
         np.savetxt(os.path.join(save_path, 'changed_indx.csv'), neq_indices_arr)
     return H_s, data_total
@@ -381,8 +452,13 @@ def sim_changepoint_mv_normal_orthogonal_cross_block(sim_scale=0.8, M=2, dim=4, 
     nonzero_cols_two = np.nonzero(np.any(symmetrize_from_vector(H_s[rand_idx[1]], dim=dim) != 0, axis=0))[0]
     subset_cols_one = np.random.choice(nonzero_cols_one, size=dim//4, replace=False)
     subset_cols_two = np.random.choice(nonzero_cols_two, size=dim//4, replace=False)
+    print(nonzero_cols_one)
+    print(nonzero_cols_two)
+    print(subset_cols_one)
+    print(subset_cols_two)
 
     precision_two = precision_one.copy()
+    m = np.zeros((dim, dim))
     for i in subset_cols_one:
         for j in subset_cols_one:
             precision_two[i, j] = precision_two[i, j] * prec_coeffs_two[rand_idx[0]]
@@ -391,7 +467,6 @@ def sim_changepoint_mv_normal_orthogonal_cross_block(sim_scale=0.8, M=2, dim=4, 
         for j in subset_cols_two:
             precision_two[i, j] = precision_two[i, j] * prec_coeffs_two[rand_idx[1]]
     #############
-
     data_two, _ = sim_data(covar=inv(precision_two), dim=dim, N=N)
     
     data_total = np.concatenate((data_one, data_two), axis=1)
@@ -399,11 +474,164 @@ def sim_changepoint_mv_normal_orthogonal_cross_block(sim_scale=0.8, M=2, dim=4, 
     data_total = scaler.transform(data_total.T).T
     print("Finished Simulation")
     print("Total Shape {}".format(data_total.shape))
+    
+    for i in range(H_s.shape[0]):
+        curr_mat = symmetrize_from_vector(H_s[i], dim)
+        nonzero_cols = np.nonzero(np.any(curr_mat != 0, axis=0))[0]
+        for col in nonzero_cols:
+            for col2 in nonzero_cols:
+                m[col, col2] = i+1
+    
     neq_indices = np.where(precision_one != precision_two)
     neq_indices_arr = np.concatenate((np.expand_dims(neq_indices[0],1), np.expand_dims(neq_indices[1], 1)), 1)
+    for ctup in neq_indices_arr:
+        i, j = ctup
+        m[i, j] = H_s.shape[0] + 1
+    #print(m)
+    #colors = 'whitesmoke blue magenta red orange lime'.split()
+    colors = 'whitesmoke grey grey grey grey lime'.split()
+    #values = range(H_s.shape[0]+1)
+    #patches = [mpatches.Patch(color=colors[x], label="Cluster {l}".format(l=values[x]) ) for x in range(len(values)) ]
+    cmap = matplotlib.colors.ListedColormap(colors, name='colors', N=None)
+
+    ############
+    plt.figure(figsize=(8, 8))
+    plt.imshow(m, cmap=cmap)
+    major_ticks = np.arange(0, 20)
+    minor_ticks = np.arange(0.5, 20.5, 1)
+    plt.xticks(major_ticks, rotation=45)
+    plt.xticks(minor_ticks, minor=True)
+    plt.yticks(major_ticks, rotation=45)
+    plt.yticks(minor_ticks, minor=True)
+    plt.xlabel("Feature Index", fontsize=18)
+    plt.ylabel("Feature Index", fontsize=18)
+    #plt.matshow(m, cmap=cmap)
+    #sns.heatmap(m, cmap=cmap)
+    #plt.yticks(range(0, 20), rotation=45)
+    #plt.legend(handles=patches, bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=-1.0 )
+    plt.grid(which='minor')
+    plt.grid(which='major', alpha=0.0)
+    plt.title("Multiple Block Change", fontsize=20)
+    plt.tight_layout()
+    plt.savefig(os.path.join('debugging_figs/nonsap_figs/', "precision_orthogonal_cross.png"))
+    plt.close()
+    ############
+
     if save_path is not None:
         np.savetxt(os.path.join(save_path, 'changed_indx.csv'), neq_indices_arr)
     return H_s, data_total
+
+def sim_changepoint_mv_normal_orthogonal_cross_hard(sim_scale=0.8, M=2, dim=4, N=500, save_path=None, linkage_type='single', data_seed=42):
+    H_s, prec_temp, _ = generate_matrices_orthogonal(M=M, dim=dim, to_print=False, linkage_type=linkage_type, seed=42) # remove this source of randomness for consistency
+    prec_coeffs_one = np.ones(M)
+    precision_one = collect_precision_matrix(H_s=H_s, prec_coeffs=prec_coeffs_one, P=dim)
+    np.random.seed(data_seed)
+    data_one, _ = sim_data(covar=inv(precision_one), dim=dim, N=N)
+    
+
+    #############
+    prec_coeffs_two = prec_coeffs_one.copy()
+    rand_idx = np.random.choice(np.arange(M), size=2, replace=False)
+    for idx in rand_idx:
+        prec_coeffs_two[idx] = prec_coeffs_two[idx] + np.random.uniform(0.5, 1.5)#sim_scale
+    
+    nonzero_cols_one = np.nonzero(np.any(symmetrize_from_vector(H_s[rand_idx[0]], dim=dim) != 0, axis=0))[0]
+    nonzero_cols_two = np.nonzero(np.any(symmetrize_from_vector(H_s[rand_idx[1]], dim=dim) != 0, axis=0))[0]
+    subset_cols_one = np.random.choice(nonzero_cols_one, size=len(nonzero_cols_one)//2, replace=False)
+    subset_cols_two = np.random.choice(nonzero_cols_two, size=len(nonzero_cols_two)//2, replace=False)
+    print(nonzero_cols_one)
+    print(nonzero_cols_two)
+    print(subset_cols_one)
+    print(subset_cols_two)
+
+    precision_two = precision_one.copy()
+    m = np.zeros((dim, dim))
+    for i in subset_cols_one:
+        for j in subset_cols_one:
+            precision_two[i, j] = precision_two[i, j] * prec_coeffs_two[rand_idx[0]]
+
+    for i in subset_cols_two:
+        for j in subset_cols_two:
+            precision_two[i, j] = precision_two[i, j] * prec_coeffs_two[rand_idx[1]]
+    #############
+    data_two, _ = sim_data(covar=inv(precision_two), dim=dim, N=N)
+    
+    data_total = np.concatenate((data_one, data_two), axis=1)
+    scaler = StandardScaler().fit(data_one.T)
+    data_total = scaler.transform(data_total.T).T
+    print("Finished Simulation")
+    print("Total Shape {}".format(data_total.shape))
+    
+    for i in range(H_s.shape[0]):
+        curr_mat = symmetrize_from_vector(H_s[i], dim)
+        nonzero_cols = np.nonzero(np.any(curr_mat != 0, axis=0))[0]
+        for col in nonzero_cols:
+            for col2 in nonzero_cols:
+                m[col, col2] = 1
+    
+    neq_indices = np.where(precision_one != precision_two)
+    neq_indices_arr = np.concatenate((np.expand_dims(neq_indices[0],1), np.expand_dims(neq_indices[1], 1)), 1)
+
+    it_count = 1
+    for ctup in neq_indices_arr:
+        i, j = ctup
+        m[i, j] = 1 + it_count
+        it_count += 1
+    print(m)
+    viridis = cm.get_cmap('viridis', 10)
+    newcolors = viridis(np.linspace(0, 1, 10))
+    #pink = np.array([248/256, 24/256, 148/256, 1])
+    whitesmoke = [0.9607843137254902, 0.9607843137254902, 0.9607843137254902, 1.0]
+    grey = [0.5019607843137255, 0.5019607843137255, 0.5019607843137255, 1.0]
+    lime = [0.0, 1.0, 0.0, 1.0]
+    cyan = [0.0, 1.0, 1.0, 1.0]
+    newcolors[0, :] = whitesmoke
+    newcolors[1, :] = grey
+    newcolors[6:, :] = cyan
+    newcolors[2:6, :] = lime
+    newcmp = ListedColormap(newcolors)
+    # for i, idx in enumerate(rand_idx):
+    #     curr_mat = symmetrize_from_vector(H_s[idx], dim)
+    #     nonzero_cols = np.nonzero(np.any(curr_mat != 0, axis=0))[0]
+    #     for col in nonzero_cols:
+    #         for col2 in nonzero_cols:
+    #             m[col, col2] = H_s.shape[0]+i+1
+
+
+    #print(m)
+    #colors = 'whitesmoke blue magenta red orange lime'.split()
+    #colors = 'whitesmoke grey grey grey grey lime cyan'.split()
+    #values = range(H_s.shape[0]+1)
+    #patches = [mpatches.Patch(color=colors[x], label="Cluster {l}".format(l=values[x]) ) for x in range(len(values)) ]
+    #cmap = matplotlib.colors.ListedColormap(colors, name='colors', N=None)
+
+    ############
+    plt.figure(figsize=(8, 8))
+    plt.imshow(m, cmap=newcmp)
+    major_ticks = np.arange(0, 20)
+    minor_ticks = np.arange(0.5, 20.5, 1)
+    plt.xticks(major_ticks, rotation=45)
+    plt.xticks(minor_ticks, minor=True)
+    plt.yticks(major_ticks, rotation=45)
+    plt.yticks(minor_ticks, minor=True)
+    plt.xlabel("Feature Index", fontsize=18)
+    plt.ylabel("Feature Index", fontsize=18)
+    #plt.matshow(m, cmap=cmap)
+    #sns.heatmap(m, cmap=cmap)
+    #plt.yticks(range(0, 20), rotation=45)
+    #plt.legend(handles=patches, bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=-1.0 )
+    plt.grid(which='minor')
+    plt.grid(which='major', alpha=0.0)
+    plt.title("Multiple Block Subset Change", fontsize=20)
+    plt.tight_layout()
+    plt.savefig(os.path.join('debugging_figs/nonsap_figs/', "precision_orthogonal_cross_hard.png"))
+    plt.close()
+    ############
+
+    if save_path is not None:
+        np.savetxt(os.path.join(save_path, 'changed_indx.csv'), neq_indices_arr)
+    return H_s, data_total
+
 
 def sim_changepoint_mv_normal_orthogonal_multiple_block(sim_scale=0.8, M=2, dim=4, N=500, save_path=None, linkage_type='single', data_seed=42):
     H_s, prec_temp, _ = generate_matrices_orthogonal(M=M, dim=dim, to_print=False, linkage_type=linkage_type, seed=42) # remove this source of randomness for consistency
@@ -416,17 +644,28 @@ def sim_changepoint_mv_normal_orthogonal_multiple_block(sim_scale=0.8, M=2, dim=
     #############
     prec_coeffs_two = prec_coeffs_one.copy()
     rand_idx = np.random.choice(np.arange(M), size=2, replace=False)
+    for idx in rand_idx:
+        sim_scale = np.random.uniform(0.5, 1.5)
+        prec_coeffs_two[idx] = prec_coeffs_two[idx] + sim_scale
     
     nonzero_cols_one = np.nonzero(np.any(symmetrize_from_vector(H_s[rand_idx[0]], dim=dim) != 0, axis=0))[0]
     nonzero_cols_two = np.nonzero(np.any(symmetrize_from_vector(H_s[rand_idx[1]], dim=dim) != 0, axis=0))[0]
     subset_cols_one = np.random.choice(nonzero_cols_one, size=dim//4, replace=False)
     subset_cols_two = np.random.choice(nonzero_cols_two, size=dim//4, replace=False)
-    subset_cols = np.concatenate((subset_cols_one, subset_cols_two))
+
     precision_two = precision_one.copy()
-    for i in subset_cols:
-        for j in subset_cols:
-            idx = np.argmin(rand_idx)
-            precision_two[i, j] = precision_two[i, j] * (1.0+sim_scale)
+    m = np.zeros((dim, dim))
+    for i in subset_cols_one:
+        for j in subset_cols_one:
+            sim_scale = np.random.uniform(0.5, 1.5)
+            precision_two[i, j] = precision_two[i, j] * (1.0+sim_scale)#prec_coeffs_two[rand_idx[0]]
+            m[i, j] = H_s.shape[0]+2
+
+    for i in subset_cols_two:
+        for j in subset_cols_two:
+            sim_scale = np.random.uniform(0.5, 1.5)
+            precision_two[i, j] = precision_two[i, j] * (1.0+sim_scale)#prec_coeffs_two[rand_idx[1]]
+            m[i, j] = H_s.shape[0]+2
     #############
 
     data_two, _ = sim_data(covar=inv(precision_two), dim=dim, N=N)
@@ -436,8 +675,157 @@ def sim_changepoint_mv_normal_orthogonal_multiple_block(sim_scale=0.8, M=2, dim=
     data_total = scaler.transform(data_total.T).T
     print("Finished Simulation")
     print("Total Shape {}".format(data_total.shape))
+    
+    for i in range(H_s.shape[0]):
+        curr_mat = symmetrize_from_vector(H_s[i], dim)
+        nonzero_cols = np.nonzero(np.any(curr_mat != 0, axis=0))[0]
+        for col in nonzero_cols:
+            for col2 in nonzero_cols:
+                m[col, col2] = i+1
     neq_indices = np.where(precision_one != precision_two)
     neq_indices_arr = np.concatenate((np.expand_dims(neq_indices[0],1), np.expand_dims(neq_indices[1], 1)), 1)
+    it_count = 1
+    for ctup in neq_indices_arr:
+        i, j = ctup
+        m[i, j] = 3 + it_count
+        it_count += 1
+    print(m)
+    #colors = 'whitesmoke blue magenta red orange lime'.split()
+
+    viridis = cm.get_cmap('viridis', it_count-1+3+2)
+    newcolors = viridis(np.linspace(0, 1, it_count-1+3+2))
+    #pink = np.array([248/256, 24/256, 148/256, 1])
+    whitesmoke = [0.9607843137254902, 0.9607843137254902, 0.9607843137254902, 1.0]
+    grey = [0.5019607843137255, 0.5019607843137255, 0.5019607843137255, 1.0]
+    newcolors[0, :] = whitesmoke
+    newcolors[1:3, :] = grey
+    newcmp = ListedColormap(newcolors)
+
+
+    #colors = 'whitesmoke grey grey grey grey lime'.split()
+    #values = range(H_s.shape[0]+1)
+    #patches = [mpatches.Patch(color=colors[x], label="Cluster {l}".format(l=values[x]) ) for x in range(len(values)) ]
+    #cmap = matplotlib.colors.ListedColormap(colors, name='colors', N=None)
+
+    ###########
+    plt.figure(figsize=(8, 8))
+    plt.imshow(m, cmap=newcmp)
+    major_ticks = np.arange(0, 20)
+    minor_ticks = np.arange(0.5, 20.5, 1)
+    plt.xticks(major_ticks, rotation=45)
+    plt.xticks(minor_ticks, minor=True)
+    plt.yticks(major_ticks, rotation=45)
+    plt.yticks(minor_ticks, minor=True)
+    plt.xlabel("Feature Index", fontsize=18)
+    plt.ylabel("Feature Index", fontsize=18)
+    #plt.matshow(m, cmap=cmap)
+    #sns.heatmap(m, cmap=cmap)
+    #plt.yticks(range(0, 20), rotation=45)
+    #plt.legend(handles=patches, bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=-1.0 )
+    plt.grid(which='minor')
+    plt.grid(which='major', alpha=0.0)
+    plt.title("Individual Coeff Change", fontsize=20)
+    plt.tight_layout()
+    plt.savefig(os.path.join('debugging_figs/nonsap_figs/', "precision_orthogonal_multiple.png"))
+    plt.close()
+    ############
+
+    if save_path is not None:
+        np.savetxt(os.path.join(save_path, 'changed_indx.csv'), neq_indices_arr)
+    return H_s, data_total
+
+def sim_changepoint_mv_normal_orthogonal_hard(sim_scale=0.8, M=2, dim=4, N=500, save_path=None, linkage_type='single', data_seed=42):
+    H_s, prec_temp, _ = generate_matrices_orthogonal(M=M, dim=dim, to_print=False, linkage_type=linkage_type, seed=42) # remove this source of randomness for consistency
+    prec_coeffs_one = np.ones(M)
+    precision_one = collect_precision_matrix(H_s=H_s, prec_coeffs=prec_coeffs_one, P=dim)
+    np.random.seed(data_seed)
+    data_one, _ = sim_data(covar=inv(precision_one), dim=dim, N=N)
+    
+
+    #############
+    prec_coeffs_two = prec_coeffs_one.copy()
+    rand_idx = np.random.choice(np.arange(M), size=2, replace=False)
+    for idx in rand_idx:
+        sim_scale = np.random.uniform(0.5, 1.5)
+        prec_coeffs_two[idx] = prec_coeffs_two[idx] + sim_scale
+    
+    nonzero_cols_one = np.nonzero(np.any(symmetrize_from_vector(H_s[rand_idx[0]], dim=dim) != 0, axis=0))[0]
+    nonzero_cols_two = np.nonzero(np.any(symmetrize_from_vector(H_s[rand_idx[1]], dim=dim) != 0, axis=0))[0]
+    subset_cols_one = np.random.choice(nonzero_cols_one, size=len(nonzero_cols_one)//2, replace=False)
+    subset_cols_two = np.random.choice(nonzero_cols_two, size=len(nonzero_cols_two)//2, replace=False)
+
+    precision_two = precision_one.copy()
+    m = np.zeros((dim, dim))
+    for i in subset_cols_one:
+        for j in subset_cols_one:
+            sim_scale = np.random.uniform(0.5, 1.5)
+            precision_two[i, j] = precision_two[i, j] * (1.0+sim_scale)#prec_coeffs_two[rand_idx[0]]
+            m[i, j] = H_s.shape[0]+1
+
+    for i in subset_cols_two:
+        for j in subset_cols_two:
+            sim_scale = np.random.uniform(0.5, 1.5)
+            precision_two[i, j] = precision_two[i, j] * (1.0+sim_scale)#prec_coeffs_two[rand_idx[1]]
+            m[i, j] = H_s.shape[0]+1
+    #############
+
+    data_two, _ = sim_data(covar=inv(precision_two), dim=dim, N=N)
+    
+    data_total = np.concatenate((data_one, data_two), axis=1)
+    scaler = StandardScaler().fit(data_one.T)
+    data_total = scaler.transform(data_total.T).T
+    print("Finished Simulation")
+    print("Total Shape {}".format(data_total.shape))
+
+    for i in range(H_s.shape[0]):
+        curr_mat = symmetrize_from_vector(H_s[i], dim)
+        nonzero_cols = np.nonzero(np.any(curr_mat != 0, axis=0))[0]
+        for col in nonzero_cols:
+            for col2 in nonzero_cols:
+                m[col, col2] = i+1
+    neq_indices = np.where(precision_one != precision_two)
+    neq_indices_arr = np.concatenate((np.expand_dims(neq_indices[0],1), np.expand_dims(neq_indices[1], 1)), 1)
+    
+    it_count = 1
+    for ctup in neq_indices_arr:
+        i, j = ctup
+        m[i, j] = 4 + it_count
+        it_count += 1
+    print(m)
+    #colors = 'whitesmoke blue magenta red orange lime'.split()
+
+    viridis = cm.get_cmap('viridis', it_count-1+4+2)
+    newcolors = viridis(np.linspace(0, 1, it_count-1+4+2))
+    #pink = np.array([248/256, 24/256, 148/256, 1])
+    whitesmoke = [0.9607843137254902, 0.9607843137254902, 0.9607843137254902, 1.0]
+    grey = [0.5019607843137255, 0.5019607843137255, 0.5019607843137255, 1.0]
+    newcolors[0, :] = whitesmoke
+    newcolors[1:5, :] = grey
+    newcmp = ListedColormap(newcolors)
+
+    ###########
+    plt.figure(figsize=(8, 8))
+    plt.imshow(m, cmap=newcmp)
+    major_ticks = np.arange(0, 20)
+    minor_ticks = np.arange(0.5, 20.5, 1)
+    plt.xticks(major_ticks, rotation=45)
+    plt.xticks(minor_ticks, minor=True)
+    plt.yticks(major_ticks, rotation=45)
+    plt.yticks(minor_ticks, minor=True)
+    plt.xlabel("Feature Index", fontsize=18)
+    plt.ylabel("Feature Index", fontsize=18)
+    #plt.matshow(m, cmap=cmap)
+    #sns.heatmap(m, cmap=cmap)
+    #plt.yticks(range(0, 20), rotation=45)
+    #plt.legend(handles=patches, bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=-1.0 )
+    plt.grid(which='minor')
+    plt.grid(which='major', alpha=0.0)
+    plt.title("Individual Coeff Subset Change", fontsize=20)
+    plt.tight_layout()
+    plt.savefig(os.path.join('debugging_figs/nonsap_figs/', "precision_orthogonal_hard.png"))
+    plt.close()
+    ############
+
     if save_path is not None:
         np.savetxt(os.path.join(save_path, 'changed_indx.csv'), neq_indices_arr)
     return H_s, data_total

@@ -160,21 +160,169 @@
 # python src/xia_cpd.py --sim 1 --sim_type orthogonal_mult_coeff --step_size 1 --window_size 100 --M 6 --dim 60 --lam 5e-2 --N 400 --num_coeffs_change 1
 # python src/xia_cpd.py --sim 1 --sim_type orthogonal_mult_coeff --step_size 1 --window_size 100 --M 8 --dim 80 --lam 5e-2 --N 400 --num_coeffs_change 1
 
+# python src/main.py --sim 1 --sim_type orthogonal_small --single_test 0 --step_size 1 --window_size 50 --split_variance 0 --M 4 --dim 20 --optim_type Boyd --lam 5e-2 --N 500 --recursion 1 --linkage single \
+#     --candidate_recursion 0 --base_M 2 --sim_scale 0.8 --log_pvals 1 --post_window_size 20 --train_percent 0.1 --thav 0 --thresh_const 0.8
+# python src/main.py --sim 1 --sim_type orthogonal_cross_block --single_test 0 --step_size 1 --window_size 50 --split_variance 0 --M 4 --dim 20 --optim_type Boyd --lam 5e-2 --N 500 --recursion 1 --linkage single \
+#     --candidate_recursion 0 --base_M 2 --sim_scale 0.8 --log_pvals 1 --post_window_size 20 --train_percent 0.1 --thav 0 --thresh_const 0.8
+# python src/main.py --sim 1 --sim_type orthogonal_cross_hard --single_test 0 --step_size 1 --window_size 50 --split_variance 0 --M 4 --dim 20 --optim_type Boyd --lam 5e-2 --N 500 --recursion 1 --linkage single \
+#     --candidate_recursion 0 --base_M 2 --sim_scale 0.8 --log_pvals 1 --post_window_size 20 --train_percent 0.1 --thav 0 --thresh_const 0.8
+# python src/main.py --sim 1 --sim_type orthogonal_multiple_block --single_test 0 --step_size 1 --window_size 50 --split_variance 0 --M 4 --dim 20 --optim_type Boyd --lam 5e-2 --N 500 --recursion 1 --linkage single \
+#     --candidate_recursion 0 --base_M 2 --sim_scale 0.8 --log_pvals 1 --post_window_size 20 --train_percent 0.1 --thav 0 --thresh_const 0.8
+# python src/main.py --sim 1 --sim_type orthogonal_hard --single_test 0 --step_size 1 --window_size 50 --split_variance 0 --M 4 --dim 20 --optim_type Boyd --lam 5e-2 --N 500 --recursion 1 --linkage single \
+#     --candidate_recursion 0 --base_M 2 --sim_scale 0.8 --log_pvals 1 --post_window_size 20 --train_percent 0.1 --thav 0 --thresh_const 0.8
 
-#python src/main.py --sim 1 --sim_type orthogonal_small --single_test 0 --step_size 1 --window_size 100 --split_variance 0 --M 4 --dim 20 --optim_type Boyd --lam 5e-2 --N 400 --recursion 1 --linkage complete --candidate_recursion 1 --base_M 2 --sim_scale 0.2 --log_pvals 0
-#python src/main.py --sim 1 --sim_type orthogonal_small --single_test 0 --step_size 1 --window_size 100 --split_variance 0 --M 5 --dim 40 --optim_type Boyd --lam 5e-2 --N 400 --recursion 1 --linkage complete --candidate_recursion 1 --base_M 2 --sim_scale 0.2 --log_pvals 0
-#python src/main.py --sim 1 --sim_type orthogonal_small --single_test 0 --step_size 1 --window_size 100 --split_variance 0 --M 6 --dim 60 --optim_type Boyd --lam 5e-2 --N 400 --recursion 1 --linkage complete --candidate_recursion 1 --base_M 2 --sim_scale 0.2 --log_pvals 0
-#python src/main.py --sim 1 --sim_type orthogonal_small --single_test 0 --step_size 1 --window_size 100 --split_variance 0 --M 8 --dim 80 --optim_type Boyd --lam 5e-2 --N 400 --recursion 1 --linkage complete --candidate_recursion 1 --base_M 2 --sim_scale 0.2 --log_pvals 0
 
-#python src/kesh_cpd.py --sim 1 --sim_type orthogonal_small --step_size 1 --window_size 100 --M 4 --dim 20 --lam 5e-2 --N 400 --burn_in 100 --sim_scale 0.2
-#python src/kesh_cpd.py --sim 1 --sim_type orthogonal_small --step_size 1 --window_size 100 --M 5 --dim 40 --lam 5e-2 --N 400 --burn_in 100 --sim_scale 0.2
-#python src/kesh_cpd.py --sim 1 --sim_type orthogonal_small --step_size 1 --window_size 100 --M 6 --dim 60 --lam 5e-2 --N 400 --burn_in 100 --sim_scale 0.2
-#python src/kesh_cpd.py --sim 1 --sim_type orthogonal_small --step_size 1 --window_size 100 --M 8 --dim 80 --lam 5e-2 --N 400 --burn_in 100 --sim_scale 0.2
+#####################
+# ORTHOGONAL BLOCKS
 
-python src/xia_cpd.py --sim 1 --sim_type orthogonal_small --step_size 1 --window_size 100 --M 4 --dim 20 --lam 5e-2 --N 400 --sim_scale 0.2
-python src/xia_cpd.py --sim 1 --sim_type orthogonal_small --step_size 1 --window_size 100 --M 5 --dim 40 --lam 5e-2 --N 400 --sim_scale 0.2
-python src/xia_cpd.py --sim 1 --sim_type orthogonal_small --step_size 1 --window_size 100 --M 6 --dim 60 --lam 5e-2 --N 400 --sim_scale 0.2
-python src/xia_cpd.py --sim 1 --sim_type orthogonal_small --step_size 1 --window_size 100 --M 8 --dim 80 --lam 5e-2 --N 400 --sim_scale 0.2
+# python src/main.py --sim 1 --sim_type orthogonal_small --single_test 0 --step_size 1 --window_size 50 --split_variance 0 --M 4 --dim 20 --optim_type Boyd --lam 5e-2 --N 500 --recursion 1 --linkage single \
+#     --candidate_recursion 0 --base_M 2 --sim_scale 0.8 --log_pvals 1 --post_window_size 20 --train_percent 0.1 --thav 0 --thresh_const 0.8
+# python src/main.py --sim 1 --sim_type orthogonal_small --single_test 0 --step_size 1 --window_size 100 --split_variance 0 --M 4 --dim 40 --optim_type Boyd --lam 5e-2 --N 500 --recursion 1 --linkage single \
+#     --candidate_recursion 0 --base_M 2 --sim_scale 0.8 --log_pvals 1 --post_window_size 20 --train_percent 0.1 --thav 0 --thresh_const 0.8
+# python src/main.py --sim 1 --sim_type orthogonal_small --single_test 0 --step_size 1 --window_size 150 --split_variance 0 --M 4 --dim 60 --optim_type Boyd --lam 5e-2 --N 500 --recursion 1 --linkage single \
+#     --candidate_recursion 0 --base_M 2 --sim_scale 0.8 --log_pvals 1 --post_window_size 20 --train_percent 0.1 --thav 0 --thresh_const 0.8
+# python src/main.py --sim 1 --sim_type orthogonal_small --single_test 0 --step_size 1 --window_size 200 --split_variance 0 --M 4 --dim 80 --optim_type Boyd --lam 5e-2 --N 500 --recursion 1 --linkage single \
+#     --candidate_recursion 0 --base_M 2 --sim_scale 0.8 --log_pvals 1 --post_window_size 20 --train_percent 0.1 --thav 0 --thresh_const 0.8
+
+# python src/kesh_cpd.py --sim 1 --sim_type orthogonal_small --step_size 1 --window_size 50 --M 4 --dim 20 --lam 5e-2 --N 500 --burn_in 50 --sim_scale 0.8 --post_window_size 20 --train_percent 0.1
+# python src/kesh_cpd.py --sim 1 --sim_type orthogonal_small --step_size 1 --window_size 100 --M 4 --dim 40 --lam 5e-2 --N 500 --burn_in 100 --sim_scale 0.8 --post_window_size 20 --train_percent 0.1
+# python src/kesh_cpd.py --sim 1 --sim_type orthogonal_small --step_size 1 --window_size 150 --M 4 --dim 60 --lam 5e-2 --N 500 --burn_in 150 --sim_scale 0.8 --post_window_size 20 --train_percent 0.1
+# python src/kesh_cpd.py --sim 1 --sim_type orthogonal_small --step_size 1 --window_size 200 --M 4 --dim 80 --lam 5e-2 --N 500 --burn_in 200 --sim_scale 0.8 --post_window_size 20 --train_percent 0.1
+
+# python src/kesh_cpd.py --sim 1 --sim_type orthogonal_small --step_size 1 --window_size 50 --M 4 --dim 20 --lam 5e-2 --N 500 --burn_in 50 --sim_scale 0.8 --post_window_size 20 --train_percent 0.1 --alt 1
+# python src/kesh_cpd.py --sim 1 --sim_type orthogonal_small --step_size 1 --window_size 100 --M 4 --dim 40 --lam 5e-2 --N 500 --burn_in 100 --sim_scale 0.8 --post_window_size 20 --train_percent 0.1 --alt 1
+# python src/kesh_cpd.py --sim 1 --sim_type orthogonal_small --step_size 1 --window_size 150 --M 4 --dim 60 --lam 5e-2 --N 500 --burn_in 150 --sim_scale 0.8 --post_window_size 20 --train_percent 0.1 --alt 1
+# python src/kesh_cpd.py --sim 1 --sim_type orthogonal_small --step_size 1 --window_size 200 --M 4 --dim 80 --lam 5e-2 --N 500 --burn_in 200 --sim_scale 0.8 --post_window_size 20 --train_percent 0.1 --alt 1
+
+# python src/xia_cpd_working.py --sim 1 --sim_type orthogonal_small --step_size 1 --window_size 50 --M 4 --dim 20 --lam 5e-2 --N 500 --post_window_size 20 --sim_scale 0.8 --train_percent 0.1
+# python src/xia_cpd_working.py --sim 1 --sim_type orthogonal_small --step_size 1 --window_size 100 --M 4 --dim 40 --lam 5e-2 --N 500 --post_window_size 20 --sim_scale 0.8 --train_percent 0.1
+# python src/xia_cpd_working.py --sim 1 --sim_type orthogonal_small --step_size 1 --window_size 150 --M 4 --dim 60 --lam 5e-2 --N 500 --post_window_size 20 --sim_scale 0.8 --train_percent 0.1
+# python src/xia_cpd_working.py --sim 1 --sim_type orthogonal_small --step_size 1 --window_size 200 --M 4 --dim 80 --lam 5e-2 --N 500 --post_window_size 20 --sim_scale 0.8 --train_percent 0.1
+
+
+#####################
+
+# CAI MODEL ONE
+
+# python src/main.py --sim 1 --sim_type orthogonal_small --single_test 0 --step_size 1 --window_size 50 --split_variance 0 --M 4 --dim 20 --optim_type Boyd --lam 5e-2 --N 500 --recursion 1 --linkage single \
+#     --candidate_recursion 0 --base_M 2 --sim_scale 0.8 --log_pvals 1 --post_window_size 20 --train_percent 0.1 --thav 0 --thresh_const 0.9
+# python src/main.py --sim 1 --sim_type orthogonal_small --single_test 0 --step_size 1 --window_size 100 --split_variance 0 --M 4 --dim 40 --optim_type Boyd --lam 5e-2 --N 500 --recursion 1 --linkage single \
+#     --candidate_recursion 0 --base_M 2 --sim_scale 0.8 --log_pvals 1 --post_window_size 20 --train_percent 0.1 --thav 0 --thresh_const 0.9
+# python src/main.py --sim 1 --sim_type orthogonal_small --single_test 0 --step_size 1 --window_size 150 --split_variance 0 --M 4 --dim 60 --optim_type Boyd --lam 5e-2 --N 500 --recursion 1 --linkage single \
+#     --candidate_recursion 0 --base_M 2 --sim_scale 0.8 --log_pvals 1 --post_window_size 20 --train_percent 0.1 --thav 0 --thresh_const 0.9
+# python src/main.py --sim 1 --sim_type orthogonal_small --single_test 0 --step_size 1 --window_size 200 --split_variance 0 --M 4 --dim 80 --optim_type Boyd --lam 5e-2 --N 500 --recursion 1 --linkage single \
+#     --candidate_recursion 0 --base_M 2 --sim_scale 0.8 --log_pvals 1 --post_window_size 20 --train_percent 0.1 --thav 0 --thresh_const 0.9
+
+# python src/kesh_cpd.py --sim 1 --sim_type orthogonal_small --step_size 1 --window_size 50 --M 4 --dim 20 --lam 5e-2 --N 500 --burn_in 50 --sim_scale 0.8 --post_window_size 20 --train_percent 0.1
+# python src/kesh_cpd.py --sim 1 --sim_type orthogonal_small --step_size 1 --window_size 100 --M 4 --dim 40 --lam 5e-2 --N 500 --burn_in 100 --sim_scale 0.8 --post_window_size 20 --train_percent 0.1
+# python src/kesh_cpd.py --sim 1 --sim_type orthogonal_small --step_size 1 --window_size 150 --M 4 --dim 60 --lam 5e-2 --N 500 --burn_in 150 --sim_scale 0.8 --post_window_size 20 --train_percent 0.1
+# python src/kesh_cpd.py --sim 1 --sim_type orthogonal_small --step_size 1 --window_size 200 --M 4 --dim 80 --lam 5e-2 --N 500 --burn_in 200 --sim_scale 0.8 --post_window_size 20 --train_percent 0.1
+
+# python src/kesh_cpd.py --sim 1 --sim_type orthogonal_small --step_size 1 --window_size 50 --M 4 --dim 20 --lam 5e-2 --N 500 --burn_in 50 --sim_scale 0.8 --post_window_size 20 --train_percent 0.1 --alt 1
+# python src/kesh_cpd.py --sim 1 --sim_type orthogonal_small --step_size 1 --window_size 100 --M 4 --dim 40 --lam 5e-2 --N 500 --burn_in 100 --sim_scale 0.8 --post_window_size 20 --train_percent 0.1 --alt 1
+# python src/kesh_cpd.py --sim 1 --sim_type orthogonal_small --step_size 1 --window_size 150 --M 4 --dim 60 --lam 5e-2 --N 500 --burn_in 150 --sim_scale 0.8 --post_window_size 20 --train_percent 0.1 --alt 1
+# python src/kesh_cpd.py --sim 1 --sim_type orthogonal_small --step_size 1 --window_size 200 --M 4 --dim 80 --lam 5e-2 --N 500 --burn_in 200 --sim_scale 0.8 --post_window_size 20 --train_percent 0.1 --alt 1
+
+# python src/xia_cpd_working.py --sim 1 --sim_type cai_model_one --step_size 1 --window_size 50 --M 4 --dim 20 --lam 5e-2 --N 500 --post_window_size 20 --sim_scale 0.8 --train_percent 0.1
+# python src/xia_cpd_working.py --sim 1 --sim_type cai_model_one --step_size 1 --window_size 100 --M 4 --dim 40 --lam 5e-2 --N 500 --post_window_size 20 --sim_scale 0.8 --train_percent 0.1
+# python src/xia_cpd_working.py --sim 1 --sim_type cai_model_one --step_size 1 --window_size 150 --M 4 --dim 60 --lam 5e-2 --N 500 --post_window_size 20 --sim_scale 0.8 --train_percent 0.1
+# python src/xia_cpd_working.py --sim 1 --sim_type cai_model_one --step_size 1 --window_size 200 --M 4 --dim 80 --lam 5e-2 --N 500 --post_window_size 200 --sim_scale 0.8 --train_percent 0.1
+
+
+
+
+#####################
+
+# CROSS BLOCK
+
+# python src/main.py --sim 1 --sim_type orthogonal_hard --single_test 0 --step_size 1 --window_size 50 --split_variance 0 --M 4 --dim 20 --optim_type Boyd --lam 5e-2 --N 500 --recursion 1 --linkage single \
+#     --candidate_recursion 1 --base_M 2 --sim_scale 0.8 --log_pvals 1 --post_window_size 20 --train_percent 0.1 --thav 0 --thresh_const 0.8
+# python src/main.py --sim 1 --sim_type orthogonal_hard --single_test 0 --step_size 1 --window_size 100 --split_variance 0 --M 4 --dim 40 --optim_type Boyd --lam 5e-2 --N 500 --recursion 1 --linkage single \
+#     --candidate_recursion 1 --base_M 2 --sim_scale 0.8 --log_pvals 1 --post_window_size 20 --train_percent 0.1 --thav 0 --thresh_const 0.8
+# python src/main.py --sim 1 --sim_type orthogonal_hard --single_test 0 --step_size 1 --window_size 150 --split_variance 0 --M 4 --dim 60 --optim_type Boyd --lam 5e-2 --N 500 --recursion 1 --linkage single \
+#     --candidate_recursion 1 --base_M 2 --sim_scale 0.8 --log_pvals 1 --post_window_size 20 --train_percent 0.1 --thav 0 --thresh_const 0.8
+# python src/main.py --sim 1 --sim_type orthogonal_hard --single_test 0 --step_size 1 --window_size 200 --split_variance 0 --M 4 --dim 80 --optim_type Boyd --lam 5e-2 --N 500 --recursion 1 --linkage single \
+#     --candidate_recursion 1 --base_M 2 --sim_scale 0.8 --log_pvals 1 --post_window_size 20 --train_percent 0.1 --thav 0 --thresh_const 0.8
+
+# python src/kesh_cpd.py --sim 1 --sim_type orthogonal_hard --step_size 1 --window_size 50 --M 4 --dim 20 --lam 5e-2 --N 500 --burn_in 50 --sim_scale 0.8 --post_window_size 20 --train_percent 0.1
+# python src/kesh_cpd.py --sim 1 --sim_type orthogonal_hard --step_size 1 --window_size 100 --M 4 --dim 40 --lam 5e-2 --N 500 --burn_in 100 --sim_scale 0.8 --post_window_size 20 --train_percent 0.1
+# python src/kesh_cpd.py --sim 1 --sim_type orthogonal_hard --step_size 1 --window_size 150 --M 4 --dim 60 --lam 5e-2 --N 500 --burn_in 150 --sim_scale 0.8 --post_window_size 20 --train_percent 0.1
+# python src/kesh_cpd.py --sim 1 --sim_type orthogonal_hard --step_size 1 --window_size 200 --M 4 --dim 80 --lam 5e-2 --N 500 --burn_in 200 --sim_scale 0.8 --post_window_size 20 --train_percent 0.1
+
+# python src/kesh_cpd.py --sim 1 --sim_type orthogonal_hard --step_size 1 --window_size 50 --M 4 --dim 20 --lam 5e-2 --N 500 --burn_in 50 --sim_scale 0.8 --post_window_size 20 --train_percent 0.1 --alt 1
+# python src/kesh_cpd.py --sim 1 --sim_type orthogonal_hard --step_size 1 --window_size 100 --M 4 --dim 40 --lam 5e-2 --N 500 --burn_in 100 --sim_scale 0.8 --post_window_size 20 --train_percent 0.1 --alt 1
+# python src/kesh_cpd.py --sim 1 --sim_type orthogonal_hard --step_size 1 --window_size 150 --M 4 --dim 60 --lam 5e-2 --N 500 --burn_in 150 --sim_scale 0.8 --post_window_size 20 --train_percent 0.1 --alt 1
+# python src/kesh_cpd.py --sim 1 --sim_type orthogonal_hard --step_size 1 --window_size 200 --M 4 --dim 80 --lam 5e-2 --N 500 --burn_in 200 --sim_scale 0.8 --post_window_size 20 --train_percent 0.1 --alt 1
+
+# python src/xia_cpd_working.py --sim 1 --sim_type orthogonal_hard --step_size 1 --window_size 50 --M 4 --dim 20 --lam 5e-2 --N 500 --post_window_size 20 --sim_scale 0.8 --train_percent 0.1
+# python src/xia_cpd_working.py --sim 1 --sim_type orthogonal_hard --step_size 1 --window_size 100 --M 4 --dim 40 --lam 5e-2 --N 500 --post_window_size 20 --sim_scale 0.8 --train_percent 0.1
+# python src/xia_cpd_working.py --sim 1 --sim_type orthogonal_hard --step_size 1 --window_size 150 --M 4 --dim 60 --lam 5e-2 --N 500 --post_window_size 20 --sim_scale 0.8 --train_percent 0.1
+# python src/xia_cpd_working.py --sim 1 --sim_type orthogonal_hard --step_size 1 --window_size 200 --M 4 --dim 80 --lam 5e-2 --N 500 --post_window_size 20 --sim_scale 0.8 --train_percent 0.1
+
+########################
+
+# MULTIPLE BLOCK (UNEQUAL COEFF SAMPLING)
+
+# python src/main.py --sim 1 --sim_type orthogonal_multiple_block --single_test 0 --step_size 1 --window_size 50 --split_variance 0 --M 4 --dim 20 --optim_type Boyd --lam 5e-2 --N 500 --recursion 1 --linkage single \
+#     --candidate_recursion 0 --base_M 2 --sim_scale 0.8 --log_pvals 1 --post_window_size 20 --train_percent 0.1 --thav 0 --thresh_const 0.8
+# python src/main.py --sim 1 --sim_type orthogonal_multiple_block --single_test 0 --step_size 1 --window_size 100 --split_variance 0 --M 4 --dim 40 --optim_type Boyd --lam 5e-2 --N 500 --recursion 1 --linkage single \
+#     --candidate_recursion 0 --base_M 2 --sim_scale 0.8 --log_pvals 1 --post_window_size 20 --train_percent 0.1 --thav 0 --thresh_const 0.8
+# python src/main.py --sim 1 --sim_type orthogonal_multiple_block --single_test 0 --step_size 1 --window_size 150 --split_variance 0 --M 4 --dim 60 --optim_type Boyd --lam 5e-2 --N 500 --recursion 1 --linkage single \
+#     --candidate_recursion 0 --base_M 2 --sim_scale 0.8 --log_pvals 1 --post_window_size 20 --train_percent 0.1 --thav 0 --thresh_const 0.8
+# python src/main.py --sim 1 --sim_type orthogonal_multiple_block --single_test 0 --step_size 1 --window_size 200 --split_variance 0 --M 4 --dim 80 --optim_type Boyd --lam 5e-2 --N 500 --recursion 1 --linkage single \
+#     --candidate_recursion 0 --base_M 2 --sim_scale 0.8 --log_pvals 1 --post_window_size 20 --train_percent 0.1 --thav 0 --thresh_const 0.8
+
+# python src/kesh_cpd.py --sim 1 --sim_type orthogonal_multiple_block --step_size 1 --window_size 50 --M 4 --dim 20 --lam 5e-2 --N 500 --burn_in 50 --sim_scale 0.8 --post_window_size 20 --train_percent 0.1
+# python src/kesh_cpd.py --sim 1 --sim_type orthogonal_multiple_block --step_size 1 --window_size 100 --M 4 --dim 40 --lam 5e-2 --N 500 --burn_in 100 --sim_scale 0.8 --post_window_size 20 --train_percent 0.1
+# python src/kesh_cpd.py --sim 1 --sim_type orthogonal_multiple_block --step_size 1 --window_size 150 --M 4 --dim 60 --lam 5e-2 --N 500 --burn_in 150 --sim_scale 0.8 --post_window_size 20 --train_percent 0.1
+# python src/kesh_cpd.py --sim 1 --sim_type orthogonal_multiple_block --step_size 1 --window_size 200 --M 4 --dim 80 --lam 5e-2 --N 500 --burn_in 200 --sim_scale 0.8 --post_window_size 20 --train_percent 0.1
+
+# python src/kesh_cpd.py --sim 1 --sim_type orthogonal_multiple_block --step_size 1 --window_size 50 --M 4 --dim 20 --lam 5e-2 --N 500 --burn_in 50 --sim_scale 0.8 --post_window_size 20 --train_percent 0.1 --alt 1
+# python src/kesh_cpd.py --sim 1 --sim_type orthogonal_multiple_block --step_size 1 --window_size 100 --M 4 --dim 40 --lam 5e-2 --N 500 --burn_in 100 --sim_scale 0.8 --post_window_size 20 --train_percent 0.1 --alt 1
+# python src/kesh_cpd.py --sim 1 --sim_type orthogonal_multiple_block --step_size 1 --window_size 150 --M 4 --dim 60 --lam 5e-2 --N 500 --burn_in 150 --sim_scale 0.8 --post_window_size 20 --train_percent 0.1 --alt 1
+# python src/kesh_cpd.py --sim 1 --sim_type orthogonal_multiple_block --step_size 1 --window_size 200 --M 4 --dim 80 --lam 5e-2 --N 500 --burn_in 200 --sim_scale 0.8 --post_window_size 20 --train_percent 0.1 --alt 1
+
+# python src/xia_cpd_working.py --sim 1 --sim_type orthogonal_multiple_block --step_size 1 --window_size 50 --M 4 --dim 20 --lam 5e-2 --N 500 --post_window_size 20 --sim_scale 0.8 --train_percent 0.1
+# python src/xia_cpd_working.py --sim 1 --sim_type orthogonal_multiple_block --step_size 1 --window_size 100 --M 4 --dim 40 --lam 5e-2 --N 500 --post_window_size 20 --sim_scale 0.8 --train_percent 0.1
+# python src/xia_cpd_working.py --sim 1 --sim_type orthogonal_multiple_block --step_size 1 --window_size 150 --M 4 --dim 60 --lam 5e-2 --N 500 --post_window_size 20 --sim_scale 0.8 --train_percent 0.1
+# python src/xia_cpd_working.py --sim 1 --sim_type orthogonal_multiple_block --step_size 1 --window_size 200 --M 4 --dim 80 --lam 5e-2 --N 500 --post_window_size 20 --sim_scale 0.8 --train_percent 0.1
+
+# python src/main.py --sim 1 --sim_type orthogonal_cross_hard --single_test 0 --step_size 1 --window_size 50 --split_variance 0 --M 4 --dim 20 --optim_type Boyd --lam 5e-2 --N 500 --recursion 1 --linkage single \
+#     --candidate_recursion 1 --base_M 2 --sim_scale 0.8 --log_pvals 1 --post_window_size 20 --train_percent 0.1 --thav 0 --thresh_const 0.8
+# python src/main.py --sim 1 --sim_type orthogonal_cross_hard --single_test 0 --step_size 1 --window_size 100 --split_variance 0 --M 4 --dim 40 --optim_type Boyd --lam 5e-2 --N 500 --recursion 1 --linkage single \
+#     --candidate_recursion 1 --base_M 2 --sim_scale 0.8 --log_pvals 1 --post_window_size 20 --train_percent 0.1 --thav 0 --thresh_const 0.8
+# python src/main.py --sim 1 --sim_type orthogonal_cross_hard --single_test 0 --step_size 1 --window_size 150 --split_variance 0 --M 4 --dim 60 --optim_type Boyd --lam 5e-2 --N 500 --recursion 1 --linkage single \
+#     --candidate_recursion 1 --base_M 2 --sim_scale 0.8 --log_pvals 1 --post_window_size 20 --train_percent 0.1 --thav 0 --thresh_const 0.8
+# python src/main.py --sim 1 --sim_type orthogonal_cross_hard --single_test 0 --step_size 1 --window_size 200 --split_variance 0 --M 4 --dim 80 --optim_type Boyd --lam 5e-2 --N 500 --recursion 1 --linkage single \
+#     --candidate_recursion 1 --base_M 2 --sim_scale 0.8 --log_pvals 1 --post_window_size 20 --train_percent 0.1 --thav 0 --thresh_const 0.8
+
+# python src/kesh_cpd.py --sim 1 --sim_type orthogonal_cross_hard --step_size 1 --window_size 50 --M 4 --dim 20 --lam 5e-2 --N 500 --burn_in 50 --sim_scale 0.8 --post_window_size 20 --train_percent 0.1
+# python src/kesh_cpd.py --sim 1 --sim_type orthogonal_cross_hard --step_size 1 --window_size 100 --M 4 --dim 40 --lam 5e-2 --N 500 --burn_in 100 --sim_scale 0.8 --post_window_size 20 --train_percent 0.1
+# python src/kesh_cpd.py --sim 1 --sim_type orthogonal_cross_hard --step_size 1 --window_size 150 --M 4 --dim 60 --lam 5e-2 --N 500 --burn_in 150 --sim_scale 0.8 --post_window_size 20 --train_percent 0.1
+# python src/kesh_cpd.py --sim 1 --sim_type orthogonal_cross_hard --step_size 1 --window_size 200 --M 4 --dim 80 --lam 5e-2 --N 500 --burn_in 200 --sim_scale 0.8 --post_window_size 20 --train_percent 0.1
+
+# python src/kesh_cpd.py --sim 1 --sim_type orthogonal_cross_hard --step_size 1 --window_size 50 --M 4 --dim 20 --lam 5e-2 --N 500 --burn_in 50 --sim_scale 0.8 --post_window_size 20 --train_percent 0.1 --alt 1
+# python src/kesh_cpd.py --sim 1 --sim_type orthogonal_cross_hard --step_size 1 --window_size 100 --M 4 --dim 40 --lam 5e-2 --N 500 --burn_in 100 --sim_scale 0.8 --post_window_size 20 --train_percent 0.1 --alt 1
+# python src/kesh_cpd.py --sim 1 --sim_type orthogonal_cross_hard --step_size 1 --window_size 150 --M 4 --dim 60 --lam 5e-2 --N 500 --burn_in 150 --sim_scale 0.8 --post_window_size 20 --train_percent 0.1 --alt 1
+# python src/kesh_cpd.py --sim 1 --sim_type orthogonal_cross_hard --step_size 1 --window_size 200 --M 4 --dim 80 --lam 5e-2 --N 500 --burn_in 200 --sim_scale 0.8 --post_window_size 20 --train_percent 0.1 --alt 1
+
+# python src/xia_cpd_working.py --sim 1 --sim_type orthogonal_cross_hard --step_size 1 --window_size 50 --M 4 --dim 20 --lam 5e-2 --N 500 --post_window_size 20 --sim_scale 0.8 --train_percent 0.1
+# python src/xia_cpd_working.py --sim 1 --sim_type orthogonal_cross_hard --step_size 1 --window_size 100 --M 4 --dim 40 --lam 5e-2 --N 500 --post_window_size 20 --sim_scale 0.8 --train_percent 0.1
+# python src/xia_cpd_working.py --sim 1 --sim_type orthogonal_cross_hard --step_size 1 --window_size 150 --M 4 --dim 60 --lam 5e-2 --N 500 --post_window_size 20 --sim_scale 0.8 --train_percent 0.1
+# python src/xia_cpd_working.py --sim 1 --sim_type orthogonal_cross_hard --step_size 1 --window_size 200 --M 4 --dim 80 --lam 5e-2 --N 500 --post_window_size 20 --sim_scale 0.8 --train_percent 0.1
+
+
+
+### TIMING RESULTS DOWN HERE
+python src/main.py --sim 1 --sim_type orthogonal_small --single_test 0 --step_size 1 --window_size 50 --split_variance 0 --M 4 --dim 20 --optim_type Boyd --lam 5e-2 --N 250 --recursion 1 --linkage single \
+    --candidate_recursion 0 --base_M 2 --sim_scale 0.8 --log_pvals 1 --post_window_size 20 --train_percent 0.1 --thav 0 --thresh_const 0.8
+python src/main.py --sim 1 --sim_type orthogonal_small --single_test 0 --step_size 1 --window_size 50 --split_variance 0 --M 4 --dim 40 --optim_type Boyd --lam 5e-2 --N 250 --recursion 1 --linkage single \
+    --candidate_recursion 0 --base_M 2 --sim_scale 0.8 --log_pvals 1 --post_window_size 20 --train_percent 0.1 --thav 0 --thresh_const 0.8
+python src/main.py --sim 1 --sim_type orthogonal_small --single_test 0 --step_size 1 --window_size 50 --split_variance 0 --M 4 --dim 60 --optim_type Boyd --lam 5e-2 --N 250 --recursion 1 --linkage single \
+    --candidate_recursion 0 --base_M 2 --sim_scale 0.8 --log_pvals 1 --post_window_size 20 --train_percent 0.1 --thav 0 --thresh_const 0.8
+python src/main.py --sim 1 --sim_type orthogonal_small --single_test 0 --step_size 1 --window_size 50 --split_variance 0 --M 4 --dim 80 --optim_type Boyd --lam 5e-2 --N 250 --recursion 1 --linkage single \
+    --candidate_recursion 0 --base_M 2 --sim_scale 0.8 --log_pvals 1 --post_window_size 20 --train_percent 0.1 --thav 0 --thresh_const 0.8
+
 
 
 

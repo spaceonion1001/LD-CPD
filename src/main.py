@@ -79,6 +79,10 @@ def resolve_data(args, save_path=None, data_seed=42):
             return sim_changepoint_mv_normal_orthogonal_cross_block(sim_scale=args.sim_scale, M=args.M, dim=args.dim, N=args.N, save_path=save_path, data_seed=data_seed)[1].T
         elif args.sim_type == 'orthogonal_multiple_block':
             return sim_changepoint_mv_normal_orthogonal_multiple_block(sim_scale=args.sim_scale, M=args.M, dim=args.dim, N=args.N, save_path=save_path, data_seed=data_seed)[1].T
+        elif args.sim_type == 'orthogonal_cross_hard':
+            return sim_changepoint_mv_normal_orthogonal_cross_hard(sim_scale=args.sim_scale, M=args.M, dim=args.dim, N=args.N, save_path=save_path, data_seed=data_seed)[1].T
+        elif args.sim_type == 'orthogonal_hard':
+            return sim_changepoint_mv_normal_orthogonal_hard(sim_scale=args.sim_scale, M=args.M, dim=args.dim, N=args.N, save_path=save_path, data_seed=data_seed)[1].T
         elif args.sim_type == 'orthogonal_block_fix_window': # THIS IS A PLACEHOLDER DUPLICATE JUST FOR EASE OF SAVING FOR COMPARISONS
             return sim_changepoint_mv_normal_orthogonal(sim_scale=args.sim_scale, M=args.M, dim=args.dim, N=args.N, save_path=save_path, data_seed=data_seed)[1].T
         elif args.sim_type == 'orthogonal_mult_coeff':
@@ -227,7 +231,7 @@ def perform_simulation_batch(args):
     args.fig_dir_path = fig_dir_path
     print("\n*******************************************************************************")
     print("Performing Batch Simulation of {} with Dim = {}, M = {}, Scale = {}, Window = {}, Lam = {}".format(args.sim_type, args.dim, args.M, args.sim_scale, args.window_size, args.lam))
-    seeds_list = np.arange(60, 70)
+    seeds_list = np.arange(51, 70)
     sim_results_path = os.path.join(args.results_path, "simulation_results")
     if not os.path.isdir(sim_results_path):
         os.mkdir(sim_results_path)
@@ -238,6 +242,8 @@ def perform_simulation_batch(args):
     if not os.path.isdir(sim_type_path):
         os.mkdir(sim_type_path)
     timing = []
+    timing_glasso = []
+    timing_mats = []
     import timeit
 
     for seed in seeds_list:
@@ -252,8 +258,14 @@ def perform_simulation_batch(args):
         print(data_full.shape)
         model = PrecisionCPD(args)
         data_train = data_full[0:args.window_size, :]
+        tglasso_0 = timeit.default_timer()
         model.fit_glasso(data_train, use_thav=bool(args.thav))
+        tglasso_1 = timeit.default_timer()
+        tmats_0 = timeit.default_timer()
         model.construct_basis_matrices()
+        tmats_1 = timeit.default_timer()
+        timing_glasso.append(round(tglasso_1-tglasso_0, 3))
+        timing_mats.append(round(tmats_1-tmats_0, 3))
 
         ############
         # if 'orthogonal' in args.sim_type:
@@ -281,6 +293,8 @@ def perform_simulation_batch(args):
         #np.savetxt(os.path.join(save_path, "p_vals.csv"), p_vals_all, delimiter=',')
         model.print_clusters_rv()
     np.savetxt('debugging_figs/timing_ours_{}.csv'.format(args.dim), np.array(timing))
+    np.savetxt('debugging_figs/timing_ours_glasso_{}.csv'.format(args.dim), np.array(timing_glasso))
+    np.savetxt('debugging_figs/timing_ours_mats_{}.csv'.format(args.dim), np.array(timing_mats))
     print("*******************************************************************************")
     print("Done!")
 
