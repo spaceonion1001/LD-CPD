@@ -115,7 +115,7 @@ def load_sap_data(args):
 
 def scale_data(data, percent=1.0, end_idx=None):
     scaler = StandardScaler()
-    if percent is not None:
+    if percent is not None and end_idx is None:
         end_idx = int(percent*data.shape[0])
     scaler = scaler.fit(data[:end_idx])
     data_scaled = scaler.transform(data)

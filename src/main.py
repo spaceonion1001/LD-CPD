@@ -67,6 +67,7 @@ def get_args():
     parser.add_argument('--thresh_const', type=float, default=0.8)
     parser.add_argument('--sap', type=int, default=0)
     parser.add_argument('--fix_pre', type=int, default=1)
+    parser.add_argument('--save_lambda', type=int, default=0)
     args = parser.parse_args()
 
     return args
@@ -96,13 +97,13 @@ def resolve_data(args, save_path=None, data_seed=42):
         elif args.sim_type == 'var_process':
             return scale_data(difference_data(sim_changepoint_var_process(dim=args.dim, N=args.N, num_coeffs_change=args.num_coeffs_change, scale=args.sim_scale, save_path=save_path)))
         elif args.sim_type == 'cai_model_one':
-            return scale_data(changepoint_cai_model_one(args, dim=args.dim, N=args.N, save_path=save_path), args.train_percent)
+            return scale_data(changepoint_cai_model_one(args, dim=args.dim, N=args.N, save_path=save_path), end_idx=args.window_size)
         elif args.sim_type == 'cai_model_one_extra':
-            return scale_data(changepoint_cai_model_one(args, dim=args.dim, N=args.N, save_path=save_path), args.train_percent)
+            return scale_data(changepoint_cai_model_one(args, dim=args.dim, N=args.N, save_path=save_path), end_idx=args.window_size)
         elif args.sim_type == 'cai_model_one_fix_window':
-            return scale_data(changepoint_cai_model_one(args, dim=args.dim, N=args.N, save_path=save_path), args.train_percent) # PLACEHOLDER DUPLICATE AGAIN
+            return scale_data(changepoint_cai_model_one(args, dim=args.dim, N=args.N, save_path=save_path), end_idx=args.window_size) # PLACEHOLDER DUPLICATE AGAIN
         elif args.sim_type == 'cai_model_three':
-            return scale_data(changepoint_cai_model_three(args, dim=args.dim, N=args.N, save_path=save_path), args.train_percent)
+            return scale_data(changepoint_cai_model_three(args, dim=args.dim, N=args.N, save_path=save_path), end_idx=args.window_size)
         elif args.sim_type == 'orthogonal_no_change':
             return sim_changepoint_mv_normal_orthogonal_no_change(sim_scale=args.sim_scale, M=args.M, dim=args.dim, N=args.N, save_path=save_path)[1].T
         elif args.sim_type == 'cholesky_no_change':
@@ -149,6 +150,17 @@ def resolve_data(args, save_path=None, data_seed=42):
             print("Error: Dataset not understood")
             exit(0)
 
+def save_lambda_value(save_path, args, chosen_lamb, seed=None):
+    if save_path is None:
+        return
+    if not os.path.isdir(save_path):
+        os.mkdir(save_path)
+    out_path = os.path.join(save_path, "chosen_lambda.csv")
+    seed_val = "" if seed is None else seed
+    with open(out_path, "w") as f:
+        f.write("sim_type,dim,seed,chosen_lambda\n")
+        f.write("{},{},{},{}\n".format(args.sim_type, args.dim, seed_val, chosen_lamb))
+
 def perform_single_test(args):
     np.random.seed(args.random_seed)
     fig_dir_path = create_fig_dir(args.fig_path)
@@ -175,7 +187,11 @@ def perform_single_test(args):
     # our algorithm            
     else:
         data_train = data_full[0:args.window_size, :]
-        model.fit_glasso(data_train)
+        chosen_lamb = model.fit_glasso(data_train)
+        save_lambda_value(results_dir_path, args, chosen_lamb, seed=args.random_seed)
+        if bool(args.save_lambda):
+            print("save_lambda enabled: skipping test statistic calculations.")
+            return
         model.construct_basis_matrices()
         #model.permute_blocks()
 
@@ -231,7 +247,7 @@ def perform_simulation_batch(args):
     args.fig_dir_path = fig_dir_path
     print("\n*******************************************************************************")
     print("Performing Batch Simulation of {} with Dim = {}, M = {}, Scale = {}, Window = {}, Lam = {}".format(args.sim_type, args.dim, args.M, args.sim_scale, args.window_size, args.lam))
-    seeds_list = np.arange(80, 85)
+    seeds_list = np.arange(50, 70)
     sim_results_path = os.path.join(args.results_path, "simulation_results")
     if not os.path.isdir(sim_results_path):
         os.mkdir(sim_results_path)
@@ -259,8 +275,12 @@ def perform_simulation_batch(args):
         model = PrecisionCPD(args)
         data_train = data_full[0:args.window_size, :]
         tglasso_0 = timeit.default_timer()
-        model.fit_glasso(data_train, use_thav=bool(args.thav))
+        chosen_lamb = model.fit_glasso(data_train, use_thav=bool(args.thav))
         tglasso_1 = timeit.default_timer()
+        save_lambda_value(save_path, args, chosen_lamb, seed=seed)
+        if bool(args.save_lambda):
+            print("save_lambda enabled: skipping test statistic calculations.")
+            continue
         tmats_0 = timeit.default_timer()
         model.construct_basis_matrices()
         tmats_1 = timeit.default_timer()
@@ -292,9 +312,10 @@ def perform_simulation_batch(args):
 
         #np.savetxt(os.path.join(save_path, "p_vals.csv"), p_vals_all, delimiter=',')
         model.print_clusters_rv()
-    np.savetxt('debugging_figs/timing_ours_{}.csv'.format(args.dim), np.array(timing))
-    np.savetxt('debugging_figs/timing_ours_glasso_{}.csv'.format(args.dim), np.array(timing_glasso))
-    np.savetxt('debugging_figs/timing_ours_mats_{}.csv'.format(args.dim), np.array(timing_mats))
+    if not bool(args.save_lambda):
+        np.savetxt('debugging_figs/timing_ours_{}.csv'.format(args.dim), np.array(timing))
+        np.savetxt('debugging_figs/timing_ours_glasso_{}.csv'.format(args.dim), np.array(timing_glasso))
+        np.savetxt('debugging_figs/timing_ours_mats_{}.csv'.format(args.dim), np.array(timing_mats))
     print("*******************************************************************************")
     print("Done!")
 
@@ -356,7 +377,11 @@ def precision_recall_sims(args):
                 print(data_full.shape)
                 model = PrecisionCPD(args)
                 data_train = data_full[0:args.window_size, :]
-                model.fit_glasso(data_train)
+                chosen_lamb = model.fit_glasso(data_train)
+                save_lambda_value(save_path, args, chosen_lamb, seed=seed)
+                if bool(args.save_lambda):
+                    print("save_lambda enabled: skipping test statistic calculations.")
+                    continue
                 model.construct_basis_matrices()
                 lrt_vals_all, _ = model.perform_lrt_local(data_full.T)
                 model.save_matrices_simulations(save_path)
@@ -383,7 +408,11 @@ def precision_recall_sims(args):
                 print(data_full.shape)
                 model = PrecisionCPD(args)
                 data_train = data_full[0:args.window_size, :]
-                model.fit_glasso(data_train)
+                chosen_lamb = model.fit_glasso(data_train)
+                save_lambda_value(save_path, args, chosen_lamb, seed=seed)
+                if bool(args.save_lambda):
+                    print("save_lambda enabled: skipping test statistic calculations.")
+                    continue
                 model.construct_basis_matrices()
                 lrt_vals_all, _ = model.perform_lrt_local(data_full.T)
                 model.save_matrices_simulations(save_path)
@@ -455,7 +484,11 @@ def precision_recall_sims_runtimes(args):
                 start_time = time.time()
                 model = PrecisionCPD(args)
                 data_train = data_full[0:args.window_size, :]
-                model.fit_glasso(data_train)
+                chosen_lamb = model.fit_glasso(data_train)
+                save_lambda_value(save_path, args, chosen_lamb, seed=seed)
+                if bool(args.save_lambda):
+                    print("save_lambda enabled: skipping test statistic calculations.")
+                    continue
                 model.construct_basis_matrices()
                 lrt_vals_all, _ = model.perform_lrt_local(data_full.T)
                 end_time = time.time()
@@ -486,7 +519,11 @@ def precision_recall_sims_runtimes(args):
                 start_time = time.monotonic()
                 model = PrecisionCPD(args)
                 data_train = data_full[0:args.window_size, :]
-                model.fit_glasso(data_train)
+                chosen_lamb = model.fit_glasso(data_train)
+                save_lambda_value(save_path, args, chosen_lamb, seed=seed)
+                if bool(args.save_lambda):
+                    print("save_lambda enabled: skipping test statistic calculations.")
+                    continue
                 model.construct_basis_matrices()
                 lrt_vals_all, _ = model.perform_lrt_local(data_full.T)
                 #model.save_matrices_simulations(save_path)
@@ -527,7 +564,11 @@ def perform_sap_batch(args):
         data_full = data_full[:, chosen_idxs]
         model = PrecisionCPD(args)
         data_train = data_full[0:args.window_size, :]
-        model.fit_glasso(data_train, use_thav=bool(args.thav))
+        chosen_lamb = model.fit_glasso(data_train, use_thav=bool(args.thav))
+        save_lambda_value(save_path, args, chosen_lamb, seed=seed)
+        if bool(args.save_lambda):
+            print("save_lambda enabled: skipping test statistic calculations.")
+            continue
         model.construct_basis_matrices()
 
         ############
@@ -637,6 +678,4 @@ if __name__ == '__main__':
 # python src/main.py --single_test 0 --num_coeffs_change 2 --train_percent 0.4 --window_size 100 --step_size 1 --sim 1 --lam 3e-1 --N 300 --M 15 --full_basis 0 --dim 100 --sim_type cholesky
 # python src/main.py --single_test 0 --num_coeffs_change 2 --train_percent 0.4 --window_size 100 --step_size 1 --sim 1 --lam 3e-1 --N 300 --M 10 --full_basis 0 --dim 100 --sim_type orthogonal
 # --results_path /nfs/hpc/share/dinkinst/Correlation-Changepoint-Detection/results
-
-
 

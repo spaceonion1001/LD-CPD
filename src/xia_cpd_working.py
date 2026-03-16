@@ -104,11 +104,11 @@ def resolve_data(args, save_path=None, data_seed=42):
         elif args.sim_type == 'var_process':
             return scale_data(difference_data(sim_changepoint_var_process(dim=args.dim, N=args.N, num_coeffs_change=args.num_coeffs_change, scale=args.sim_scale, save_path=save_path)))
         elif args.sim_type == 'cai_model_one':
-            return scale_data(changepoint_cai_model_one(args, dim=args.dim, N=args.N, save_path=save_path))
+            return scale_data(changepoint_cai_model_one(args, dim=args.dim, N=args.N, save_path=save_path), end_idx=args.window_size)
         elif args.sim_type == 'cai_model_three':
-            return scale_data(changepoint_cai_model_three(args, dim=args.dim, N=args.N, save_path=save_path))
+            return scale_data(changepoint_cai_model_three(args, dim=args.dim, N=args.N, save_path=save_path), end_idx=args.window_size)
         elif args.sim_type == 'cai_model_one_extra':
-            return scale_data(changepoint_cai_model_one(args, dim=args.dim, N=args.N, save_path=save_path), args.train_percent)
+            return scale_data(changepoint_cai_model_one(args, dim=args.dim, N=args.N, save_path=save_path), end_idx=args.window_size)
         elif args.sim_type == 'orthogonal_no_change':
             return sim_changepoint_mv_normal_orthogonal_no_change(sim_scale=args.sim_scale, M=args.M, dim=args.dim, N=args.N, save_path=save_path)[1].T
         elif args.sim_type == 'cholesky_no_change':
@@ -498,7 +498,7 @@ def perform_simulation_batch(args):
     # save everything to files - I guess
     print("\n*******************************************************************************")
     print("Performing Batch Simulation of {} with Dim = {}, Window = {}".format(args.sim_type, args.dim, args.window_size))
-    seeds_list = np.arange(51, 70)
+    seeds_list = np.arange(60, 70)
     sim_results_path = os.path.join(args.results_path, "simulation_results_cai")
     if not os.path.isdir(sim_results_path):
         os.mkdir(sim_results_path)

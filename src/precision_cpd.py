@@ -79,6 +79,7 @@ class PrecisionCPD:
             precision[np.abs(precision) <= tthresh] = 0.0
         #precision[np.abs(precision) <= 0.1] = 0.0
         self.precision = precision
+        self.chosen_lambda = float(chosen_lamb)
 
         #self.glasso = GraphicalLasso(max_iter=500, alpha=self.lam, tol=1e-5, verbose=False).fit(data)
         #print(np.count_nonzero(self.glasso.precision_)/len(self.glasso.precision_.flatten()))
@@ -87,6 +88,7 @@ class PrecisionCPD:
         #self.inv_cov = inv(np.cov(data.T, bias=True))
         #self.inv_cov += np.eye(self.inv_cov.shape[0])*np.abs(np.linalg.eig(self.inv_cov)[0].min()) + 0.05
         #assert(is_pos_def(self.inv_cov))
+        return chosen_lamb
 
     def top_down_search(self, Z, precision, dim, clust_dist_mat):
         """

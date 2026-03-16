@@ -795,19 +795,20 @@ def main_sims_avesnov(): # changes the window calculations because it slides bot
 
 
 
-def main_sims():
+def main_sims(clime=False):
     curr_path = os.getcwd()
     save_path = os.path.join(curr_path, 'amoc_figs/')
     seeds = np.arange(51, 70)
-    #seeds = np.arange(50, 54)
     #sim_types = ['anderson_residual_block', 'anderson_residual_unstructured', 'orthogonal']
     #sim_types = ['anderson_residual_unstructured']
-    #sim_types = ['orthogonal_small_block']
+    sim_types = ['orthogonal_small']
     #sim_types = ['orthogonal_cross_block']
     #sim_types = ['orthogonal_multiple_block']
-    sim_types = ['orthogonal_hard']
+    # sim_types = ['orthogonal_hard']
     #sim_types = ['orthogonal_cross_hard']
-    #sim_types = ['cai_model_one']
+    # sim_types = ['cai_model_one', 'cai_model_three']
+    # sim_types = ['orthogonal_small', 'orthogonal_cross_block', 'orthogonal_multiple_block', 'orthogonal_hard', 'cai_model_one']
+    # sim_types = ['orthogonal_cross_block', 'orthogonal_multiple_block', 'orthogonal_hard', 'cai_model_one']
     dims = [20, 40, 60, 80]
     #dims = [20,40,60]
     #dims = [80]
@@ -860,8 +861,13 @@ def main_sims():
             for curr_seed in seeds:
                 cpd_path='./results/simulation_results/{}_{}/{}/lrt_vals.csv'.format(sim_type, curr_dim, curr_seed)
                 xia_path='./results/simulation_results_cai/{}_{}/{}/global_test_vals.csv'.format(sim_type, curr_dim, curr_seed)
-                kesh_path='./results/simulation_results_kesh/{}_{}/{}/global_test_vals.csv'.format(sim_type, curr_dim, curr_seed)
-                kesh_path_alt='./results/simulation_results_kesh_alt/{}_{}/{}/global_test_vals.csv'.format(sim_type, curr_dim, curr_seed)
+                kesh_root = './results/simulation_results_kesh'
+                kesh_alt_root = './results/simulation_results_kesh_alt'
+                if clime:
+                    kesh_root = kesh_root + "_clime"
+                    kesh_alt_root = kesh_alt_root + "_clime"
+                kesh_path='{}/{}_{}/{}/global_test_vals.csv'.format(kesh_root, sim_type, curr_dim, curr_seed)
+                kesh_path_alt='{}/{}_{}/{}/global_test_vals.csv'.format(kesh_alt_root, sim_type, curr_dim, curr_seed)
                 cpd_vals = np.loadtxt(cpd_path, delimiter=',')
                 cutoff = cpd_vals.shape[1]//2
                 pvals_cpd = cpd_vals[:, cutoff:][window_size:] # just the p-values
@@ -869,7 +875,10 @@ def main_sims():
                 xia_cpd = np.loadtxt(xia_path, delimiter=',')
                 kesh_cpd = np.loadtxt(kesh_path, delimiter=',')
                 kesh_cpd_alt = np.loadtxt(kesh_path_alt, delimiter=',')
-                print(pvals_cpd.shape, stats_cpd.shape, xia_cpd.shape, kesh_cpd.shape, kesh_cpd_alt.shape)
+                print("SIM {} DIM {} SEED {} WINDOW {} RAW {} PVALS {} STATS {} XIA {} KESH {} KESH_ALT {}".format(
+                    sim_type, curr_dim, curr_seed, window_size,
+                    cpd_vals.shape, pvals_cpd.shape, stats_cpd.shape,
+                    xia_cpd.shape, kesh_cpd.shape, kesh_cpd_alt.shape))
                 #pvals_cpd_padded = np.pad(pvals_cpd, [(100, 100), (0,0)], mode='constant')
                 #stats_cpd_padded = np.pad(stats_cpd, [(100, 100), (0,0)], mode='constant')[0:-100, :]
                 #stats_cpd = stats_cpd_padded
@@ -951,7 +960,10 @@ def main_sims():
                 cai_results[sim_type] = cai_seed_dict
                 kesh_results[sim_type] = kesh_seed_dict
                 kesh_alt_results[sim_type] = kesh_alt_seed_dict
-                print(pvals_cpd.shape, stats_cpd.shape, stats_cpd.max(axis=1).shape, xia_cpd.shape, kesh_cpd.shape, kesh_cpd_alt.shape)
+                print("SIM {} DIM {} SEED {} WINDOW {} PVALS {} STATS {} STATS_MAX {} XIA {} KESH {} KESH_ALT {}".format(
+                    sim_type, curr_dim, curr_seed, window_size,
+                    pvals_cpd.shape, stats_cpd.shape, stats_cpd.max(axis=1).shape,
+                    xia_cpd.shape, kesh_cpd.shape, kesh_cpd_alt.shape))
 
                 sorted_lrt_result_cpd = lrt_result_cpd #sorted(lrt_result_cpd, reverse=True)
                 sorted_lrt_result_cai = lrt_result_cai #sorted(lrt_result_cai, reverse=True)
@@ -974,7 +986,8 @@ def main_sims():
                 plt.xlabel("FPR")
                 plt.title("{} Seed {}".format(sim_type, curr_seed))
                 plt.legend(loc='best')
-                plt.savefig(os.path.join(curr_dim_path, 'amoc_{}_seed_{}_dim_{}.png'.format(sim_type, curr_seed, curr_dim)))
+                amoc_suffix = "_clime" if clime else ""
+                plt.savefig(os.path.join(curr_dim_path, 'amoc_{}_seed_{}_dim_{}{}.png'.format(sim_type, curr_seed, curr_dim, amoc_suffix)))
                 plt.close()
 
 
@@ -1087,13 +1100,15 @@ def main_sims():
             plt.ylabel("AMOC-AUC")
             plt.xlabel("FPR")
             plt.tight_layout()
-            plt.savefig(os.path.join(curr_dim_path+'/avg_amoc/', 'auc_conf_{}_dim_{}.png'.format(sim_type, curr_dim)))
+            auc_conf_suffix = "_clime" if clime else ""
+            plt.savefig(os.path.join(curr_dim_path+'/avg_amoc/', 'auc_conf_{}_dim_{}{}.png'.format(sim_type, curr_dim, auc_conf_suffix)))
             plt.close()
 
             np.savetxt(os.path.join(curr_dim_path+'/avg_amoc/', 'auc_ours_{}_dim_{}.csv'.format(sim_type, curr_dim)), auc_ours, delimiter=',')
             np.savetxt(os.path.join(curr_dim_path+'/avg_amoc/', 'auc_cai_{}_dim_{}.csv'.format(sim_type, curr_dim)), auc_cai, delimiter=',')
-            np.savetxt(os.path.join(curr_dim_path+'/avg_amoc/', 'auc_kesh_{}_dim_{}.csv'.format(sim_type, curr_dim)), auc_kesh, delimiter=',')
-            np.savetxt(os.path.join(curr_dim_path+'/avg_amoc/', 'auc_kesh_alt_{}_dim_{}.csv'.format(sim_type, curr_dim)), auc_kesh_alt, delimiter=',')
+            kesh_suffix = "_clime" if clime else ""
+            np.savetxt(os.path.join(curr_dim_path+'/avg_amoc/', 'auc_kesh{}_{}_dim_{}.csv'.format(kesh_suffix, sim_type, curr_dim)), auc_kesh, delimiter=',')
+            np.savetxt(os.path.join(curr_dim_path+'/avg_amoc/', 'auc_kesh_alt{}_{}_dim_{}.csv'.format(kesh_suffix, sim_type, curr_dim)), auc_kesh_alt, delimiter=',')
             auc_ours = np.array(auc_ours).mean()
             auc_kesh = np.array(auc_kesh).mean()
             auc_kesh_alt = np.array(auc_kesh_alt).mean()
@@ -1115,15 +1130,32 @@ def main_sims():
             plt.xlabel('FPR', fontsize=38)
             plt.ylabel('Detection Time', fontsize=38)
             #plt.title('Average AMOC Curve for {} Dim {}'.format(sim_type, curr_dim))
-            plt.title('Average AMOC Curve ({} Dim={})'.format("Individual Subsets", curr_dim), fontsize=36)
+            if sim_type == 'cai_model_one':
+                plot_title = 'Banded Matrix Change'
+            elif sim_type == 'cai_model_three':
+                plot_title = 'Scattered Matrix Change'
+            elif sim_type == 'orthogonal_small':
+                plot_title = 'Single'
+            elif sim_type == 'orthogonal_cross_block':
+                plot_title = 'Multiple'
+            elif sim_type == 'orthogonal_multiple_block':
+                plot_title = 'Indiv Coeffs'
+            elif sim_type == 'orthogonal_hard':
+                plot_title = 'Indiv Coeffs Subsets'
+            elif sim_type == 'orthogonal_cross_hard':
+                plot_title = 'Multiple Subsets'
+            else:
+                plot_title = sim_type
+            plt.title('Average AMOC Curve ({} Dim={})'.format(plot_title, curr_dim), fontsize=36)
             plt.ylim(bottom=0.0)
             plt.xticks(fontsize=28)
             plt.yticks(fontsize=28)
             plt.legend(loc='best', fontsize=32)
-            plt.savefig(os.path.join(curr_dim_path+'/avg_amoc/', 'avg_amoc_{}_dim_{}.png'.format(sim_type, curr_dim)))
+            avg_suffix = "_clime" if clime else ""
+            plt.savefig(os.path.join(curr_dim_path+'/avg_amoc/', 'avg_amoc_{}_dim_{}{}.png'.format(sim_type, curr_dim, avg_suffix)))
             plt.close()
 
-def main_mesonet(storm_name='center'):
+def main_mesonet(storm_name='center', clime=False):
     """
     In progress for MesoNet data collection
 
@@ -1145,6 +1177,9 @@ def main_mesonet(storm_name='center'):
     cpd_path = 'results/{}_storm_unprocessed'.format(storm_name)
     kesh_path = 'results_kesh/mesonet'
     kesh_alt_path = 'results_kesh_alt/mesonet'
+    if clime:
+        kesh_path = 'results_kesh_clime/mesonet'
+        kesh_alt_path = 'results_kesh_alt_clime/mesonet'
     cai_path = 'results_cai/mesonet'
     storm_data_path = '../data/out_{}'.format(storm_name)
     dir_files = os.listdir(cpd_path)
@@ -1305,19 +1340,20 @@ def main_mesonet(storm_name='center'):
 
         plt.plot(pvals_cpd_uncut)
         plt.axvline(cp_location_adjustment, linestyle='--', color='green')
-        plt.savefig('debugging_figs/mesonet_center/{}_{}.png'.format(num, "ours"))
+        kesh_suffix = "_clime" if clime else ""
+        plt.savefig('debugging_figs/mesonet_center/{}_{}{}.png'.format(num, "ours", kesh_suffix))
         plt.close()
         plt.plot(cai_vals_uncut)
         plt.axvline(cp_location_adjustment, linestyle='--', color='green')
-        plt.savefig('debugging_figs/mesonet_center/{}_{}.png'.format(num, "cai"))
+        plt.savefig('debugging_figs/mesonet_center/{}_{}{}.png'.format(num, "cai", kesh_suffix))
         plt.close()
         plt.plot(kesh_vals_uncut)
         plt.axvline(cp_location_adjustment, linestyle='--', color='green')
-        plt.savefig('debugging_figs/mesonet_center/{}_{}.png'.format(num, "kma"))
+        plt.savefig('debugging_figs/mesonet_center/{}_{}{}.png'.format(num, "kma", kesh_suffix))
         plt.close()
         plt.plot(kesh_vals_alt_uncut)
         plt.axvline(cp_location_adjustment, linestyle='--', color='green')
-        plt.savefig('debugging_figs/mesonet_center/{}_{}.png'.format(num, "km"))
+        plt.savefig('debugging_figs/mesonet_center/{}_{}{}.png'.format(num, "km", kesh_suffix))
         plt.close()
 
         # lrt_result_cpd, detect_result_cpd = amoc_lrt_vals(pvals_cpd, first_possible_detect_time=first_d_time, last_possible_detect_time=last_d_time, thresholds=None, p_values=True)
@@ -1375,7 +1411,8 @@ def main_mesonet(storm_name='center'):
         plt.xlabel("FPR")
         plt.title("{} Storm_{}".format(storm_name, num))
         plt.legend(loc='best')
-        plt.savefig(os.path.join(curr_storm_save_path, 'amoc_{}_{}.png'.format(storm_name, num)))
+        kesh_suffix = "_clime" if clime else ""
+        plt.savefig(os.path.join(curr_storm_save_path, 'amoc{}_{}_{}.png'.format(kesh_suffix, storm_name, num)))
         plt.close()
     #means_per_threshold_ours, thresholds_ours, fpr_dict_ours = average_AMOC(fpr_detect_pairs_ours)
     #means_per_threshold_cai, thresholds_cai, fpr_dict_cai = average_AMOC(fpr_detect_pairs_cai)
@@ -1394,12 +1431,13 @@ def main_mesonet(storm_name='center'):
     sns.boxplot(auc_kesh)
     plt.title('{} Storm AUC KMA FPR <= 0.05'.format(storm_name))
     plt.ylabel('Detection Time')
-    plt.savefig(os.path.join(curr_storm_save_path, 'auc_kesh_{}.png'.format(storm_name)))
+    kesh_suffix = "_clime" if clime else ""
+    plt.savefig(os.path.join(curr_storm_save_path, 'auc_kesh{}_{}.png'.format(kesh_suffix, storm_name)))
     plt.close()
     sns.boxplot(auc_kesh_alt)
     plt.title('{} Storm AUC KM FPR <= 0.05'.format(storm_name))
     plt.ylabel('Detection Time')
-    plt.savefig(os.path.join(curr_storm_save_path, 'auc_kesh_alt_{}.png'.format(storm_name)))
+    plt.savefig(os.path.join(curr_storm_save_path, 'auc_kesh_alt{}_{}.png'.format(kesh_suffix, storm_name)))
     plt.close()
     sns.boxplot(auc_cai)
     plt.title('{} Storm AUC XCC FPR <= 0.05'.format(storm_name))
@@ -1419,14 +1457,14 @@ def main_mesonet(storm_name='center'):
     plt.ylabel("AMOC-AUC")
     #plt.xlabel("FPR")
     plt.tight_layout()
-    plt.savefig(os.path.join(curr_storm_save_path, 'auc_conf_{}.png'.format(storm_name)))
+    plt.savefig(os.path.join(curr_storm_save_path, 'auc_conf{}_{}.png'.format(kesh_suffix, storm_name)))
     #plt.savefig(os.path.join(curr_dim_path+'/avg_amoc/', 'auc_conf_{}_dim_{}.png'.format(sim_type, curr_dim)))
     plt.close()
 
     np.savetxt(os.path.join(curr_storm_save_path, 'auc_ours_{}.csv'.format(storm_name)), auc_ours, delimiter=',')
     np.savetxt(os.path.join(curr_storm_save_path, 'auc_cai_{}.csv'.format(storm_name)), auc_cai, delimiter=',')
-    np.savetxt(os.path.join(curr_storm_save_path, 'auc_kesh_{}.csv'.format(storm_name)), auc_kesh, delimiter=',')
-    np.savetxt(os.path.join(curr_storm_save_path, 'auc_kesh_alt_{}.csv'.format(storm_name)), auc_kesh_alt, delimiter=',')
+    np.savetxt(os.path.join(curr_storm_save_path, 'auc_kesh{}_{}.csv'.format(kesh_suffix, storm_name)), auc_kesh, delimiter=',')
+    np.savetxt(os.path.join(curr_storm_save_path, 'auc_kesh_alt{}_{}.csv'.format(kesh_suffix, storm_name)), auc_kesh_alt, delimiter=',')
     auc_ours = np.array(auc_ours).mean()
     auc_kesh = np.array(auc_kesh).mean()
     auc_kesh_alt = np.array(auc_kesh_alt).mean()
@@ -1513,11 +1551,11 @@ def main_mesonet(storm_name='center'):
     
     if not os.path.exists(curr_storm_save_path):
         os.mkdir(curr_storm_save_path)
-    plt.savefig(os.path.join(curr_storm_save_path, 'avg_amoc_{}.png'.format(storm_name)))
+    plt.savefig(os.path.join(curr_storm_save_path, 'avg_amoc{}_{}.png'.format(kesh_suffix, storm_name)))
     plt.close()
 
 
-def main_mesonet_pressure(storm_name='pressure'):
+def main_mesonet_pressure(storm_name='pressure', clime=False):
     """
     In progress for MesoNet data collection
 
@@ -1539,6 +1577,9 @@ def main_mesonet_pressure(storm_name='pressure'):
     cpd_path = 'results/{}_storm'.format(storm_name)
     kesh_path = 'results_kesh/mesonet_pressure'
     kesh_alt_path = 'results_kesh_alt/mesonet_pressure'
+    if clime:
+        kesh_path = 'results_kesh_clime/mesonet_pressure'
+        kesh_alt_path = 'results_kesh_alt_clime/mesonet_pressure'
     cai_path = 'results_cai/mesonet_pressure'
     storm_data_path = '../data/out_{}'.format(storm_name)
     dir_files = os.listdir(cpd_path)
@@ -1700,19 +1741,20 @@ def main_mesonet_pressure(storm_name='pressure'):
 
         plt.plot(pvals_cpd_uncut)
         plt.axvline(cp_location_adjustment, linestyle='--', color='green')
-        plt.savefig('debugging_figs/mesonet_center/{}_{}.png'.format(num, "ours"))
+        kesh_suffix = "_clime" if clime else ""
+        plt.savefig('debugging_figs/mesonet_center/{}_{}{}.png'.format(num, "ours", kesh_suffix))
         plt.close()
         plt.plot(cai_vals_uncut)
         plt.axvline(cp_location_adjustment, linestyle='--', color='green')
-        plt.savefig('debugging_figs/mesonet_center/{}_{}.png'.format(num, "cai"))
+        plt.savefig('debugging_figs/mesonet_center/{}_{}{}.png'.format(num, "cai", kesh_suffix))
         plt.close()
         plt.plot(kesh_vals_uncut)
         plt.axvline(cp_location_adjustment, linestyle='--', color='green')
-        plt.savefig('debugging_figs/mesonet_center/{}_{}.png'.format(num, "kma"))
+        plt.savefig('debugging_figs/mesonet_center/{}_{}{}.png'.format(num, "kma", kesh_suffix))
         plt.close()
         plt.plot(kesh_vals_alt_uncut)
         plt.axvline(cp_location_adjustment, linestyle='--', color='green')
-        plt.savefig('debugging_figs/mesonet_center/{}_{}.png'.format(num, "km"))
+        plt.savefig('debugging_figs/mesonet_center/{}_{}{}.png'.format(num, "km", kesh_suffix))
         plt.close()
 
         # lrt_result_cpd, detect_result_cpd = amoc_lrt_vals(pvals_cpd, first_possible_detect_time=first_d_time, last_possible_detect_time=last_d_time, thresholds=None, p_values=True)
@@ -1770,7 +1812,8 @@ def main_mesonet_pressure(storm_name='pressure'):
         plt.xlabel("FPR")
         plt.title("{} Storm_{}".format(storm_name, num))
         plt.legend(loc='best')
-        plt.savefig(os.path.join(curr_storm_save_path, 'amoc_{}_{}.png'.format(storm_name, num)))
+        kesh_suffix = "_clime" if clime else ""
+        plt.savefig(os.path.join(curr_storm_save_path, 'amoc{}_{}_{}.png'.format(kesh_suffix, storm_name, num)))
         plt.close()
     #means_per_threshold_ours, thresholds_ours, fpr_dict_ours = average_AMOC(fpr_detect_pairs_ours)
     #means_per_threshold_cai, thresholds_cai, fpr_dict_cai = average_AMOC(fpr_detect_pairs_cai)
@@ -1788,12 +1831,13 @@ def main_mesonet_pressure(storm_name='pressure'):
     sns.boxplot(auc_kesh)
     plt.title('{} Storm AUC KMA FPR <= 0.05'.format(storm_name))
     plt.ylabel('Detection Time')
-    plt.savefig(os.path.join(curr_storm_save_path, 'auc_kesh_{}.png'.format(storm_name)))
+    kesh_suffix = "_clime" if clime else ""
+    plt.savefig(os.path.join(curr_storm_save_path, 'auc_kesh{}_{}.png'.format(kesh_suffix, storm_name)))
     plt.close()
     sns.boxplot(auc_kesh_alt)
     plt.title('{} Storm AUC KM FPR <= 0.05'.format(storm_name))
     plt.ylabel('Detection Time')
-    plt.savefig(os.path.join(curr_storm_save_path, 'auc_kesh_alt_{}.png'.format(storm_name)))
+    plt.savefig(os.path.join(curr_storm_save_path, 'auc_kesh_alt{}_{}.png'.format(kesh_suffix, storm_name)))
     plt.close()
     sns.boxplot(auc_cai)
     plt.title('{} Storm AUC XCC FPR <= 0.05'.format(storm_name))
@@ -1813,13 +1857,13 @@ def main_mesonet_pressure(storm_name='pressure'):
     plt.ylabel("AMOC-AUC")
     #plt.xlabel("FPR")
     plt.tight_layout()
-    plt.savefig(os.path.join(curr_storm_save_path, 'auc_conf_{}.png'.format(storm_name)))
+    plt.savefig(os.path.join(curr_storm_save_path, 'auc_conf{}_{}.png'.format(kesh_suffix, storm_name)))
     #plt.savefig(os.path.join(curr_dim_path+'/avg_amoc/', 'auc_conf_{}_dim_{}.png'.format(sim_type, curr_dim)))
     plt.close()
     np.savetxt(os.path.join(curr_storm_save_path, 'auc_ours_{}.csv'.format(storm_name)), auc_ours, delimiter=',')
     np.savetxt(os.path.join(curr_storm_save_path, 'auc_cai_{}.csv'.format(storm_name)), auc_cai, delimiter=',')
-    np.savetxt(os.path.join(curr_storm_save_path, 'auc_kesh_{}.csv'.format(storm_name)), auc_kesh, delimiter=',')
-    np.savetxt(os.path.join(curr_storm_save_path, 'auc_kesh_alt_{}.csv'.format(storm_name)), auc_kesh_alt, delimiter=',')
+    np.savetxt(os.path.join(curr_storm_save_path, 'auc_kesh{}_{}.csv'.format(kesh_suffix, storm_name)), auc_kesh, delimiter=',')
+    np.savetxt(os.path.join(curr_storm_save_path, 'auc_kesh_alt{}_{}.csv'.format(kesh_suffix, storm_name)), auc_kesh_alt, delimiter=',')
     auc_ours = np.array(auc_ours).mean()
     auc_kesh = np.array(auc_kesh).mean()
     auc_kesh_alt = np.array(auc_kesh_alt).mean()
@@ -1918,7 +1962,7 @@ def main_mesonet_pressure(storm_name='pressure'):
     
     if not os.path.exists(curr_storm_save_path):
         os.mkdir(curr_storm_save_path)
-    plt.savefig(os.path.join(curr_storm_save_path, 'avg_amoc_{}.png'.format(storm_name)))
+    plt.savefig(os.path.join(curr_storm_save_path, 'avg_amoc{}_{}.png'.format(kesh_suffix, storm_name)))
     plt.close()
 
 
@@ -1932,6 +1976,7 @@ def get_args():
     parser.add_argument('--mesonet', action='store_true')
     parser.add_argument('--avesenov', action='store_true')
     parser.add_argument('--pressure', action='store_true')
+    parser.add_argument('--clime', action='store_true')
     args = parser.parse_args()
 
     return args
@@ -1939,10 +1984,10 @@ def get_args():
 if __name__ == "__main__":
     args = get_args()
     if args.sims:
-        main_sims()
+        main_sims(clime=args.clime)
     if args.mesonet:
-        main_mesonet()
+        main_mesonet(clime=args.clime)
     if args.avesenov:
         main_sims_avesnov()
     if args.pressure:
-        main_mesonet_pressure()
+        main_mesonet_pressure(clime=args.clime)

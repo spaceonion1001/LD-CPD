@@ -33,6 +33,7 @@ matplotlib.use('Agg')
 
 from rpy2.rinterface_lib.callbacks import logger as rpy2_logger
 import logging
+import csv
 rpy2_logger.setLevel(logging.ERROR)
 
 r = robjects.r
@@ -40,7 +41,7 @@ rpy2.robjects.numpy2ri.activate()
 utils = importr('utils')
 utils.chooseCRANmirror(ind=1)
 # R package names
-packnames = ('scalreg')
+packnames = ('scalreg', 'fastclime')
 
 # R vector of strings
 from rpy2.robjects.vectors import StrVector
@@ -50,8 +51,8 @@ from rpy2.robjects.vectors import StrVector
 names_to_install = [x for x in packnames if not rpackages.isinstalled(x)]
 if len(names_to_install) > 0:
     utils.install_packages(StrVector(names_to_install))
-#clime = importr('clime')
 scalreg = importr('scalreg')
+fastclime = importr('fastclime')
 
 import argparse
 
@@ -86,6 +87,9 @@ def get_args():
     parser.add_argument('--results_filename', type=str, default=None)
     parser.add_argument('--sap', type=int, default=0)
     parser.add_argument('--alt', type=int, default=0)
+    parser.add_argument('--estimator', type=str, choices=['clime', 'scalreg'], default='scalreg')
+    parser.add_argument('--auto_lambda', type=int, default=0)
+    parser.add_argument('--load_lambdas', type=str, default=None)
     args = parser.parse_args()
 
     return args
@@ -111,11 +115,11 @@ def resolve_data(args, save_path=None, data_seed=42):
         elif args.sim_type == 'var_process':
             return scale_data(difference_data(sim_changepoint_var_process(dim=args.dim, N=args.N, num_coeffs_change=args.num_coeffs_change, scale=args.sim_scale, save_path=save_path)), percent=args.percent)
         elif args.sim_type == 'cai_model_one':
-            return scale_data(changepoint_cai_model_one(args, dim=args.dim, N=args.N, save_path=save_path), percent=args.percent)
+            return scale_data(changepoint_cai_model_one(args, dim=args.dim, N=args.N, save_path=save_path), end_idx=args.window_size)
         elif args.sim_type == 'cai_model_one_extra':
-            return scale_data(changepoint_cai_model_one(args, dim=args.dim, N=args.N, save_path=save_path), args.train_percent)
+            return scale_data(changepoint_cai_model_one(args, dim=args.dim, N=args.N, save_path=save_path), end_idx=args.window_size)
         elif args.sim_type == 'cai_model_three':
-            return scale_data(changepoint_cai_model_three(args, dim=args.dim, N=args.N, save_path=save_path), percent=args.percent)
+            return scale_data(changepoint_cai_model_three(args, dim=args.dim, N=args.N, save_path=save_path), end_idx=args.window_size)
         elif args.sim_type == 'orthogonal_no_change':
             return sim_changepoint_mv_normal_orthogonal_no_change(sim_scale=args.sim_scale, M=args.M, dim=args.dim, N=args.N, save_path=save_path)[1].T
         elif args.sim_type == 'cholesky_no_change':
@@ -164,9 +168,44 @@ def resolve_data(args, save_path=None, data_seed=42):
             print("Error: Dataset not understood")
             exit(0)
 
+def load_lambda_override(args, seed=None):
+    if not args.load_lambdas:
+        return None
+    candidates = []
+    if seed is not None:
+        candidates.append(os.path.join(args.load_lambdas, str(seed), "chosen_lambda.csv"))
+        sim_dir = args.sim_type + "_" + str(args.dim)
+        if args.sim_type == 'anderson_residual':
+            sim_dir = args.sim_type + "_" + args.resid_type + "_" + str(args.dim)
+        candidates.append(os.path.join(args.load_lambdas, sim_dir, str(seed), "chosen_lambda.csv"))
+    else:
+        candidates.append(os.path.join(args.load_lambdas, "chosen_lambda.csv"))
+
+    csv_path = None
+    for cand in candidates:
+        if os.path.isfile(cand):
+            csv_path = cand
+            break
+    if csv_path is None:
+        print("Warning: load_lambdas did not find chosen_lambda.csv; using args.lam.")
+        return None
+    try:
+        with open(csv_path, "r", newline="") as f:
+            reader = csv.reader(f)
+            rows = list(reader)
+        if len(rows) < 2:
+            print("Warning: chosen_lambda.csv missing data row; using args.lam.")
+            return None
+        chosen = rows[-1][-1]
+        return float(chosen)
+    except Exception:
+        print("Warning: failed to parse chosen_lambda.csv; using args.lam.")
+        return None
+
+
 class KeshOnline:
 
-    def __init__(self, args, data):
+    def __init__(self, args, data, seed=None):
         self.args = args
         self.data_full = data
         self.N = args.burn_in
@@ -176,12 +215,23 @@ class KeshOnline:
         self.pi_0 = args.pi_0
         self.p = self.data_full.shape[1]
         self.lam = args.lam
+        self.seed = seed
+        if args.estimator == 'clime' and args.load_lambdas and not bool(args.auto_lambda):
+            loaded_lam = load_lambda_override(args, seed=seed)
+            if loaded_lam is not None:
+                self.lam = loaded_lam
+                print("Loaded lambda override {}".format(self.lam))
+        elif args.estimator == 'clime' and bool(args.auto_lambda):
+            print("Auto lambda enabled: ignoring args.lam and any loaded lambda.")
 
         self.D_hat = []
 
         self.data = self.data_full[self.N:, :]
 
-        self.clime_init = self.clime_init_fn(args, self.data_full[0:self.N, :])
+        if args.estimator == 'clime':
+            self.clime_init = self.fastclime_init_fn(args, self.data_full[0:self.N, :])
+        else:
+            self.clime_init = self.scalreg_init_fn(args, self.data_full[0:self.N, :])
         #self.prec_est = self.clime_init_fn(self.data_full)
         #self.glasso_est = GraphicalLasso(max_iter=100, alpha=self.lam, tol=1e-5, verbose=False).fit(self.data_full)
         #print(self.prec_mat, end='\n\n')
@@ -226,22 +276,107 @@ class KeshOnline:
         #print(scipy.linalg.norm(calc_E_hat(self.data, self.glasso.precision_, t=0, p=self.p, w=self.w, prec_mat=self.prec_mat), ord=np.inf))
         #print(self.critical_value)
 
-    def clime_init_fn(self, args, data_minimal):
+    def scalreg_init_fn(self, args, data_minimal):
         nrow, ncol = data_minimal.shape
         X = r.matrix(data_minimal, nrow=nrow, ncol=ncol)
         reg_soln = scalreg.scalreg(X, lam0="univ")
         reg_soln_dict = dict(zip(reg_soln.names, list(reg_soln)))
         clime_est = reg_soln_dict['precision']
-        # nrow, ncol = data_minimal.shape
-        # X = r.matrix(data_minimal, nrow=nrow, ncol=ncol)
-        # clime_out = clime.fastclime(X, self.lam, 100)
-        # clime_soln = dict(zip(clime_out.names, list(clime_out)))
-        # lambdamtx = clime_soln['lambdamtx']
-        # icovlist = clime_soln['icovlist']
-        # select_out = clime.fastclime_selector(lambdamtx, icovlist, self.lam)
-        # select_soln = dict(zip(select_out.names, list(select_out)))
-        
-        # clime_est = np.array(select_soln['icov'])
+        return clime_est
+
+    def fastclime_init_fn(self, args, data_minimal):
+        nrow, ncol = data_minimal.shape
+        X = r.matrix(data_minimal, nrow=nrow, ncol=ncol)
+
+        if args.auto_lambda:
+            clime_out = fastclime.fastclime(X)
+        else:
+            clime_out = fastclime.fastclime(X, self.lam, 100)
+
+        clime_soln = dict(zip(clime_out.names, list(clime_out)))
+        lambdamtx = np.array(clime_soln['lambdamtx'])
+        icovlist = clime_soln['icovlist']
+
+        if args.auto_lambda:
+            # sample size and dimension
+            n = nrow
+            p = ncol
+
+            # sample covariance
+            S = np.cov(data_minimal, rowvar=False, bias=True)
+            row_lambdas = np.median(lambdamtx, axis=1)
+
+            def bic_score(theta):
+                theta = (theta + theta.T) / 2
+                sign, logdet = np.linalg.slogdet(theta)
+                if sign <= 0 or not np.isfinite(logdet):
+                    return np.inf
+
+                nz = np.sum(np.abs(theta) > 1e-8)
+                offdiag_nz = max(nz - p, 0)
+                k = p + (offdiag_nz / 2.0)
+
+                negloglik = n * (np.trace(S @ theta) - logdet)
+                return negloglik + k * np.log(n)
+
+            # build τ grid from paper
+            tau_grid = [
+                (10 ** (-1 + j / 10.0)) * np.sqrt(np.log(p) / n)
+                for j in range(20)
+            ]
+
+            best_tau = None
+            best_idx = None
+            best_score = np.inf
+
+            for tau in tau_grid:
+                try:
+                    idx = int(np.argmin(np.abs(row_lambdas - tau)))
+                    theta = np.array(icovlist[idx])
+                except Exception:
+                    continue
+
+                score = bic_score(theta)
+
+                if score < best_score:
+                    best_score = score
+                    best_tau = tau
+                    best_idx = idx
+
+            if best_tau is None or best_idx is None:
+                print("Warning: BIC grid search failed; falling back to args.lam.")
+            else:
+                self.lam = float(row_lambdas[best_idx])
+                print("Auto-selected lambda via BIC grid (tau {}, path {})".format(best_tau, self.lam))
+
+        # Ensure lambda is reachable for all columns (avoid fastclime warning)
+        # Use the max of per-column minima across the path.
+        min_required = float(np.max(np.min(lambdamtx, axis=0)))
+        if self.lam < min_required:
+            print("Clamping lambda from {} to {} to satisfy column limits".format(self.lam, min_required))
+            self.lam = min_required
+
+        max_attempts = 5
+        bump_factor = 1.5
+        clime_est = None
+        last_err = None
+        for attempt in range(max_attempts):
+            try:
+                select_out = fastclime.fastclime_selector(lambdamtx, icovlist, self.lam)
+                select_soln = dict(zip(select_out.names, list(select_out)))
+                clime_est = np.array(select_soln['icov'])
+                break
+            except Exception as exc:
+                last_err = exc
+                self.lam = self.lam * bump_factor
+                print("Warning: fastclime selector failed; bumping lambda to {}".format(self.lam))
+
+        if clime_est is None:
+            if args.auto_lambda and best_idx is not None:
+                clime_est = np.array(icovlist[best_idx])
+            else:
+                raise last_err
+
         return clime_est
     
 
@@ -397,12 +532,15 @@ def inv_Q_func(pi_0):
 def perform_single_run(args):
     data_full = resolve_data(args, save_path=None)
     print(data_full.shape)
-    save_path = os.path.join(args.results_path+"_kesh", args.data)
+    save_root = args.results_path+"_kesh"
     if args.alt:
-        save_path = os.path.join(args.results_path+"_kesh_alt", args.data)
+        save_root = args.results_path+"_kesh_alt"
+    if args.estimator == 'clime':
+        save_root = save_root + "_clime"
+    save_path = os.path.join(save_root, args.data)
     if not os.path.isdir(save_path):
-        os.mkdir(save_path)
-    model = KeshOnline(args, data_full)
+        os.makedirs(save_path, exist_ok=True)
+    model = KeshOnline(args, data_full, seed=args.random_seed)
     global_test_vals = model.test_stats
     np.savetxt(os.path.join(save_path, args.data_fname+"_global_test_vals.csv"), global_test_vals, delimiter=',')
     plt.plot(global_test_vals)
@@ -419,28 +557,30 @@ def perform_simulation_batch(args):
     print("\n*******************************************************************************")
     print("Performing Batch Simulation of {} with Dim = {}, Window = {}".format(args.sim_type, args.dim, args.window_size))
     seeds_list = np.arange(50, 70)
-    sim_results_path = os.path.join(args.results_path, "simulation_results_kesh")
+    sim_results_root = os.path.join(args.results_path, "simulation_results_kesh")
     if args.alt:
-        sim_results_path = os.path.join(args.results_path, "simulation_results_kesh_alt")
-    if not os.path.isdir(sim_results_path):
-        os.mkdir(sim_results_path)
-    sim_type_path = os.path.join(sim_results_path, args.sim_type+"_"+str(args.dim))
+        sim_results_root = os.path.join(args.results_path, "simulation_results_kesh_alt")
+    if args.estimator == 'clime':
+        sim_results_root = sim_results_root + "_clime"
+    if not os.path.isdir(sim_results_root):
+        os.makedirs(sim_results_root, exist_ok=True)
+    sim_type_path = os.path.join(sim_results_root, args.sim_type+"_"+str(args.dim))
     if args.sim_type == 'anderson_residual':
-        sim_type_path = os.path.join(sim_results_path, args.sim_type+"_"+args.resid_type+"_"+str(args.dim))
+        sim_type_path = os.path.join(sim_results_root, args.sim_type+"_"+args.resid_type+"_"+str(args.dim))
     print(sim_type_path)
     if not os.path.isdir(sim_type_path):
-        os.mkdir(sim_type_path)
+        os.makedirs(sim_type_path, exist_ok=True)
     timing = []
     import timeit
     for seed in seeds_list:
         np.random.seed(seed)
         save_path = os.path.join(sim_type_path, str(seed))
         if not os.path.isdir(save_path):
-            os.mkdir(save_path)
+            os.makedirs(save_path, exist_ok=True)
         data_full = resolve_data(args, save_path=save_path, data_seed=seed)
         print(data_full.shape)
         t0 = timeit.default_timer()
-        model = KeshOnline(args, data_full)
+        model = KeshOnline(args, data_full, seed=seed)
         t1 = timeit.default_timer()
         timing.append(round(t1-t0, 3))
         global_test_vals = model.test_stats
@@ -460,20 +600,22 @@ def perform_sap_batch(args):
     print("\n*******************************************************************************")
     print("Performing SAP Run with Dim = {}, Window = {}, Post Window {}".format(args.dim, args.window_size, args.post_window_size))
     seeds_list = np.arange(50, 60)
-    sim_results_path = os.path.join(args.results_path, "sap_results_kesh")
+    sim_results_root = os.path.join(args.results_path, "sap_results_kesh")
     if args.alt:
-        sim_results_path = os.path.join(args.results_path, "sap_results_kesh_alt")
-    if not os.path.isdir(sim_results_path):
-        os.mkdir(sim_results_path)
-    sim_type_path = os.path.join(sim_results_path, "sap_500"+"_"+str(args.dim))
+        sim_results_root = os.path.join(args.results_path, "sap_results_kesh_alt")
+    if args.estimator == 'clime':
+        sim_results_root = sim_results_root + "_clime"
+    if not os.path.isdir(sim_results_root):
+        os.makedirs(sim_results_root, exist_ok=True)
+    sim_type_path = os.path.join(sim_results_root, "sap_500"+"_"+str(args.dim))
     print(sim_type_path)
     if not os.path.isdir(sim_type_path):
-        os.mkdir(sim_type_path)
+        os.makedirs(sim_type_path, exist_ok=True)
     for seed in seeds_list:
         np.random.seed(seed)
         save_path = os.path.join(sim_type_path, str(seed))
         if not os.path.isdir(save_path):
-            os.mkdir(save_path)
+            os.makedirs(save_path, exist_ok=True)
         data_full = resolve_data(args, save_path=save_path, data_seed=seed)
         # if 'orthogonal' in args.sim_type:
         #     H_s, data_full = data_full
@@ -482,7 +624,7 @@ def perform_sap_batch(args):
         dim_list = np.arange(0, data_full.shape[1])
         chosen_idxs = np.random.choice(dim_list, size=args.dim, replace=False)
         data_full = data_full[:, chosen_idxs]
-        model = KeshOnline(args, data_full)
+        model = KeshOnline(args, data_full, seed=seed)
         global_test_vals = model.test_stats
         print("Test Vals Shape", global_test_vals.shape)
         print()
