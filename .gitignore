@@ -142,6 +142,7 @@ results_cai/
 
 # macOS
 .DS_Store
+../.DS_Store
 .AppleDouble
 .LSOverride
 
@@ -149,6 +150,7 @@ results_cai/
 Thumbs.db
 ehthumbs.db
 Desktop.ini
+.vscode/
 
 # NumPy binary outputs
 *.npy

@@ -4,6 +4,10 @@
 
 This repository contains the code for the paper "Online Precision Matrix Changepoint Detection with Localization to Groups of Dimensions", currently in review at DMKD.
 
+### Requirements
+
+The requirements are outlines in the `requirements.txt` file. A working R installation is also required for the XCC and KM/KMA algorithms. 
+
 ## Examples
 
 ### Simulations
@@ -115,6 +119,12 @@ To calculate results on the S&P 500 data, please run the following script. Resul
 
 ```bash
 bash sap.sh
+```
+
+Plots can be produced by running the plotting script.
+
+```bash
+python src/sap_plots.py --clime
 ```
 
 ## References
