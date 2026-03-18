@@ -52,7 +52,6 @@ def plot_confidence_interval(x, values, z=1.96, color='#2187bb', horizontal_line
     plt.plot([left, right], [top, top], color=color, linewidth=3)
     plt.plot([left, right], [bottom, bottom], color=color, linewidth=3)
     plt.plot(x, mean, 'o', color='#f44336', markersize=10)
-    #plt.plot(x, median, 'o', color='yellow')
     return mean, confidence_interval
 
 def get_args():
@@ -69,8 +68,6 @@ def sim_display_name(sim_type):
         return 'Indiv Coeffs'
     if sim_type == 'orthogonal_hard':
         return 'Indiv Coeffs Subsets'
-    if sim_type == 'orthogonal_cross_hard':
-        return 'Multiple Subsets'
     if sim_type == 'cai_model_one':
         return 'Banded Matrix Change'
     if sim_type == 'cai_model_three':
@@ -100,11 +97,11 @@ def summarize_one_sided(sim_label, dim_label, data_map):
 if __name__ == '__main__':
     args = get_args()
     kesh_suffix = "_clime" if args.clime else ""
-    base_dir = '/home/dink/Documents/Research/Correlation-Changepoint-Detection/amoc_figs'
+    os.makedirs('lrt_test_figs', exist_ok=True)
+    base_dir = './amoc_figs'
     sim_rows = []
     mesonet_rows = []
-    for sim in ['orthogonal_small', 'orthogonal_cross_block', 'orthogonal_multiple_block', 'orthogonal_hard', 'cai_model_one']:
-    # for sim in ['cai_model_one', 'cai_model_three']:
+    for sim in ['orthogonal_small', 'orthogonal_cross_block', 'orthogonal_multiple_block', 'orthogonal_hard', 'cai_model_one', 'cai_model_three']:
         for dim in [20, 40, 60, 80]:
             block_ours = np.loadtxt(os.path.join(base_dir, '{}/avg_amoc/auc_{}_{}_dim_{}.csv'.format(dim, 'ours', sim, dim)), delimiter=',')
             block_cai = np.loadtxt(os.path.join(base_dir, '{}/avg_amoc/auc_{}_{}_dim_{}.csv'.format(dim, 'cai', sim, dim)), delimiter=',')
@@ -130,7 +127,6 @@ if __name__ == '__main__':
                 "wilcoxon": comparisons,
                 "variance": None,  # filled below
             })
-            #print(block_ours)
             if block_ours.mean() <= block_cai.mean() and block_ours.mean() <= block_kesh.mean() and block_ours.mean() <= block_kesh_alt.mean():
                 print("Ours {} XCC {} KMA {} KM {}".format(block_ours.mean(), block_cai.mean(), block_kesh.mean(), block_kesh_alt.mean()))
                 print("vs Cai", wilcoxon(block_ours, block_cai, alternative='less', zero_method='wilcox', correction=False))
@@ -170,8 +166,6 @@ if __name__ == '__main__':
                 plt.title("95% Confidence Intervals TR-AMOC-AUC {} Dim {}".format("Indiv Coeffs", dim), fontsize=22)
             elif sim == 'orthogonal_hard':
                 plt.title("95% Confidence Intervals TR-AMOC-AUC {} Dim {}".format("Indiv Coeffs Subsets", dim), fontsize=22)
-            elif sim == 'orthogonal_cross_hard':
-                plt.title("95% Confidence Intervals TR-AMOC-AUC {} Dim {}".format("Multiple Subsets", dim), fontsize=22)
             elif sim == 'cai_model_one':
                 plt.title("95% Confidence Intervals TR-AMOC-AUC {} Dim {}".format("Banded Matrix Change", dim), fontsize=22)
             elif sim == 'cai_model_three':
@@ -232,8 +226,6 @@ if __name__ == '__main__':
                 plt.title('TR-AMOC-AUC Distribution {} Dim {}'.format("Multiple", dim), fontsize=24)
             elif sim == 'orthogonal_multiple_block':
                 plt.title('TR-AMOC-AUC Distribution {} Dim {}'.format("Individual Coeffs", dim), fontsize=24)
-            elif sim == 'orthogonal_cross_hard':
-                plt.title('TR-AMOC-AUC Distribution {} Dim {}'.format("Multiple Subsets", dim), fontsize=24)
             elif sim == 'orthogonal_hard':
                 plt.title('TR-AMOC-AUC Distribution {} Dim {}'.format("Indiv Coeffs Subsets", dim), fontsize=24)
             plt.ylabel("TR-AMOC-AUC", fontsize=26)
@@ -329,7 +321,7 @@ if __name__ == '__main__':
         print()
 
     # Save human-readable summaries
-    sim_out_dir = '/home/dink/Documents/Research/Correlation-Changepoint-Detection/results/simulation_results'
+    sim_out_dir = './results/simulation_results'
     os.makedirs(sim_out_dir, exist_ok=True)
     sim_txt_path = os.path.join(sim_out_dir, 'wilcoxon_one_sided{}.txt'.format(kesh_suffix))
     with open(sim_txt_path, 'w') as f:
@@ -351,7 +343,7 @@ if __name__ == '__main__':
                 f.write("    {} vs {}: F={:.6f} p={:.6g}\n".format(left, right, res[0], res[1]))
             f.write("\n")
 
-    mesonet_out_dir = '/home/dink/Documents/Research/Correlation-Changepoint-Detection/amoc_figs/mesonet'
+    mesonet_out_dir = './amoc_figs/mesonet'
     os.makedirs(mesonet_out_dir, exist_ok=True)
     mesonet_txt_path = os.path.join(mesonet_out_dir, 'wilcoxon_one_sided{}.txt'.format(kesh_suffix))
     with open(mesonet_txt_path, 'w') as f:
@@ -372,98 +364,3 @@ if __name__ == '__main__':
             for left, right, res in row["variance"]:
                 f.write("    {} vs {}: F={:.6f} p={:.6g}\n".format(left, right, res[0], res[1]))
             f.write("\n")
-    # block_ours = np.loadtxt('debugging_figs/detect_times_0.05_Ours_Block_20.csv', delimiter=',')
-    # block_cai = np.loadtxt('debugging_figs/detect_times_0.05_Cai_Block_20.csv', delimiter=',')
-    # block_KM = np.loadtxt('debugging_figs/detect_times_0.05_KM_Block_20.csv', delimiter=',')
-    # block_KMA = np.loadtxt('debugging_figs/detect_times_0.05_KMA_Block_20.csv', delimiter=',')
-
-    
-    # banded_ours = np.loadtxt('debugging_figs/detect_times_0.05_Ours_Banded_20.csv', delimiter=',')
-    # banded_cai = np.loadtxt('debugging_figs/detect_times_0.05_Cai_Banded_20.csv', delimiter=',')
-    # banded_KM = np.loadtxt('debugging_figs/detect_times_0.05_KM_Banded_20.csv', delimiter=',')
-    # banded_KMA = np.loadtxt('debugging_figs/detect_times_0.05_KMA_Banded_20.csv', delimiter=',')
-
-    # print("20 Block vs Cai", wilcoxon(block_ours, block_cai, alternative='less', zero_method='wilcox', correction=False))
-    # print("20 Block vs KM", wilcoxon(block_ours, block_KM, alternative='less', zero_method='wilcox', correction=False))
-    # print("20 Block vs KMA", wilcoxon(block_ours, block_KMA, alternative='less', zero_method='wilcox', correction=False))
-    # print()
-    # print("20 Banded vs Cai", wilcoxon(banded_ours, banded_cai, alternative='less', zero_method='wilcox', correction=False))
-    # print("20 Banded vs KM", wilcoxon(banded_ours, banded_KM, alternative='less', zero_method='wilcox', correction=False))
-    # print("20 Banded vs KMA", wilcoxon(banded_ours, banded_KMA, alternative='less', zero_method='wilcox', correction=False))
-    # print()
-
-    # block_ours = np.loadtxt('debugging_figs/detect_times_0.05_Ours_Block_40.csv', delimiter=',')
-    # block_cai = np.loadtxt('debugging_figs/detect_times_0.05_Cai_Block_40.csv', delimiter=',')
-    # block_KM = np.loadtxt('debugging_figs/detect_times_0.05_KM_Block_40.csv', delimiter=',')
-    # block_KMA = np.loadtxt('debugging_figs/detect_times_0.05_KMA_Block_40.csv', delimiter=',')
-
-    # banded_ours = np.loadtxt('debugging_figs/detect_times_0.05_Ours_Banded_40.csv', delimiter=',')
-    # banded_cai = np.loadtxt('debugging_figs/detect_times_0.05_Cai_Banded_40.csv', delimiter=',')
-    # banded_KM = np.loadtxt('debugging_figs/detect_times_0.05_KM_Banded_40.csv', delimiter=',')
-    # banded_KMA = np.loadtxt('debugging_figs/detect_times_0.05_KMA_Banded_40.csv', delimiter=',')
-
-    # print("40 Block vs Cai", wilcoxon(block_ours, block_cai, alternative='less', zero_method='wilcox', correction=False))
-    # print("40 Block vs KM", wilcoxon(block_ours, block_KM, alternative='less', zero_method='wilcox', correction=False))
-    # print("40 Block vs KMA", wilcoxon(block_ours, block_KMA, alternative='less', zero_method='wilcox', correction=False))
-    # print()
-    # print("40 Banded vs Cai", wilcoxon(banded_ours, banded_cai, alternative='less', zero_method='wilcox', correction=False))
-    # print("40 Banded vs KM", wilcoxon(banded_ours, banded_KM, alternative='less', zero_method='wilcox', correction=False))
-    # print("40 Banded vs KMA", wilcoxon(banded_ours, banded_KMA, alternative='less', zero_method='wilcox', correction=False))
-    # print()
-
-    # block_ours = np.loadtxt('debugging_figs/detect_times_0.05_Ours_Block_60.csv', delimiter=',')
-    # block_cai = np.loadtxt('debugging_figs/detect_times_0.05_Cai_Block_60.csv', delimiter=',')
-    # block_KM = np.loadtxt('debugging_figs/detect_times_0.05_KM_Block_60.csv', delimiter=',')
-    # block_KMA = np.loadtxt('debugging_figs/detect_times_0.05_KMA_Block_60.csv', delimiter=',')
-
-    # banded_ours = np.loadtxt('debugging_figs/detect_times_0.05_Ours_Banded_60.csv', delimiter=',')
-    # banded_cai = np.loadtxt('debugging_figs/detect_times_0.05_Cai_Banded_60.csv', delimiter=',')
-    # banded_KM = np.loadtxt('debugging_figs/detect_times_0.05_KM_Banded_60.csv', delimiter=',')
-    # banded_KMA = np.loadtxt('debugging_figs/detect_times_0.05_KMA_Banded_60.csv', delimiter=',')
-
-    # print("60 Block vs Cai", wilcoxon(block_ours, block_cai, alternative='less', zero_method='wilcox', correction=False))
-    # print("60 Block vs KM", wilcoxon(block_ours, block_KM, alternative='less', zero_method='wilcox', correction=False))
-    # print("60 Block vs KMA", wilcoxon(block_ours, block_KMA, alternative='less', zero_method='wilcox', correction=False))
-    # print()
-    # print("60 Banded vs Cai", wilcoxon(banded_ours, banded_cai, alternative='less', zero_method='wilcox', correction=False))
-    # print("60 Banded vs KM", wilcoxon(banded_ours, banded_KM, alternative='less', zero_method='wilcox', correction=False))
-    # print("60 Banded vs KMA", wilcoxon(banded_ours, banded_KMA, alternative='less', zero_method='wilcox', correction=False))
-    # print()
-
-    # block_ours = np.loadtxt('debugging_figs/detect_times_0.05_Ours_Block_80.csv', delimiter=',')
-    # block_cai = np.loadtxt('debugging_figs/detect_times_0.05_Cai_Block_80.csv', delimiter=',')
-    # block_KM = np.loadtxt('debugging_figs/detect_times_0.05_KM_Block_80.csv', delimiter=',')
-    # block_KMA = np.loadtxt('debugging_figs/detect_times_0.05_KMA_Block_80.csv', delimiter=',')
-
-    # banded_ours = np.loadtxt('debugging_figs/detect_times_0.05_Ours_Banded_80.csv', delimiter=',')
-    # banded_cai = np.loadtxt('debugging_figs/detect_times_0.05_Cai_Banded_80.csv', delimiter=',')
-    # banded_KM = np.loadtxt('debugging_figs/detect_times_0.05_KM_Banded_80.csv', delimiter=',')
-    # banded_KMA = np.loadtxt('debugging_figs/detect_times_0.05_KMA_Banded_80.csv', delimiter=',')
-
-    # print("80 Block vs Cai", wilcoxon(block_ours, block_cai, alternative='less', zero_method='wilcox', correction=False))
-    # print("80 Block vs KM", wilcoxon(block_ours, block_KM, alternative='less', zero_method='wilcox', correction=False))
-    # print("80 Block vs KMA", wilcoxon(block_ours, block_KMA, alternative='less', zero_method='wilcox', correction=False))
-    # print()
-    # print("80 Banded vs Cai", wilcoxon(banded_ours, banded_cai, alternative='less', zero_method='wilcox', correction=False))
-    # print("80 Banded vs KM", wilcoxon(banded_ours, banded_KM, alternative='less', zero_method='wilcox', correction=False))
-    # print("80 Banded vs KMA", wilcoxon(banded_ours, banded_KMA, alternative='less', zero_method='wilcox', correction=False))
-    # print()
-
-    # mesonet_ours = np.loadtxt('debugging_figs/detect_times_0.05_Ours_Mesonet.csv', delimiter=',')
-    # mesonet_cai = np.loadtxt('debugging_figs/detect_times_0.05_Cai_Mesonet.csv', delimiter=',')
-    # mesonet_KM = np.loadtxt('debugging_figs/detect_times_0.05_KM_Mesonet.csv', delimiter=',')
-    # mesonet_KMA = np.loadtxt('debugging_figs/detect_times_0.05_KMA_Mesonet.csv', delimiter=',')
-
-    # mesonet_ours_opo = np.loadtxt('debugging_figs/detect_times_0.01_Ours_Mesonet.csv', delimiter=',')
-    # mesonet_cai_opo = np.loadtxt('debugging_figs/detect_times_0.01_Cai_Mesonet.csv', delimiter=',')
-    # mesonet_KM_opo = np.loadtxt('debugging_figs/detect_times_0.01_KM_Mesonet.csv', delimiter=',')
-    # mesonet_KMA_opo = np.loadtxt('debugging_figs/detect_times_0.01_KMA_Mesonet.csv', delimiter=',')
-
-    
-    # print("Mesonet vs Cai", wilcoxon(mesonet_ours, mesonet_cai, alternative='less', zero_method='wilcox', correction=False))
-    # print("Mesonet vs KM", wilcoxon(mesonet_ours, mesonet_KM, alternative='less', zero_method='wilcox', correction=False))
-    # print("Mesonet vs KMA", wilcoxon(mesonet_ours, mesonet_KMA, alternative='less', zero_method='wilcox', correction=False))
-    # print()
-    # print("Mesonet vs Cai 0.01", wilcoxon(mesonet_ours_opo, mesonet_cai_opo, alternative='less', zero_method='wilcox', correction=False))
-    # print("Mesonet vs KM 0.01", wilcoxon(mesonet_ours_opo, mesonet_KM_opo, alternative='less', zero_method='wilcox', correction=False))
-    # print("Mesonet vs KMA 0.01", wilcoxon(mesonet_ours_opo, mesonet_KMA_opo, alternative='less', zero_method='wilcox', correction=False))

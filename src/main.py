@@ -19,7 +19,7 @@ matplotlib.use('Agg')
 def get_args():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--lam', type=float, default=3e-1)
+    parser.add_argument('--lam', type=float, default=5e-2, help='Lambda value for Graphical Lasso. Default value affects plot naming currently, but not actual lambda calculated value.')
     parser.add_argument('--sim', type=int, default=1)
     parser.add_argument('--M', type=int, default=2)
     parser.add_argument('--window_size', type=int, default=100)
@@ -45,7 +45,7 @@ def get_args():
     parser.add_argument('--t', type=float, default=1.0)
     parser.add_argument('--save_test_stat', type=int, default=0)
     parser.add_argument('--random_seed', type=int, default=42)
-    parser.add_argument('--train_percent', type=float, default=0.25)
+    parser.add_argument('--train_percent', type=float, default=0.1)
     parser.add_argument('--single_test', type=int, default=1)
     parser.add_argument('--num_coeffs_change', type=int, default=1)
     parser.add_argument('--prec_recall', type=int, default=0)
@@ -88,8 +88,6 @@ def resolve_data(args, save_path=None, data_seed=42):
             return sim_changepoint_mv_normal_orthogonal(sim_scale=args.sim_scale, M=args.M, dim=args.dim, N=args.N, save_path=save_path, data_seed=data_seed)[1].T
         elif args.sim_type == 'orthogonal_mult_coeff':
             return sim_changepoint_mv_normal_orthogonal_mult_coeff(sim_scale=args.sim_scale, num_coeffs_change=args.num_coeffs_change, M=args.M, dim=args.dim, N=args.N, save_path=save_path)[1].T
-            #print("TESTING MAKE SURE TO CHANGE THIS")
-            #return sim_changepoint_mv_normal_orthogonal_mult_coeff(sim_scale=args.sim_scale, num_coeffs_change=args.num_coeffs_change, M=args.M, dim=args.dim, N=args.N, save_path=save_path)
         elif args.sim_type == 'cholesky':
             return scale_data(sim_changepoint_mv_normal_cholesky(dim=args.dim, N=args.N, num_coeffs_change=args.num_coeffs_change, scale=args.sim_scale, save_path=save_path))
         elif args.sim_type == 'ldlt':
@@ -125,7 +123,6 @@ def resolve_data(args, save_path=None, data_seed=42):
         else:
             print("Incorrect Simulation")
             exit(0)
-            # return sim_changepoint_mv_normal_no_decomp(dim=args.dim, N=args.N, num_coeffs_change=1, scale=args.sim_scale, save_path=save_path).T
     else:
         if args.data == 'alaska':
             return load_alaska_data(args)
@@ -134,11 +131,8 @@ def resolve_data(args, save_path=None, data_seed=42):
         elif args.data == 'hjandrews':
             return load_hjandrews_data(args)
         elif args.data == 'holidayfarm':
-            # python src/main.py --sim 0 --data holidayfarm --eps_matrices 0 --lam 5e-2 --M 8 --full_basis 0 --single_test 1 --train_percent 0.2 --step_size 2 --num_eps_mats 2 --window_size 200 --save_test_stat 1
             return scale_data(load_holiday_farm_data(args))[22000:-10000, :]
         elif args.data == 'stocks':
-            # python src/main.py --window_size 100 --sim 0 --data stocks --step 1 --window_size 100 --lam 5e-1 --full_basis 0 --M 6 --train_percent 0.4 --split_variance 0
-            # python src/main.py --window_size 100 --sim 0 --data stocks --step 1 --window_size 100 --lam 5e-1 --full_basis 0 --M 10 --train_percent 0.4 --split_variance 0
             return scale_data(load_stock_market_data(args), args.train_percent)
         elif args.data == 'mesonet':
             return scale_data(load_mesonet_data(args), percent=None, end_idx=args.window_size)
@@ -247,7 +241,7 @@ def perform_simulation_batch(args):
     args.fig_dir_path = fig_dir_path
     print("\n*******************************************************************************")
     print("Performing Batch Simulation of {} with Dim = {}, M = {}, Scale = {}, Window = {}, Lam = {}".format(args.sim_type, args.dim, args.M, args.sim_scale, args.window_size, args.lam))
-    seeds_list = np.arange(50, 70)
+    seeds_list = np.arange(51, 70)
     sim_results_path = os.path.join(args.results_path, "simulation_results")
     if not os.path.isdir(sim_results_path):
         os.mkdir(sim_results_path)
@@ -257,10 +251,6 @@ def perform_simulation_batch(args):
     print(sim_type_path)
     if not os.path.isdir(sim_type_path):
         os.mkdir(sim_type_path)
-    timing = []
-    timing_glasso = []
-    timing_mats = []
-    import timeit
 
     for seed in seeds_list:
         np.random.seed(seed)
@@ -274,28 +264,19 @@ def perform_simulation_batch(args):
         print(data_full.shape)
         model = PrecisionCPD(args)
         data_train = data_full[0:args.window_size, :]
-        tglasso_0 = timeit.default_timer()
         chosen_lamb = model.fit_glasso(data_train, use_thav=bool(args.thav))
-        tglasso_1 = timeit.default_timer()
         save_lambda_value(save_path, args, chosen_lamb, seed=seed)
         if bool(args.save_lambda):
             print("save_lambda enabled: skipping test statistic calculations.")
             continue
-        tmats_0 = timeit.default_timer()
         model.construct_basis_matrices()
-        tmats_1 = timeit.default_timer()
-        timing_glasso.append(round(tglasso_1-tglasso_0, 3))
-        timing_mats.append(round(tmats_1-tmats_0, 3))
 
         ############
         # if 'orthogonal' in args.sim_type:
         #     print("DEFINITELY CHANGE THIS THIS IS JUST A SANITY CHECK")
         #     model.basis_matrices = H_s
         ############
-        t0 = timeit.default_timer()
         lrt_vals_all, p_vals_all = model.perform_lrt_local(data_full.T)
-        t1 = timeit.default_timer()
-        timing.append(round(t1-t0, 3))
         test_results = np.hstack([lrt_vals_all, p_vals_all])
         model.save_matrices_simulations(save_path)
         print()
@@ -312,226 +293,9 @@ def perform_simulation_batch(args):
 
         #np.savetxt(os.path.join(save_path, "p_vals.csv"), p_vals_all, delimiter=',')
         model.print_clusters_rv()
-    if not bool(args.save_lambda):
-        np.savetxt('debugging_figs/timing_ours_{}.csv'.format(args.dim), np.array(timing))
-        np.savetxt('debugging_figs/timing_ours_glasso_{}.csv'.format(args.dim), np.array(timing_glasso))
-        np.savetxt('debugging_figs/timing_ours_mats_{}.csv'.format(args.dim), np.array(timing_mats))
     print("*******************************************************************************")
     print("Done!")
 
-def precision_recall_sims(args):
-    print("***************************")
-    print("Performing Prec/Recall Simulations")
-    args.full_basis = 0
-    args.split_variance = 0
-    args.N = 101
-    args.window_size = 100
-    args.step_size = 2
-    args.sim = 1
-    args.lam = 1e-1
-    args.train_percent = 0.4
-    # simulation_prefixes = ['cai_model_one', 'cai_model_three', 
-    #                     'orthogonal', 'cholesky']
-    # no_change_prefixes = ['cai_model_one_no_change', 'cai_model_three_no_change', 
-    #                     'orthogonal_no_change', 'cholesky_no_change']
-    simulation_prefixes = ['cholesky']
-    no_change_prefixes = ['cholesky_no_change']
-    simulation_dims = ['_6', '_10', '_15', '_20', '_30', '_50', '_100']
-    #M_s_non_orthog = [2, 3, 4, 6, 8, 10, 20]
-    M_s_non_orthog = [3, 4, 5, 8, 10, 15, 25]
-    M_s_orthog = [2, 2, 3, 4, 5, 10, 20]
-    sim_results_path = os.path.join(args.results_path, "simulation_results_precision_cholesky")
-    seeds = np.arange(50, 100)
-    if not os.path.isdir(sim_results_path):
-        os.mkdir(sim_results_path)
-    for sim_type in simulation_prefixes:
-        args.sim_type = sim_type
-        for k, dim in enumerate(simulation_dims):
-            if 'orthogonal' in args.sim_type:
-                args.M = M_s_orthog[k]
-                args.split_variance = 0
-                args.full_basis = 0
-            # elif 'cholesky' in args.sim_type:
-            #     args.split_variance = 1
-            #     args.full_basis = 1
-            #     args.M = M_s_non_orthog[k]
-            else:
-                args.M = M_s_non_orthog[k]
-            args.dim = int(dim[1:])
-            if args.dim >= 50:
-                args.iters = 200
-                args.beta = 5e-3
-            else:
-                args.iters = 115
-                args.beta = 8e-3
-            sim_type_path = os.path.join(sim_results_path, args.sim_type+str(dim))
-            if not os.path.isdir(sim_type_path):
-                os.mkdir(sim_type_path)
-            print(sim_type_path)
-            for seed in seeds:
-                np.random.seed(seed)
-                save_path = os.path.join(sim_type_path, str(seed))
-                if not os.path.isdir(save_path):
-                    os.mkdir(save_path)
-                data_full = resolve_data(args, save_path=save_path)
-                print(data_full.shape)
-                model = PrecisionCPD(args)
-                data_train = data_full[0:args.window_size, :]
-                chosen_lamb = model.fit_glasso(data_train)
-                save_lambda_value(save_path, args, chosen_lamb, seed=seed)
-                if bool(args.save_lambda):
-                    print("save_lambda enabled: skipping test statistic calculations.")
-                    continue
-                model.construct_basis_matrices()
-                lrt_vals_all, _ = model.perform_lrt_local(data_full.T)
-                model.save_matrices_simulations(save_path)
-                print()
-                np.savetxt(os.path.join(save_path, "lrt_vals.csv"), lrt_vals_all, delimiter=',')
-    for sim_type in no_change_prefixes:
-        args.sim_type = sim_type
-        for k, dim in enumerate(simulation_dims):
-            if 'orthogonal' in args.sim_type:
-                args.M = M_s_orthog[k]
-            else:
-                args.M = M_s_non_orthog[k]
-            args.dim = int(dim[1:])
-            sim_type_path = os.path.join(sim_results_path, args.sim_type+str(dim))
-            if not os.path.isdir(sim_type_path):
-                os.mkdir(sim_type_path)
-            print(sim_type_path)
-            for seed in seeds:
-                np.random.seed(seed)
-                save_path = os.path.join(sim_type_path, str(seed))
-                if not os.path.isdir(save_path):
-                    os.mkdir(save_path)
-                data_full = resolve_data(args, save_path=save_path)
-                print(data_full.shape)
-                model = PrecisionCPD(args)
-                data_train = data_full[0:args.window_size, :]
-                chosen_lamb = model.fit_glasso(data_train)
-                save_lambda_value(save_path, args, chosen_lamb, seed=seed)
-                if bool(args.save_lambda):
-                    print("save_lambda enabled: skipping test statistic calculations.")
-                    continue
-                model.construct_basis_matrices()
-                lrt_vals_all, _ = model.perform_lrt_local(data_full.T)
-                model.save_matrices_simulations(save_path)
-                print()
-                np.savetxt(os.path.join(save_path, "lrt_vals.csv"), lrt_vals_all, delimiter=',')
-    
-    print("***************************")
-    print("Done!")
-
-def precision_recall_sims_runtimes(args):
-    print("***************************")
-    print("Performing Runtime Calculation")
-    args.full_basis = 0
-    args.split_variance = 0
-    args.N = 101
-    args.window_size = 100
-    args.step_size = 2
-    args.sim = 1
-    args.lam = 1e-1
-    args.train_percent = 0.4
-    # simulation_prefixes = ['cai_model_one', 'cai_model_three', 
-    #                     'orthogonal', 'cholesky']
-    # no_change_prefixes = ['cai_model_one_no_change', 'cai_model_three_no_change', 
-    #                     'orthogonal_no_change', 'cholesky_no_change']
-    simulation_prefixes = ['cai_model_four']
-    #no_change_prefixes = ['cai_model_four_no_change']
-    no_change_prefixes = []
-    simulation_dims = ['_6', '_10', '_15', '_20', '_30', '_50', '_100']
-    #M_s_non_orthog = [2, 3, 4, 6, 8, 10, 20]
-    M_s_non_orthog = [3, 4, 5, 8, 10, 15, 25]
-    M_s_orthog = [2, 2, 3, 4, 5, 10, 20]
-    sim_results_path = os.path.join(args.results_path, "simulation_results_precision")
-    seeds = np.arange(50, 60)
-    if not os.path.isdir(sim_results_path):
-        os.mkdir(sim_results_path)
-    runtimes = []
-    for sim_type in simulation_prefixes:
-        args.sim_type = sim_type
-        for k, dim in enumerate(simulation_dims):
-            if 'orthogonal' in args.sim_type:
-                args.M = M_s_orthog[k]
-                args.split_variance = 0
-                args.full_basis = 0
-            # elif 'cholesky' in args.sim_type:
-            #     args.split_variance = 1
-            #     args.full_basis = 1
-            #     args.M = M_s_non_orthog[k]
-            else:
-                args.M = M_s_non_orthog[k]
-            args.dim = int(dim[1:])
-            if args.dim >= 50:
-                args.iters = 200
-                args.beta = 5e-3
-            else:
-                args.iters = 115
-                args.beta = 8e-3
-            sim_type_path = os.path.join(sim_results_path, args.sim_type+str(dim))
-            if not os.path.isdir(sim_type_path):
-                os.mkdir(sim_type_path)
-            print(sim_type_path)
-            curr_runtimes = []
-            for seed in seeds:
-                np.random.seed(seed)
-                save_path = os.path.join(sim_type_path, str(seed))
-                if not os.path.isdir(save_path):
-                    os.mkdir(save_path)
-                data_full = resolve_data(args, save_path=None)
-                print(data_full.shape)
-                start_time = time.time()
-                model = PrecisionCPD(args)
-                data_train = data_full[0:args.window_size, :]
-                chosen_lamb = model.fit_glasso(data_train)
-                save_lambda_value(save_path, args, chosen_lamb, seed=seed)
-                if bool(args.save_lambda):
-                    print("save_lambda enabled: skipping test statistic calculations.")
-                    continue
-                model.construct_basis_matrices()
-                lrt_vals_all, _ = model.perform_lrt_local(data_full.T)
-                end_time = time.time()
-                curr_runtimes.append(end_time-start_time)
-                #model.save_matrices_simulations(save_path)
-                print()
-                #np.savetxt(os.path.join(save_path, "lrt_vals.csv"), lrt_vals_all, delimiter=',')
-            runtimes.append(np.mean(curr_runtimes))
-    for sim_type in no_change_prefixes:
-        args.sim_type = sim_type
-        for k, dim in enumerate(simulation_dims):
-            if 'orthogonal' in args.sim_type:
-                args.M = M_s_orthog[k]
-            else:
-                args.M = M_s_non_orthog[k]
-            args.dim = int(dim[1:])
-            sim_type_path = os.path.join(sim_results_path, args.sim_type+str(dim))
-            if not os.path.isdir(sim_type_path):
-                os.mkdir(sim_type_path)
-            print(sim_type_path)
-            for seed in seeds:
-                np.random.seed(seed)
-                save_path = os.path.join(sim_type_path, str(seed))
-                if not os.path.isdir(save_path):
-                    os.mkdir(save_path)
-                data_full = resolve_data(args, save_path=save_path)
-                print(data_full.shape)
-                start_time = time.monotonic()
-                model = PrecisionCPD(args)
-                data_train = data_full[0:args.window_size, :]
-                chosen_lamb = model.fit_glasso(data_train)
-                save_lambda_value(save_path, args, chosen_lamb, seed=seed)
-                if bool(args.save_lambda):
-                    print("save_lambda enabled: skipping test statistic calculations.")
-                    continue
-                model.construct_basis_matrices()
-                lrt_vals_all, _ = model.perform_lrt_local(data_full.T)
-                #model.save_matrices_simulations(save_path)
-                print()
-                #np.savetxt(os.path.join(save_path, "lrt_vals.csv"), lrt_vals_all, delimiter=',')
-    np.savetxt(os.path.join(args.results_path, 'runtimes/runtimes_ours.csv'), np.array(runtimes), delimiter=',')
-    print("***************************")
-    print("Done!")
 
 def perform_sap_batch(args):
     # run a batch of SAP500 data
@@ -540,7 +304,7 @@ def perform_sap_batch(args):
     args.fig_dir_path = fig_dir_path
     print("\n*******************************************************************************")
     print("Performing SAP Run with Dim = {}, Window = {}, Post Window {}".format(args.dim, args.window_size, args.post_window_size))
-    seeds_list = np.arange(50, 60)
+    seeds_list = np.arange(50, 51)
     sim_results_path = os.path.join(args.results_path, "sap_results")
     if not os.path.isdir(sim_results_path):
         os.mkdir(sim_results_path)
@@ -555,9 +319,6 @@ def perform_sap_batch(args):
         if not os.path.isdir(save_path):
             os.mkdir(save_path)
         data_full = resolve_data(args, save_path=save_path, data_seed=seed)
-        # if 'orthogonal' in args.sim_type:
-        #     H_s, data_full = data_full
-        #     data_full = data_full.T
         print(data_full.shape)
         dim_list = np.arange(0, data_full.shape[1])
         chosen_idxs = np.random.choice(dim_list, size=args.dim, replace=False)
@@ -570,12 +331,6 @@ def perform_sap_batch(args):
             print("save_lambda enabled: skipping test statistic calculations.")
             continue
         model.construct_basis_matrices()
-
-        ############
-        # if 'orthogonal' in args.sim_type:
-        #     print("DEFINITELY CHANGE THIS THIS IS JUST A SANITY CHECK")
-        #     model.basis_matrices = H_s
-        ############
 
         lrt_vals_all, p_vals_all = model.perform_lrt_local(data_full.T)
         test_results = np.hstack([lrt_vals_all, p_vals_all])
@@ -593,7 +348,6 @@ def perform_sap_batch(args):
                                                                                                                 args.full_basis, args.sim)))
             plt.close()
 
-        #np.savetxt(os.path.join(save_path, "p_vals.csv"), p_vals_all, delimiter=',')
         model.print_clusters_rv()
     print("*******************************************************************************")
     print("Done!")
@@ -604,78 +358,9 @@ if __name__ == '__main__':
     print("Window Size {} Post Window Size {} Train Percent {}".format(args.window_size, args.post_window_size, args.train_percent))
     if bool(args.single_test):
         perform_single_test(args)
-    elif bool(args.prec_recall):
-        precision_recall_sims(args)
-    elif bool(args.runtimes):
-        precision_recall_sims_runtimes(args)
     elif bool(args.sap):
         perform_sap_batch(args)
     else:
         perform_simulation_batch(args)
 
-    
-    
-
-
-# python src/main.py --sim 0 --data alaska --M 2 --window_size 50 --step_size 1 --lam 1e-3 --train_percent 0.5 --full_basis 1 --split_variance 1
-# python src/main.py --sim 1 --sim_type cholesky --dim 50 --sim_scale 1.5 --window_size 100 --step_size 1 --lam 3e-1 --single_test 0 --N 500 --M 8 --t 1.0 --train_percent 0.2 --full_basis 1 --beta 6e-3
-# python src/main.py --sim 1 --sim_type orthogonal_mult_coeff --dim 50 --sim_scale 1.5 --window_size 100 --step_size 1 --lam 3e-1 --single_test 0 --N 500 --M 5 --t 1.0 --train_percent 0.2 --full_basis 0 --beta 6e-3 --num_coeffs_change 2
-# python src/main.py --sim 1 --sim_type cai_model_three --dim 50 --window_size 100 --step_size 1 --lam 3e-1 --single_test 0 --N 500 --M 8 --t 1.0 --train_percent 0.2 --full_basis 1 --beta 6e-3
-
-# python src/main.py --sim 1 --sim_type ldlt --dim 50 --window_size 100 --step_size 1 --lam 1e-1 --single_test 0 --N 500 --M 10 --t 1.0 --train_percent 0.4 --full_basis 1 --beta 6e-3 --num_coeffs_change 2
-# python src/main.py --sim 1 --sim_type orthogonal_mult_coeff --dim 50 --window_size 100 --step_size 1 --lam 1e-1 --single_test 0 --N 500 --M 10 --t 1.0 --train_percent 0.4 --full_basis 1 --beta 6e-3 --num_coeffs_change 2
-# python src/main.py --sim 1 --sim_type cai_model_three --dim 50 --window_size 100 --step_size 1 --lam 1e-1 --single_test 0 --N 500 --M 10 --t 1.0 --train_percent 0.4 --full_basis 1 --beta 6e-3
-# python src/main.py --sim 1 --sim_type cholesky --dim 50 --window_size 100 --step_size 1 --lam 3e-1 --single_test 0 --N 500 --M 10 --t 1.0 --train_percent 0.45 --full_basis 1 --beta 6e-3 --num_coeffs_change 2
-
-# python src/main.py --sim 0 --data stocks --lam 1e-2 --train_percent 0.4 --M 5 --beta 6e-3
-
-
-# sims
-# cai models
-# dim 6
-# python src/main.py --single_test 0 --num_coeffs_change 2 --train_percent 0.4 --window_size 100 --step_size 1 --sim 1 --lam 8e-2 --N 500 --M 2 --full_basis 0 --dim 6 --sim_type cai_model_three
-# python src/main.py --single_test 0 --num_coeffs_change 2 --train_percent 0.4 --window_size 100 --step_size 1 --sim 1 --lam 8e-2 --N 500 --M 2 --full_basis 0 --dim 6 --sim_type cai_model_one
-# dim 10
-# python src/main.py --single_test 0 --num_coeffs_change 2 --train_percent 0.4 --window_size 100 --step_size 1 --sim 1 --lam 8e-2 --N 500 --M 3 --full_basis 0 --dim 10 --sim_type cai_model_three
-# python src/main.py --single_test 0 --num_coeffs_change 2 --train_percent 0.4 --window_size 100 --step_size 1 --sim 1 --lam 8e-2 --N 500 --M 3 --full_basis 0 --dim 10 --sim_type cai_model_one
-# dim 15
-# python src/main.py --single_test 0 --num_coeffs_change 2 --train_percent 0.4 --window_size 100 --step_size 1 --sim 1 --lam 8e-2 --N 500 --M 4 --full_basis 0 --dim 15 --sim_type cai_model_three
-# python src/main.py --single_test 0 --num_coeffs_change 2 --train_percent 0.4 --window_size 100 --step_size 1 --sim 1 --lam 8e-2 --N 500 --M 4 --full_basis 0 --dim 15 --sim_type cai_model_one
-# dim 20
-# python src/main.py --single_test 0 --num_coeffs_change 2 --train_percent 0.4 --window_size 100 --step_size 1 --sim 1 --lam 8e-2 --N 500 --M 6 --full_basis 0 --dim 20 --sim_type cai_model_three
-# python src/main.py --single_test 0 --num_coeffs_change 2 --train_percent 0.4 --window_size 100 --step_size 1 --sim 1 --lam 8e-2 --N 500 --M 6 --full_basis 0 --dim 20 --sim_type cai_model_one
-# dim 30
-# python src/main.py --single_test 0 --num_coeffs_change 2 --train_percent 0.4 --window_size 100 --step_size 1 --sim 1 --lam 8e-2 --N 500 --M 8 --full_basis 0 --dim 30 --sim_type cai_model_three
-# python src/main.py --single_test 0 --num_coeffs_change 2 --train_percent 0.4 --window_size 100 --step_size 1 --sim 1 --lam 8e-2 --N 500 --M 8 --full_basis 0 --dim 30 --sim_type cai_model_one
-# dim 50
-# python src/main.py --sim 1 --sim_type cai_model_three --dim 50 --window_size 100 --step_size 1 --lam 1e-1 --single_test 0 --N 500 --M 10 --t 1.0 --train_percent 0.4 --full_basis 1 --beta 6e-3
-# python src/main.py --sim 1 --sim_type cai_model_one --dim 50 --window_size 100 --step_size 1 --lam 1e-1 --single_test 0 --N 500 --M 10 --t 1.0 --train_percent 0.4 --full_basis 1 --beta 6e-3
-# dim 100
-# python src/main.py --single_test 0 --num_coeffs_change 2 --train_percent 0.4 --window_size 100 --step_size 1 --sim 1 --lam 8e-2 --N 300 --M 20 --full_basis 0 --dim 100 --sim_type cai_model_three
-# python src/main.py --single_test 0 --num_coeffs_change 2 --train_percent 0.4 --window_size 100 --step_size 1 --sim 1 --lam 8e-2 --N 300 --M 20 --full_basis 0 --dim 100 --sim_type cai_model_one
-
-
-# non cai models
-# dim 6
-# python src/main.py --single_test 0 --num_coeffs_change 2 --train_percent 0.4 --window_size 100 --step_size 1 --sim 1 --lam 1e-1 --N 500 --M 2 --full_basis 0 --dim 6 --sim_type ldlt
-# python src/main.py --single_test 0 --num_coeffs_change 2 --train_percent 0.4 --window_size 100 --step_size 1 --sim 1 --lam 1e-1 --N 500 --M 2 --full_basis 0 --dim 6 --sim_type cholesky
-# dim 10
-# python src/main.py --single_test 0 --num_coeffs_change 2 --train_percent 0.4 --window_size 100 --step_size 1 --sim 1 --lam 1e-1 --N 500 --M 3 --full_basis 0 --dim 10 --sim_type cholesky
-# python src/main.py --single_test 0 --num_coeffs_change 2 --train_percent 0.4 --window_size 100 --step_size 1 --sim 1 --lam 1e-1 --N 500 --M 2 --full_basis 0 --dim 10 --sim_type orthogonal
-# dim 15
-# python src/main.py --single_test 0 --num_coeffs_change 2 --train_percent 0.4 --window_size 100 --step_size 1 --sim 1 --lam 3e-1 --N 500 --M 4 --full_basis 0 --dim 15 --sim_type cholesky
-# python src/main.py --single_test 0 --num_coeffs_change 2 --train_percent 0.4 --window_size 100 --step_size 1 --sim 1 --lam 3e-1 --N 500 --M 3 --full_basis 0 --dim 15 --sim_type orthogonal
-# dim 20
-# python src/main.py --single_test 0 --num_coeffs_change 2 --train_percent 0.4 --window_size 100 --step_size 1 --sim 1 --lam 3e-1 --N 500 --M 6 --full_basis 0 --dim 20 --sim_type cholesky
-# python src/main.py --single_test 0 --num_coeffs_change 2 --train_percent 0.4 --window_size 100 --step_size 1 --sim 1 --lam 3e-1 --N 500 --M 4 --full_basis 0 --dim 20 --sim_type orthogonal
-# dim 30
-# python src/main.py --single_test 0 --num_coeffs_change 2 --train_percent 0.4 --window_size 100 --step_size 1 --sim 1 --lam 3e-1 --N 500 --M 8 --full_basis 0 --dim 30 --sim_type cholesky
-# python src/main.py --single_test 0 --num_coeffs_change 2 --train_percent 0.4 --window_size 100 --step_size 1 --sim 1 --lam 3e-1 --N 500 --M 5 --full_basis 0 --dim 30 --sim_type orthogonal
-# dim 50
-# python src/main.py --sim 1 --sim_type orthogonal_mult_coeff --dim 50 --window_size 100 --step_size 1 --lam 1e-1 --single_test 0 --N 500 --M 10 --t 1.0 --train_percent 0.4 --full_basis 1 --beta 6e-3 --num_coeffs_change 2
-# python src/main.py --sim 1 --sim_type cholesky --dim 50 --window_size 100 --step_size 1 --lam 3e-1 --single_test 0 --N 500 --M 10 --t 1.0 --train_percent 0.45 --full_basis 1 --beta 6e-3 --num_coeffs_change 2
-# dim 100
-# python src/main.py --single_test 0 --num_coeffs_change 2 --train_percent 0.4 --window_size 100 --step_size 1 --sim 1 --lam 3e-1 --N 300 --M 15 --full_basis 0 --dim 100 --sim_type cholesky
-# python src/main.py --single_test 0 --num_coeffs_change 2 --train_percent 0.4 --window_size 100 --step_size 1 --sim 1 --lam 3e-1 --N 300 --M 10 --full_basis 0 --dim 100 --sim_type orthogonal
-# --results_path /nfs/hpc/share/dinkinst/Correlation-Changepoint-Detection/results
 

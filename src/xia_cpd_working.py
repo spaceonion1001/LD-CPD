@@ -1,11 +1,7 @@
-from pickletools import read_string1
-from cvxpy import vec
 import numpy as np
 from numpy.linalg import inv as inv
-from scipy.optimize import least_squares, minimize
 from simulate import sim_changepoint_mv_normal_cholesky, sim_changepoint_mv_normal_ldlt, sim_changepoint_var_process, changepoint_cai_model_one, changepoint_cai_model_three, anderson_sim_with_residual
 from utils import scale_data, difference_data, vectorize_matrix, symmetrize_from_vector
-from statsmodels.stats.multitest import fdrcorrection
 from tqdm import tqdm
 from scipy.stats import norm
 from simulate import *
@@ -13,7 +9,6 @@ from utils import difference_data, load_alaska_data, scale_data, load_hjandrews_
 from numba import jit
 import time
 from datetime import timedelta
-from scipy.optimize import linprog
 import rpy2
 import rpy2.robjects as robjects
 import rpy2.robjects.numpy2ri
@@ -23,7 +18,6 @@ import rpy2.robjects.packages as rpackages
 import matplotlib.pyplot as plt
 import matplotlib
 
-import cvxpy as cp
 
 from sklearn.linear_model import Lasso
 
@@ -33,44 +27,35 @@ r = robjects.r
 rpy2.robjects.numpy2ri.activate()
 utils = importr('utils')
 utils.chooseCRANmirror(ind=1)
-# R package names
-#packnames = ('fastclime', 'scalreg')
-#packnames = ('scalreg', 'hexbin')
 
 # R vector of strings
 from rpy2.robjects.vectors import StrVector
 
-# Selectively install what needs to be install.
-# We are fancy, just because we can.
-#names_to_install = [x for x in packnames if not rpackages.isinstalled(x)]
-# if len(names_to_install) > 0:
-#     utils.install_packages(StrVector(names_to_install))
-#clime = importr('fastclime')
 scalreg = importr('scalreg')
 
 import argparse
 import warnings
-warnings.filterwarnings('ignore')  # <- remember to comment this if something breaks and you get confused
+warnings.filterwarnings('ignore')
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--lam', type=float, default=1e-1)
+    parser.add_argument('--lam', type=float, default=5e-2)
     parser.add_argument('--dim', type=int, default=16)
     parser.add_argument('--N', type=int, default=500)
     parser.add_argument('--M', type=int, default=2)
     parser.add_argument('--sim', type=int, default=1)
-    parser.add_argument('--sim_type', type=str, default='cai_model_three')
+    parser.add_argument('--sim_type', type=str, default='cai_model_one')
     parser.add_argument('--data', type=str, default='alaska')
-    parser.add_argument('--data_path', type=str, default='/home/dink/Documents/Research/data')
+    parser.add_argument('--data_path', type=str, default='../data')
     parser.add_argument('--data_fname', type=str, default='mesonet_test_out.csv')
     parser.add_argument('--sim_scale', type=float, default=0.2)
     parser.add_argument('--random_seed', type=int, default=42)
-    parser.add_argument('--train_percent', type=float, default=0.25)
+    parser.add_argument('--train_percent', type=float, default=0.1)
     parser.add_argument('--window_size', type=int, default=100)
     parser.add_argument('--post_window_size', type=int, default=20)
     parser.add_argument('--step_size', type=int, default=1)
     parser.add_argument('--num_coeffs_change', type=int, default=2)
-    parser.add_argument('--results_path', type=str, default='/home/dink/Documents/Research/Correlation-Changepoint-Detection/results')
+    parser.add_argument('--results_path', type=str, default='./results')
     parser.add_argument('--fix_pre', type=int, default=1)
     parser.add_argument('--resid_type', type=str, choices=['unstructured', 'block'], default='unstructured', help='Residual Type')
     parser.add_argument('--num_indices', type=int, default=4)
@@ -140,8 +125,6 @@ def resolve_data(args, save_path=None, data_seed=42):
         elif args.data == 'holidayfarm':
             return load_holiday_farm_data(args)
         elif args.data == 'stocks':
-            # python src/main.py --M 5 --lam 2e-5 --window_size 200 --step_size 1 --data stocks --local 1 --sim 0 --split_variance 0 --train_percent 0.6
-            # stocks need a low lambda value I think
             return scale_data(load_stock_market_data(args), args.train_percent)
         elif args.data == 'mesonet':
             return scale_data(load_mesonet_data(args), percent=None, end_idx=args.window_size)
@@ -174,9 +157,6 @@ def perform_regression(X_data, Y_data, kd=2):
     """
     Split data in half and perform the regression process on each column
     """
-    #half = data.shape[0]//2
-    #X_data = data[:half, :]
-    #Y_data = data[half:, :]
     dim = X_data.shape[1]
     x_0 = np.random.normal(0, 1, dim-1)
     x_log_dim = np.log(dim)/X_data.shape[0]
@@ -200,14 +180,6 @@ def perform_regression(X_data, Y_data, kd=2):
         residuals_x[:, i] = np.array(x_response) - x_lasso.predict(x_predictors)
         beta_hats_x_curr = np.sqrt(D_i)*np.array(x_lasso.coef_)
 
-
-        # nrow, ncol = X_m_i.shape
-        # X = r.matrix(X_m_i, nrow=nrow, ncol=ncol)
-        # y_i = robjects.FloatVector(X_data[:, i])
-        # reg_soln = scalreg.scalreg(X, y_i, lam0=x_lam)
-        # reg_soln_dict = dict(zip(reg_soln.names, list(reg_soln)))
-        # residuals_x[:, i] = np.array(reg_soln_dict['residuals'])
-        # beta_hats_x_curr = np.array(reg_soln_dict['coefficients'])
         beta_hats_x[i, :] = beta_hats_x_curr
 
         Y_m_i = np.delete(Y_data, i, axis=1)
@@ -223,45 +195,9 @@ def perform_regression(X_data, Y_data, kd=2):
         beta_hats_y_curr = np.sqrt(D_i)*np.array(y_lasso.coef_)
 
 
-        # nrow, ncol = Y_m_i.shape
-        # Y = r.matrix(Y_m_i, nrow=nrow, ncol=ncol)
-        # yy_i = robjects.FloatVector(Y_data[:, i])
-        # reg_soln = scalreg.scalreg(Y, yy_i, lam0=y_lam)
-        # reg_soln_dict = dict(zip(reg_soln.names, list(reg_soln)))
-        # residuals_y[:, i] = np.array(reg_soln_dict['residuals'])
-        # beta_hats_y_curr = np.array(reg_soln_dict['coefficients'])
         beta_hats_y[i, :] = beta_hats_y_curr
 
     return residuals_x, residuals_y, beta_hats_x, beta_hats_y
-
-
-    #print(X_data.shape, r.dim(X))
-    #print(scalreg.scalreg(X))
-    # for i in range(dim):
-    #     X_m_i = np.delete(X_data, i, axis=1)
-    #     X_i = X_data[:, i]
-    #     sig_i_i_x = np.var(X_i)
-    #     x_lam = kd*np.power(sig_i_i_x*x_log_dim, 0.5)
-    #     D_i_x = np.power(np.diag(np.cov(X_m_i.T, bias=False)), -0.5)
-    #     res_x_i = minimize(loss_func, x_0, method='Nelder-Mead', args=(X_data, i, x_lam)).x
-    #     #res_x_i = least_squares(loss_func, x_0, args=(X_data, i, x_lam)).x
-    #     beta_hat_x_i = D_i_x*res_x_i
-
-    #     Y_m_i = np.delete(Y_data, i, axis=1)
-    #     Y_i = Y_data[:, i]
-    #     sig_i_i_y = np.var(Y_i)
-    #     y_lam = kd*np.power(sig_i_i_y*y_log_dim, 0.5)
-    #     D_i_y = np.power(np.diag(np.cov(Y_m_i.T, bias=False)), -0.5)
-    #     #res_y_i = minimize(loss_func, x_0, method='BFGS', args=(Y_data, i, y_lam)).x
-    #     res_y_i = least_squares(loss_func, x_0, args=(Y_data, i, y_lam)).x
-    #     beta_hat_y_i = D_i_y*res_y_i
-
-    #     beta_hats_x.append(beta_hat_x_i)
-    #     beta_hats_y.append(beta_hat_y_i)
-    
-    # return should be (dim, dim-1) shape
-    # since we need one regression for each dim, and is vector size of dim-1
-    #return np.array(beta_hats_x), np.array(beta_hats_y)
 
 @jit(nopython=True)
 def numba_mean_col(X):
@@ -284,7 +220,6 @@ def calculate_residuals(beta_hats, data):
     residuals = np.zeros((N, dim))
     for k in range(N):
         for i in range(dim):
-            #X_m_i = np.delete(data, i, axis=1)
             idxs = []
             for j in range(dim):
                 if j != i:
@@ -293,8 +228,6 @@ def calculate_residuals(beta_hats, data):
             X_m_i = data[:, idxs]
             X_m_i_k = X_m_i[k, :]
             X_i_k = data[k, i]
-            # X_m_i_k_min_mu = X_m_i_k - np.mean(X_m_i.T, 1)
-            # X_i_k_min_mu = X_i_k - np.mean(data[:, i])
             X_m_i_k_min_mu = X_m_i_k - numba_mean_col(X_m_i.T)
             X_i_k_min_mu = X_i_k - np.mean(data[:, i])
             pred = X_m_i_k_min_mu.dot(beta_hats[i])
@@ -374,11 +307,6 @@ def G_func(t):
     return 2-2*norm.cdf(t)
 
 def indicator_local_stat(W, p, alpha=0.01):
-    # simplest t_hat
-    #t_hat = 2*np.sqrt(np.log(p))
-    
-    #return np.abs(W) >= t_hat
-
     # BH FDR correction
     upper_triangle = vectorize_matrix(W)
     p_vals = np.array([G_func(np.abs(t)) for t in upper_triangle])
@@ -388,27 +316,19 @@ def indicator_local_stat(W, p, alpha=0.01):
     return p_vals <= alpha
 
 def apply_cai_algorithm_windowed(args, data):
-    #global_p_vals = []
     global_test_vals = []
     for i in tqdm(range(args.window_size, data.shape[0]-args.post_window_size, args.step_size)):
-        #data_window = data[i:i+2*args.window_size, :]
         if args.fix_pre:
             first_data_window = data[0:args.window_size, :] # fix the training window
             second_data_window = data[i:i+args.post_window_size, :] # move forward from i post_window_size ticks forward
-            #data_window = np.concatenate((first_data_window, second_data_window), axis=0)
         else:
             first_data_window = data[i:i+args.window_size, :]
             second_data_window = data[i+args.window_size:i+args.window_size+args.post_window_size, :]
-        #beta_hats_x, beta_hats_y = perform_regression(data)
         residuals_x, residuals_y, beta_hats_x, beta_hats_y  = perform_regression(X_data=first_data_window, Y_data=second_data_window)
-        #residuals_x, residuals_y, beta_hats_x, beta_hats_y  = perform_regression_alt(X_data=first_data_window, Y_data=second_data_window)
-        #middle = data_window.shape[0]//2
-        #residuals_x = calculate_residuals(beta_hats_x, data_window[:middle, :])
         residuals_x_cov_corrected = bias_corrected_residual_covariance(residuals_x, beta_hats_x)
         T_x = calculate_T(residuals_x_cov_corrected)
         theta_x = calculate_theta(residuals_x_cov_corrected, beta_hats_x, N=first_data_window.shape[0])
 
-        #residuals_y = calculate_residuals(beta_hats_y, data_window[middle:, :])
         residuals_y_cov_corrected = bias_corrected_residual_covariance(residuals_y, beta_hats_y)
         T_y = calculate_T(residuals_y_cov_corrected)
         theta_y = calculate_theta(residuals_y_cov_corrected, beta_hats_y, N=second_data_window.shape[0])
@@ -416,15 +336,9 @@ def apply_cai_algorithm_windowed(args, data):
         W = calculate_standardized_stat(T_x, T_y, theta_x, theta_y)
         M = calculate_global_stat(W)
         threshold = indicator_global_stat(M, p=data.shape[1], alpha=0.01)
-
-        # print(M)
-        # print(threshold)
-        # print(M>threshold)
-
         local_test = np.triu(indicator_local_stat(W, p=data.shape[1], alpha=0.01).astype(int), k=1)
 
         global_test_vals.append(M)
-        #global_p_vals.append()
     
     return np.array(global_test_vals), local_test
 
@@ -492,13 +406,9 @@ def apply_cai_variance_windowed(args, data):
 
     
 def perform_simulation_batch(args):
-    # run a batch of 50 simulations/results with a specified simulation model
-    # only local test
-    # should do step_size = 1 because it's easier
-    # save everything to files - I guess
     print("\n*******************************************************************************")
     print("Performing Batch Simulation of {} with Dim = {}, Window = {}".format(args.sim_type, args.dim, args.window_size))
-    seeds_list = np.arange(60, 70)
+    seeds_list = np.arange(51, 70)
     sim_results_path = os.path.join(args.results_path, "simulation_results_cai")
     if not os.path.isdir(sim_results_path):
         os.mkdir(sim_results_path)
@@ -508,8 +418,6 @@ def perform_simulation_batch(args):
     print(sim_type_path)
     if not os.path.isdir(sim_type_path):
         os.mkdir(sim_type_path)
-    timing = []
-    import timeit
     for seed in seeds_list:
         print("Seed {}".format(seed))
         np.random.seed(seed)
@@ -518,16 +426,12 @@ def perform_simulation_batch(args):
             os.mkdir(save_path)
         data_full = resolve_data(args, save_path=save_path, data_seed=seed)
         print(data_full.shape)
-        t0 = timeit.default_timer()
         global_test_vals, _ = apply_cai_algorithm_windowed(args, data_full)
-        t1 = timeit.default_timer()
-        timing.append(round(t1-t0, 3))
         print()
         np.savetxt(os.path.join(save_path, "global_test_vals.csv"), global_test_vals, delimiter=',')
         plt.plot(global_test_vals)
         plt.savefig(os.path.join(save_path, "test_stat.png"))
         plt.close()
-    np.savetxt('debugging_figs/timing_cai_{}.csv'.format(args.dim), np.array(timing))
     print("*******************************************************************************")
     print("Done!")
 
@@ -536,7 +440,7 @@ def perform_sap_batch(args):
     # batch constitutes a random sample of a subset of tickers
     print("\n*******************************************************************************")
     print("Performing SAP Run with Dim = {}, Window = {}, Post Window {}".format(args.dim, args.window_size, args.post_window_size))
-    seeds_list = np.arange(50, 55)
+    seeds_list = np.arange(50, 51)
     sim_results_path = os.path.join(args.results_path, "sap_results_cai")
     if not os.path.isdir(sim_results_path):
         os.mkdir(sim_results_path)
@@ -550,9 +454,6 @@ def perform_sap_batch(args):
         if not os.path.isdir(save_path):
             os.mkdir(save_path)
         data_full = resolve_data(args, save_path=save_path, data_seed=seed)
-        # if 'orthogonal' in args.sim_type:
-        #     H_s, data_full = data_full
-        #     data_full = data_full.T
         print(data_full.shape)
         dim_list = np.arange(0, data_full.shape[1])
         chosen_idxs = np.random.choice(dim_list, size=args.dim, replace=False)
@@ -569,256 +470,12 @@ def perform_sap_batch(args):
     print("*******************************************************************************")
     print("Done!")
 
-def perform_simulation_batch_variance(args):
-    # run a batch of 50 simulations/results with a specified simulation model
-    # only local test
-    # should do step_size = 1 because it's easier
-    # save everything to files - I guess
-    print("\n*******************************************************************************")
-    print("Performing Batch Simulation of {} with Dim = {}, Window = {}".format(args.sim_type, args.dim, args.window_size))
-    seeds_list = np.arange(50, 70)
-    sim_results_path = os.path.join(args.results_path, "simulation_results_cai")
-    if not os.path.isdir(sim_results_path):
-        os.mkdir(sim_results_path)
-    sim_type_path = os.path.join(sim_results_path, args.sim_type+"_"+str(args.dim))
-    print(sim_type_path)
-    if not os.path.isdir(sim_type_path):
-        os.mkdir(sim_type_path)
-    for seed in seeds_list:
-        np.random.seed(seed)
-        save_path = os.path.join(sim_type_path, str(seed))
-        if not os.path.isdir(save_path):
-            os.mkdir(save_path)
-        data_full = resolve_data(args, save_path=save_path)
-        print("DATA SHAPE {}".format(data_full.shape))
-        global_test_vals, local_test_vals = apply_cai_variance_windowed(args, data_full)
-        np.savetxt(os.path.join(save_path, "global_test_vals.csv"), global_test_vals, delimiter=',')
-    print("*******************************************************************************")
-    print("Done!")
-
 def perform_single_run(args):
     data_full = resolve_data(args, save_path=None)
     print(data_full.shape)
     global_test_vals, _ = apply_cai_algorithm_windowed(args, data_full)
     plt.plot(global_test_vals)
     plt.show()
-
-def precision_recall_sims(args):
-    print("***************************")
-    print("Performing Prec/Recall Simulations")
-    args.N = 101
-    args.window_size = 100
-    args.step_size = 2
-    args.sim = 1
-    simulation_prefixes = ['cai_model_one', 'cai_model_three', 
-                        'orthogonal', 'cholesky', 'sparse_cholesky', 'cai_model_four']
-    no_change_prefixes = ['cai_model_one_no_change', 'cai_model_three_no_change', 
-                        'orthogonal_no_change', 'cholesky_no_change', 'sparse_cholesky_no_change', 'cai_model_four_no_change']
-    simulation_dims = ['_6', '_10', '_15', '_20', '_30', '_50', '_100']
-    M_s_non_orthog = [2, 3, 4, 6, 8, 10, 20]
-    M_s_orthog = [2, 2, 3, 4, 5, 10, 20]
-    sim_results_path = os.path.join(args.results_path, "simulation_results_precision_cai")
-    seeds = np.arange(50, 100)
-    if not os.path.isdir(sim_results_path):
-        os.mkdir(sim_results_path)
-    for sim_type in simulation_prefixes:
-        args.sim_type = sim_type
-        for k, dim in enumerate(simulation_dims):
-            if 'orthogonal' in args.sim_type:
-                args.M = M_s_orthog[k]
-            else:
-                args.M = M_s_non_orthog[k]
-            args.dim = int(dim[1:])
-            sim_type_path = os.path.join(sim_results_path, args.sim_type+str(dim))
-            if not os.path.isdir(sim_type_path):
-                os.mkdir(sim_type_path)
-            print(sim_type_path)
-            for seed in seeds:
-                np.random.seed(seed)
-                save_path = os.path.join(sim_type_path, str(seed))
-                if not os.path.isdir(save_path):
-                    os.mkdir(save_path)
-                data_full = resolve_data(args, save_path=save_path)
-                print(data_full.shape)
-                global_test_vals, T = apply_cai_variance_windowed(args, data_full)
-                print()
-                np.savetxt(os.path.join(save_path, "global_test_vals.csv"), global_test_vals, delimiter=',')
-                np.savetxt(os.path.join(save_path, "local_test_vals.csv"), T, delimiter=',')
-
-    for sim_type in no_change_prefixes:
-        args.sim_type = sim_type
-        for k, dim in enumerate(simulation_dims):
-            if 'orthogonal' in args.sim_type:
-                args.M = M_s_orthog[k]
-            else:
-                args.M = M_s_non_orthog[k]
-            args.dim = int(dim[1:])
-            sim_type_path = os.path.join(sim_results_path, args.sim_type+str(dim))
-            if not os.path.isdir(sim_type_path):
-                os.mkdir(sim_type_path)
-            print(sim_type_path)
-            for seed in seeds:
-                np.random.seed(seed)
-                save_path = os.path.join(sim_type_path, str(seed))
-                if not os.path.isdir(save_path):
-                    os.mkdir(save_path)
-                data_full = resolve_data(args, save_path=save_path)
-                print(data_full.shape)
-                global_test_vals, T = apply_cai_variance_windowed(args, data_full)
-                print()
-                np.savetxt(os.path.join(save_path, "global_test_vals.csv"), global_test_vals, delimiter=',')
-                np.savetxt(os.path.join(save_path, "local_test_vals.csv"), T, delimiter=',')
-    
-    print("***************************")
-    print("Done!")
-
-def precision_recall_sims_precision(args):
-    print("***************************")
-    print("Performing Prec/Recall Simulations")
-    args.N = 101
-    args.window_size = 100
-    args.step_size = 2
-    args.sim = 1
-    simulation_prefixes = ['cai_model_one', 'cai_model_three', 
-                        'orthogonal', 'cholesky']
-    no_change_prefixes = ['cai_model_one_no_change', 'cai_model_three_no_change', 
-                        'orthogonal_no_change', 'cholesky_no_change']
-    simulation_dims = ['_6', '_10', '_15', '_20', '_30', '_50', '_100']
-    M_s_non_orthog = [2, 3, 4, 6, 8, 10, 20]
-    M_s_orthog = [2, 2, 3, 4, 5, 10, 20]
-    sim_results_path = os.path.join(args.results_path, "simulation_results_precision_cai")
-    seeds = np.arange(50, 100)
-    if not os.path.isdir(sim_results_path):
-        os.mkdir(sim_results_path)
-    for sim_type in simulation_prefixes:
-        args.sim_type = sim_type
-        for k, dim in enumerate(simulation_dims):
-            if 'orthogonal' in args.sim_type:
-                args.M = M_s_orthog[k]
-            else:
-                args.M = M_s_non_orthog[k]
-            args.dim = int(dim[1:])
-            sim_type_path = os.path.join(sim_results_path, args.sim_type+str(dim))
-            if not os.path.isdir(sim_type_path):
-                os.mkdir(sim_type_path)
-            print(sim_type_path)
-            for seed in seeds:
-                np.random.seed(seed)
-                save_path = os.path.join(sim_type_path, str(seed))
-                if not os.path.isdir(save_path):
-                    os.mkdir(save_path)
-                data_full = resolve_data(args, save_path=save_path)
-                print(data_full.shape)
-                global_test_vals, T = apply_cai_algorithm_windowed(args, data_full)
-                print()
-                np.savetxt(os.path.join(save_path, "global_test_vals.csv"), global_test_vals, delimiter=',')
-                #np.savetxt(os.path.join(save_path, "local_test_vals.csv"), T, delimiter=',')
-
-    for sim_type in no_change_prefixes:
-        args.sim_type = sim_type
-        for k, dim in enumerate(simulation_dims):
-            if 'orthogonal' in args.sim_type:
-                args.M = M_s_orthog[k]
-            else:
-                args.M = M_s_non_orthog[k]
-            args.dim = int(dim[1:])
-            sim_type_path = os.path.join(sim_results_path, args.sim_type+str(dim))
-            if not os.path.isdir(sim_type_path):
-                os.mkdir(sim_type_path)
-            print(sim_type_path)
-            for seed in seeds:
-                np.random.seed(seed)
-                save_path = os.path.join(sim_type_path, str(seed))
-                if not os.path.isdir(save_path):
-                    os.mkdir(save_path)
-                data_full = resolve_data(args, save_path=save_path)
-                print(data_full.shape)
-                global_test_vals, T = apply_cai_algorithm_windowed(args, data_full)
-                print()
-                np.savetxt(os.path.join(save_path, "global_test_vals.csv"), global_test_vals, delimiter=',')
-                #np.savetxt(os.path.join(save_path, "local_test_vals.csv"), T, delimiter=',')
-    
-    print("***************************")
-    print("Done!")
-
-
-def precision_recall_sims_precision_runtimes(args):
-    print("***************************")
-    print("Performing Runtime Simulations")
-    args.N = 101
-    args.window_size = 100
-    args.step_size = 2
-    args.sim = 1
-    # simulation_prefixes = ['cai_model_one', 'cai_model_three', 
-    #                     'orthogonal', 'cholesky']
-    # no_change_prefixes = ['cai_model_one_no_change', 'cai_model_three_no_change', 
-    #                     'orthogonal_no_change', 'cholesky_no_change']
-    simulation_prefixes = ['cai_model_four']
-    no_change_prefixes = []
-    simulation_dims = ['_6', '_10', '_15', '_20', '_30', '_50', '_100']
-    #simulation_dims = ['_100']
-    M_s_non_orthog = [2, 3, 4, 6, 8, 10, 20]
-    M_s_orthog = [2, 2, 3, 4, 5, 10, 20]
-    sim_results_path = os.path.join(args.results_path, "simulation_results_precision_cai")
-    seeds = np.arange(50, 60)
-    if not os.path.isdir(sim_results_path):
-        os.mkdir(sim_results_path)
-    runtimes = []
-    for sim_type in simulation_prefixes:
-        args.sim_type = sim_type
-        for k, dim in enumerate(simulation_dims):
-            if 'orthogonal' in args.sim_type:
-                args.M = M_s_orthog[k]
-            else:
-                args.M = M_s_non_orthog[k]
-            args.dim = int(dim[1:])
-            sim_type_path = os.path.join(sim_results_path, args.sim_type+str(dim))
-            if not os.path.isdir(sim_type_path):
-                os.mkdir(sim_type_path)
-            print(sim_type_path)
-            curr_runtimes = []
-            for seed in seeds:
-                np.random.seed(seed)
-                save_path = os.path.join(sim_type_path, str(seed))
-                if not os.path.isdir(save_path):
-                    os.mkdir(save_path)
-                data_full = resolve_data(args, save_path=save_path)
-                print(data_full.shape)
-                start_time = time.time()
-                global_test_vals, T = apply_cai_algorithm_windowed(args, data_full)
-                end_time = time.time()
-                curr_runtimes.append(end_time-start_time)
-                print()
-                #np.savetxt(os.path.join(save_path, "global_test_vals.csv"), global_test_vals, delimiter=',')
-                #np.savetxt(os.path.join(save_path, "local_test_vals.csv"), T, delimiter=',')
-            runtimes.append(np.mean(curr_runtimes))
-
-    for sim_type in no_change_prefixes:
-        args.sim_type = sim_type
-        for k, dim in enumerate(simulation_dims):
-            if 'orthogonal' in args.sim_type:
-                args.M = M_s_orthog[k]
-            else:
-                args.M = M_s_non_orthog[k]
-            args.dim = int(dim[1:])
-            sim_type_path = os.path.join(sim_results_path, args.sim_type+str(dim))
-            if not os.path.isdir(sim_type_path):
-                os.mkdir(sim_type_path)
-            print(sim_type_path)
-            for seed in seeds:
-                np.random.seed(seed)
-                save_path = os.path.join(sim_type_path, str(seed))
-                if not os.path.isdir(save_path):
-                    os.mkdir(save_path)
-                data_full = resolve_data(args, save_path=save_path)
-                print(data_full.shape)
-                global_test_vals, T = apply_cai_algorithm_windowed(args, data_full)
-                print()
-                #np.savetxt(os.path.join(save_path, "global_test_vals.csv"), global_test_vals, delimiter=',')
-                #np.savetxt(os.path.join(save_path, "local_test_vals.csv"), T, delimiter=',')
-    np.savetxt(os.path.join(args.results_path, 'runtimes/runtimes_cai.csv'), np.array(runtimes), delimiter=',')
-    print("***************************")
-    print("Done!")
 
 
 def main():
@@ -851,11 +508,8 @@ def main():
 
 
 if __name__ == '__main__':
-    #main()
     args = get_args()
     print("Window Size {} Post Window Size {} Train Percent {}".format(args.window_size, args.post_window_size, args.train_percent))
-    #data = resolve_data(args)
-    #apply_cai_variance_windowed(args, data)
     if args.single_test:
         data_full = resolve_data(args)
         save_path = os.path.join(args.results_path+"_cai", args.data)
@@ -872,8 +526,3 @@ if __name__ == '__main__':
         perform_sap_batch(args)
     else:
         perform_simulation_batch(args)
-    #perform_simulation_batch_variance(args)
-    #precision_recall_sims(args)
-    #precision_recall_sims_precision(args)
-    #precision_recall_sims_precision_runtimes(args)
-    #perform_single_run(args)

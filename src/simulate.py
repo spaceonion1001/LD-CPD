@@ -77,22 +77,14 @@ def lacz_sampling(adj):
 
 
 def generate_matrices_orthogonal(prec_coeffs=None, M=2, dim=4, to_print=True, lam=1e-1, seed=42, linkage_type='single', plotting=True):
+    os.makedirs('debugging_figs/nonsap_figs', exist_ok=True)
     print(">>  Generating H Matrices - M {}; Dim {} <<".format(M, dim))
     H_s = []
     if not prec_coeffs:
         prec_coeffs = np.random.rand(M)
     if (prec_coeffs <= 0.).sum() > 0:
         prec_coeffs = prec_coeffs + np.abs(prec_coeffs.min()) + 0.5 # add adjustment so non-negative
-    """"""
-    #precision = make_spd_matrix(dim)
-    #precision = make_sparse_spd_matrix(dim=dim, alpha=0.9, norm_diag=True, random_state=seed)
-    #delta = np.abs(np.min(np.linalg.eig(precision)[0])) + 0.01
-    #delta_times_I = np.eye(dim)*delta
-    #precision = precision + delta_times_I
-    """"""
 
-    #adj = gilbert_graph(dim=dim, seed=seed)
-    #adj = grid_graph(dim=dim, seed=seed)
     adj = block_model(dim=dim, seed=seed)
     precision = lacz_sampling(adj)
 
@@ -101,36 +93,12 @@ def generate_matrices_orthogonal(prec_coeffs=None, M=2, dim=4, to_print=True, la
     precision[np.abs(precision) <= 0.1] = 0.0
     """"""
 
-
-
-    #print((precision == 0).sum()/len(precision.flatten()))
-    #####
-    # data_temp, _ = sim_data(covar=inv(precision), dim=dim, N=20000)
-    # #glasso = GraphicalLasso(max_iter=1500, alpha=0.05, tol=1e-4, verbose=False).fit(data_temp.T)
-    # glasso = GraphicalLassoCV(alphas=[1e-1, 1e-2, 5e-1, 5e-2, 1.0], n_refinements=4, tol=1e-4, max_iter=1500, cv=5).fit(data_temp.T)
-    # precision = glasso.precision_.copy()
-    ####
-
-    # precision = (precision+precision.T)/2
-    # precision = (precision - precision.min())/(precision.max() - precision.min())*2 - 1
-    # eps_mask = (np.abs(precision) <= 0.2)
-    # precision[eps_mask] = 0.0
-    # np.fill_diagonal(precision, 1.0)
-    # precision = get_near_psd(precision)
-    # precision = precision/precision.max()
-    # print(np.linalg.eig(precision)[0].max())
-    ####
-    
-    #print(precision.max(), precision.min(), np.diag(precision))
     assert is_pos_def(precision), "Not Positive Definite Precision Matrix"
     clust_dist_mat = np.abs(precision)
     np.fill_diagonal(clust_dist_mat, 0.0)
     print("MAX", clust_dist_mat.max())
-    #clust_dist_mat = 1.0 - clust_dist_mat
     clust_dist_mat = (clust_dist_mat.max()+1e-5) - clust_dist_mat
     np.fill_diagonal(clust_dist_mat, 0.0)
-    #clust_dist_mat[clust_dist_mat == clust_dist_mat.max()] = 1e8
-    #pairwise_distances = hierarchy.distance.pdist(clust_dist_mat)
     pairwise_distances = squareform(clust_dist_mat)
     Z = linkage(pairwise_distances, method=linkage_type)
     clust_distances = sorted(Z[:, 2])
@@ -157,7 +125,6 @@ def generate_matrices_orthogonal(prec_coeffs=None, M=2, dim=4, to_print=True, la
     """
 
     cutree1 = hierarchy.cut_tree(Z, n_clusters=M).squeeze()
-    #cutree1 = hierarchy.fcluster(Z, t=clust_distances[-M], criterion='distance')
     m = np.zeros((dim, dim))
     for i in range(max(set(cutree1))+1): # iterate over clusters
         idxs = np.where(cutree1 == i)[0] # indexes for given cluster
@@ -172,8 +139,6 @@ def generate_matrices_orthogonal(prec_coeffs=None, M=2, dim=4, to_print=True, la
     if plotting:
         from matplotlib.ticker import AutoMinorLocator
         colors = 'whitesmoke purple red green orange'.split()
-        #values = range(H_s.shape[0]+1)
-        #patches = [mpatches.Patch(color=colors[x], label="Cluster {l}".format(l=values[x]) ) for x in range(len(values)) ]
         cmap = matplotlib.colors.ListedColormap(colors, name='colors', N=None)
 
         plt.imshow(m, cmap=cmap)
@@ -185,39 +150,12 @@ def generate_matrices_orthogonal(prec_coeffs=None, M=2, dim=4, to_print=True, la
         plt.yticks(minor_ticks, minor=True)
         plt.xlabel("Feature Index", fontsize=18)
         plt.ylabel("Feature Index", fontsize=18)
-        #plt.matshow(m, cmap=cmap)
-        #sns.heatmap(m, cmap=cmap)
-        #plt.yticks(range(0, 20), rotation=45)
-        #plt.legend(handles=patches, bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=-1.0 )
         plt.tight_layout()
         plt.grid(which='minor')
         plt.grid(which='major', alpha=0.0)
         plt.savefig(os.path.join('debugging_figs/nonsap_figs/', "true_precision.png"))
         plt.close()
 
-    ##############
-    # precision = np.zeros((dim, dim))
-    # H_s_stacked = np.zeros((dim**2, M))
-    # mat = make_spd_matrix(dim)
-    # indxes = np.random.choice(np.arange(dim), (M, dim//M), replace=False)
-    # for i in range(M):
-    #     A = np.zeros((dim, dim))
-    #     for idx in indxes[i]:
-    #         for idx2 in indxes[i]:
-    #             A[idx, idx2] = mat[idx, idx2]
-    #     H_s.append(A)
-    #     precision += prec_coeffs[i]*A
-    #     H_s_stacked[:, i] = A.flatten()
-    # H_s = np.array(H_s)
-    
-    # # ensure basis matrices are linearly independent
-    # assert np.linalg.matrix_rank(H_s_stacked) == M, "Not Linearly Independent basis matrices"
-    
-    # # ensure it's actually symmetric
-    # # minimal modification on scale of 1e-15
-    # precision_corrected = (precision + precision.T)/2
-    # assert is_pos_def(precision_corrected), "Not Positive Definite Initial Matrices"
-    ##############
     if to_print:
         for i in range(H_s.shape[0]):
             curr_mat = symmetrize_from_vector(H_s[i], dim)
@@ -230,8 +168,6 @@ def generate_matrices_orthogonal(prec_coeffs=None, M=2, dim=4, to_print=True, la
             else:
                 print("Sim Basis Matrix {}".format(i))
             print("Sim Channels Contained {}".format(nonzero_cols))
-            #print("Diag: ", set(list(np.diag(curr_mat))))
-            #print("OffDiag: ", set(list(curr_mat[np.triu_indices(dim, k=1)])))
             print("****************************************")
             print()
 
@@ -252,7 +188,6 @@ def generate_matrices_orthogonal(prec_coeffs=None, M=2, dim=4, to_print=True, la
 def collect_precision_matrix(H_s, prec_coeffs, P):
     psi_hat = np.sum(np.expand_dims(prec_coeffs, 1)*H_s, 0)
     psi_hat = symmetrize_from_vector(psi_hat, P)
-    #precision = (prec_coeffs.reshape(-1, 1, 1)*H_s).sum(0)
     assert is_pos_def(psi_hat), "Not Pos Def"
     return psi_hat
 
@@ -292,9 +227,6 @@ def create_residual_structured(H_s, omega, dim, N, num_indices=4, double_H=False
     upper_indices = slow_permutations(upper_indices, nonzero_cols)
     if num_indices > len(upper_indices[0]):
         num_indices = len(upper_indices[0])
-    #print(len(upper_indices[0]), num_indices)
-    # for i in range(len(upper_indices[0])):
-    #     print(upper_indices[0][i], upper_indices[1][i])
     rand_four_indices = np.random.choice(np.arange(len(upper_indices[0])), size=num_indices, replace=False)
     w = np.max(np.diag(omega))
     log_dim_over_N = np.log(dim)/N
@@ -348,9 +280,6 @@ def anderson_sim_with_residual(M=2, dim=4, N=500, num_indices=4, resid_type='uns
                                  num_indices=num_indices, 
                                  resid_type=resid_type
                                  )
-    #delta = np.abs(np.min(np.linalg.eig(precision_one)[0])) + 0.05
-    #delta_times_I = np.eye(dim)*delta
-    #precision_one = precision_one + delta_times_I
     if not is_pos_def(precision_one + R):
         eig_vals = np.linalg.eig(precision_one + R)[0]
         correction_vector = np.eye(dim)*np.abs(eig_vals.min()) + 0.05 # pos-def correction
@@ -372,7 +301,6 @@ def anderson_sim_with_residual(M=2, dim=4, N=500, num_indices=4, resid_type='uns
 
 def sim_changepoint_mv_normal_orthogonal(sim_scale=0.8, M=2, dim=4, N=500, save_path=None, linkage_type='single', data_seed=42):
     print("Simulating Anderson Decomp Data")
-    #assert dim % M == 0, "Need dim divisible by M for sake of sampling at the moment"
     H_s, prec_temp, _ = generate_matrices_orthogonal(M=M, dim=dim, to_print=False, linkage_type=linkage_type, seed=42) # remove this source of randomness for consistency
     prec_coeffs_one = np.ones(M)
     precision_one = collect_precision_matrix(H_s=H_s, prec_coeffs=prec_coeffs_one, P=dim)
@@ -404,8 +332,6 @@ def sim_changepoint_mv_normal_orthogonal(sim_scale=0.8, M=2, dim=4, N=500, save_
         m[i, j] = H_s.shape[0] + 1
 
     colors = 'whitesmoke grey grey grey grey lime'.split()
-    #values = range(H_s.shape[0]+1)
-    #patches = [mpatches.Patch(color=colors[x], label="Cluster {l}".format(l=values[x]) ) for x in range(len(values)) ]
     cmap = matplotlib.colors.ListedColormap(colors, name='colors', N=None)
 
     plt.figure(figsize=(8, 8))
@@ -418,10 +344,6 @@ def sim_changepoint_mv_normal_orthogonal(sim_scale=0.8, M=2, dim=4, N=500, save_
     plt.yticks(minor_ticks, minor=True)
     plt.xlabel("Feature Index", fontsize=18)
     plt.ylabel("Feature Index", fontsize=18)
-    #plt.matshow(m, cmap=cmap)
-    #sns.heatmap(m, cmap=cmap)
-    #plt.yticks(range(0, 20), rotation=45)
-    #plt.legend(handles=patches, bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=-1.0 )
     plt.grid(which='minor')
     plt.grid(which='major', alpha=0.0)
     plt.title("Single Block Change", fontsize=20)
@@ -487,11 +409,7 @@ def sim_changepoint_mv_normal_orthogonal_cross_block(sim_scale=0.8, M=2, dim=4, 
     for ctup in neq_indices_arr:
         i, j = ctup
         m[i, j] = H_s.shape[0] + 1
-    #print(m)
-    #colors = 'whitesmoke blue magenta red orange lime'.split()
     colors = 'whitesmoke grey grey grey grey lime'.split()
-    #values = range(H_s.shape[0]+1)
-    #patches = [mpatches.Patch(color=colors[x], label="Cluster {l}".format(l=values[x]) ) for x in range(len(values)) ]
     cmap = matplotlib.colors.ListedColormap(colors, name='colors', N=None)
 
     ############
@@ -505,10 +423,6 @@ def sim_changepoint_mv_normal_orthogonal_cross_block(sim_scale=0.8, M=2, dim=4, 
     plt.yticks(minor_ticks, minor=True)
     plt.xlabel("Feature Index", fontsize=18)
     plt.ylabel("Feature Index", fontsize=18)
-    #plt.matshow(m, cmap=cmap)
-    #sns.heatmap(m, cmap=cmap)
-    #plt.yticks(range(0, 20), rotation=45)
-    #plt.legend(handles=patches, bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=-1.0 )
     plt.grid(which='minor')
     plt.grid(which='major', alpha=0.0)
     plt.title("Multiple Block Change", fontsize=20)
@@ -580,7 +494,6 @@ def sim_changepoint_mv_normal_orthogonal_cross_hard(sim_scale=0.8, M=2, dim=4, N
     print(m)
     viridis = cm.get_cmap('viridis', 10)
     newcolors = viridis(np.linspace(0, 1, 10))
-    #pink = np.array([248/256, 24/256, 148/256, 1])
     whitesmoke = [0.9607843137254902, 0.9607843137254902, 0.9607843137254902, 1.0]
     grey = [0.5019607843137255, 0.5019607843137255, 0.5019607843137255, 1.0]
     lime = [0.0, 1.0, 0.0, 1.0]
@@ -590,22 +503,6 @@ def sim_changepoint_mv_normal_orthogonal_cross_hard(sim_scale=0.8, M=2, dim=4, N
     newcolors[6:, :] = cyan
     newcolors[2:6, :] = lime
     newcmp = ListedColormap(newcolors)
-    # for i, idx in enumerate(rand_idx):
-    #     curr_mat = symmetrize_from_vector(H_s[idx], dim)
-    #     nonzero_cols = np.nonzero(np.any(curr_mat != 0, axis=0))[0]
-    #     for col in nonzero_cols:
-    #         for col2 in nonzero_cols:
-    #             m[col, col2] = H_s.shape[0]+i+1
-
-
-    #print(m)
-    #colors = 'whitesmoke blue magenta red orange lime'.split()
-    #colors = 'whitesmoke grey grey grey grey lime cyan'.split()
-    #values = range(H_s.shape[0]+1)
-    #patches = [mpatches.Patch(color=colors[x], label="Cluster {l}".format(l=values[x]) ) for x in range(len(values)) ]
-    #cmap = matplotlib.colors.ListedColormap(colors, name='colors', N=None)
-
-    ############
     plt.figure(figsize=(8, 8))
     plt.imshow(m, cmap=newcmp)
     major_ticks = np.arange(0, 20)
@@ -616,10 +513,6 @@ def sim_changepoint_mv_normal_orthogonal_cross_hard(sim_scale=0.8, M=2, dim=4, N
     plt.yticks(minor_ticks, minor=True)
     plt.xlabel("Feature Index", fontsize=18)
     plt.ylabel("Feature Index", fontsize=18)
-    #plt.matshow(m, cmap=cmap)
-    #sns.heatmap(m, cmap=cmap)
-    #plt.yticks(range(0, 20), rotation=45)
-    #plt.legend(handles=patches, bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=-1.0 )
     plt.grid(which='minor')
     plt.grid(which='major', alpha=0.0)
     plt.title("Multiple Block Subset Change", fontsize=20)
@@ -690,11 +583,9 @@ def sim_changepoint_mv_normal_orthogonal_multiple_block(sim_scale=0.8, M=2, dim=
         m[i, j] = 3 + it_count
         it_count += 1
     print(m)
-    #colors = 'whitesmoke blue magenta red orange lime'.split()
 
     viridis = cm.get_cmap('viridis', it_count-1+3+2)
     newcolors = viridis(np.linspace(0, 1, it_count-1+3+2))
-    #pink = np.array([248/256, 24/256, 148/256, 1])
     whitesmoke = [0.9607843137254902, 0.9607843137254902, 0.9607843137254902, 1.0]
     grey = [0.5019607843137255, 0.5019607843137255, 0.5019607843137255, 1.0]
     newcolors[0, :] = whitesmoke
@@ -702,10 +593,6 @@ def sim_changepoint_mv_normal_orthogonal_multiple_block(sim_scale=0.8, M=2, dim=
     newcmp = ListedColormap(newcolors)
 
 
-    #colors = 'whitesmoke grey grey grey grey lime'.split()
-    #values = range(H_s.shape[0]+1)
-    #patches = [mpatches.Patch(color=colors[x], label="Cluster {l}".format(l=values[x]) ) for x in range(len(values)) ]
-    #cmap = matplotlib.colors.ListedColormap(colors, name='colors', N=None)
 
     ###########
     plt.figure(figsize=(8, 8))
@@ -718,10 +605,6 @@ def sim_changepoint_mv_normal_orthogonal_multiple_block(sim_scale=0.8, M=2, dim=
     plt.yticks(minor_ticks, minor=True)
     plt.xlabel("Feature Index", fontsize=18)
     plt.ylabel("Feature Index", fontsize=18)
-    #plt.matshow(m, cmap=cmap)
-    #sns.heatmap(m, cmap=cmap)
-    #plt.yticks(range(0, 20), rotation=45)
-    #plt.legend(handles=patches, bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=-1.0 )
     plt.grid(which='minor')
     plt.grid(which='major', alpha=0.0)
     plt.title("Individual Coeff Change", fontsize=20)
@@ -792,11 +675,9 @@ def sim_changepoint_mv_normal_orthogonal_hard(sim_scale=0.8, M=2, dim=4, N=500, 
         m[i, j] = 4 + it_count
         it_count += 1
     print(m)
-    #colors = 'whitesmoke blue magenta red orange lime'.split()
 
     viridis = cm.get_cmap('viridis', it_count-1+4+2)
     newcolors = viridis(np.linspace(0, 1, it_count-1+4+2))
-    #pink = np.array([248/256, 24/256, 148/256, 1])
     whitesmoke = [0.9607843137254902, 0.9607843137254902, 0.9607843137254902, 1.0]
     grey = [0.5019607843137255, 0.5019607843137255, 0.5019607843137255, 1.0]
     newcolors[0, :] = whitesmoke
@@ -814,10 +695,6 @@ def sim_changepoint_mv_normal_orthogonal_hard(sim_scale=0.8, M=2, dim=4, N=500, 
     plt.yticks(minor_ticks, minor=True)
     plt.xlabel("Feature Index", fontsize=18)
     plt.ylabel("Feature Index", fontsize=18)
-    #plt.matshow(m, cmap=cmap)
-    #sns.heatmap(m, cmap=cmap)
-    #plt.yticks(range(0, 20), rotation=45)
-    #plt.legend(handles=patches, bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=-1.0 )
     plt.grid(which='minor')
     plt.grid(which='major', alpha=0.0)
     plt.title("Individual Coeff Subset Change", fontsize=20)
@@ -832,12 +709,10 @@ def sim_changepoint_mv_normal_orthogonal_hard(sim_scale=0.8, M=2, dim=4, N=500, 
 
 def sim_changepoint_mv_normal_orthogonal_no_change(sim_scale=0.8, M=2, dim=4, N=500, save_path=None):
     print("Simulating Anderson Decomp Data")
-    #assert dim % M == 0, "Need dim divisible by M for sake of sampling at the moment"
     H_s, precision_one, prec_coeffs_one = generate_matrices_orthogonal(M=M, dim=dim)
     data_one, C_one = sim_data(covar=inv(precision_one), dim=dim, N=N)
     
     prec_coeffs_two = prec_coeffs_one.copy()
-    # prec_coeffs_two[0] += sim_scale#*np.random.choice([-1, 1])
     precision_two = collect_precision_matrix(H_s, prec_coeffs_two, dim)
     data_two, C_two = sim_data(covar=inv(precision_two), dim=dim, N=N)
     
@@ -851,7 +726,6 @@ def sim_changepoint_mv_normal_orthogonal_no_change(sim_scale=0.8, M=2, dim=4, N=
     return H_s, data_total
 
 def sim_changepoint_mv_normal_orthogonal_mult_coeff(sim_scale=0.8, M=2, dim=4, N=500, num_coeffs_change=1, save_path=None):
-    #assert dim % M == 0, "Need dim divisible by M for sake of sampling at the moment"
     H_s, precision_one, prec_coeffs_one = generate_matrices_orthogonal(M=M, dim=dim)
     prec_coeffs_one = np.ones(M)*2.0
     precision_one = collect_precision_matrix(H_s, prec_coeffs_one, dim)
@@ -872,7 +746,6 @@ def sim_changepoint_mv_normal_orthogonal_mult_coeff(sim_scale=0.8, M=2, dim=4, N
     print("Precision Coefficients Pre-Changepoint: ", prec_coeffs_one)
     print("Precision Coefficients Post-Changepoint: ", prec_coeffs_two)
     neq_indices = np.where(prec_coeffs_one != prec_coeffs_two)
-    #neq_indices_arr = np.concatenate((np.expand_dims(neq_indices[0],1), np.expand_dims(neq_indices[1], 1)), 1)
     print(neq_indices)
     if save_path is not None:
         np.savetxt(os.path.join(save_path, 'changed_indx.csv'), neq_indices)
@@ -893,7 +766,6 @@ def sim_data(covar, dim, N=1000):
     
     assert is_symmetric(covar), is_pos_def(covar)
     data_sim = np.random.multivariate_normal(np.zeros(dim), covar, N).T
-    #data_sim = (data_sim - data_sim.mean())/data_sim.std()
     C = np.cov(data_sim)
     
     return data_sim, C
@@ -945,7 +817,6 @@ def get_scale_val(C, dim, scale_factor=50):
         rand_val = np.random.uniform(rand_val_zero, rand_val_one)
     else:
         rand_val = np.random.uniform(rand_val_two, rand_val_three)
-    #print(rand_val_zero, rand_val_one, rand_val_two, rand_val_three)
     return rand_val
 
 def sim_changepoint_mv_normal_cholesky(dim, N, num_coeffs_change=1, scale=0.8, save_path=None, sparse=False):
@@ -964,7 +835,6 @@ def sim_changepoint_mv_normal_cholesky(dim, N, num_coeffs_change=1, scale=0.8, s
             L_one[i,j] = 0.0
     np.fill_diagonal(L_one, 1.0)
     C_one = L_one.dot(L_one.T)
-    #C_one = C_one/np.abs(C_one.max())
     data_one = np.random.multivariate_normal(np.zeros(dim), inv(C_one), N)
     L_two = L_one.copy()
     for _ in range(num_coeffs_change):
@@ -975,16 +845,11 @@ def sim_changepoint_mv_normal_cholesky(dim, N, num_coeffs_change=1, scale=0.8, s
         else:
             val = L_two[j, i]
         val += get_scale_val(C_one, dim)
-        # val += scale
-        # no need for symmetric change - it's a cholesky
         if i >= j:
             L_two[i, j] = val
         else:
             L_two[j, i] = val
     C_two = L_two.dot(L_two.T)
-    #adjustment = np.abs(np.linalg.eig(C_two)[0].min()) + 1e-12
-    #C_two += np.eye(dim)*adjustment
-    #C_two = C_two/np.abs(C_two.max())
     data_two = np.random.multivariate_normal(np.zeros(dim), inv(C_two), N)
     data_total = np.concatenate((data_one, data_two), axis=0)
     
@@ -1017,7 +882,6 @@ def sim_changepoint_mv_normal_cholesky_no_change(dim, N, num_coeffs_change=1, sc
             L_one[i,j] = 0.0
     np.fill_diagonal(L_one, 1.0)
     C_one = L_one.dot(L_one.T)
-    #C_one = C_one/np.abs(C_one.max())
     data_one = np.random.multivariate_normal(np.zeros(dim), inv(C_one), N)
     L_two = L_one.copy()
     for _ in range(num_coeffs_change):
@@ -1029,16 +893,11 @@ def sim_changepoint_mv_normal_cholesky_no_change(dim, N, num_coeffs_change=1, sc
         else:
             val = L_two[j,i]
         val += 0.0#get_scale_val(C_one, dim)
-        # val += scale
-        # no need for symmetric change - it's a cholesky
         if i >= j:
             L_two[i, j] = val
         else:
             L_two[j,i] = val
     C_two = L_two.dot(L_two.T)
-    #adjustment = np.abs(np.linalg.eig(C_two)[0].min()) + 1e-12
-    #C_two += np.eye(dim)*adjustment
-    #C_two = C_two/np.abs(C_two.max())
     data_two = np.random.multivariate_normal(np.zeros(dim), inv(C_two), N)
     data_total = np.concatenate((data_one, data_two), axis=0)
     
@@ -1076,8 +935,6 @@ def sim_changepoint_mv_normal_ldlt(dim, N, num_coeffs_change=1, scale=0.8, save_
         else:
             val = L_two[j,i]
         val += get_scale_val(C_one, dim)
-        # val += scale
-        # no need for symmetric change - it's a cholesky
         if i >= j:
             L_two[i, j] = val
         else:
@@ -1089,18 +946,12 @@ def sim_changepoint_mv_normal_ldlt(dim, N, num_coeffs_change=1, scale=0.8, save_
     data_two = np.random.multivariate_normal(np.zeros(dim), inv(C_two), N)
     data_total = np.concatenate((data_one, data_two), axis=0)
 
-    #print(np.abs(C_one-C_two).max())
-    #print(C_one.max(), C_two.max())
     assert is_pos_def(C_one)
     assert is_symmetric(C_one)
     assert is_pos_def(C_two)
     assert is_symmetric(C_two)
     assert sum(np.diag(inv(C_one)) <= 0) == 0
     assert sum(np.diag(inv(C_two)) <= 0) == 0
-    # print(C_one.max())
-    # print(C_two.max())
-    # print(inv(C_one).max())
-    # print(inv(C_two).max())
     print("Finished Simulation")
     neq_indices = np.where(C_one != C_two)
     neq_indices_arr = np.concatenate((np.expand_dims(neq_indices[0],1), np.expand_dims(neq_indices[1], 1)), 1)
@@ -1109,8 +960,6 @@ def sim_changepoint_mv_normal_ldlt(dim, N, num_coeffs_change=1, scale=0.8, save_
     return data_total
 
 def sim_changepoint_var_process(dim, N, num_coeffs_change, scale=0.5, save_path=None):
-    # simulate this where we change the noise covariance via a LDLT decomposition on precision
-    # VAR(1)
     print("Simulating VAR Data")
     coeffs = np.random.uniform(low=-0.1, high=0.1, size=(1, dim, dim))
     L_one = make_spd_matrix(dim)
@@ -1126,7 +975,6 @@ def sim_changepoint_var_process(dim, N, num_coeffs_change, scale=0.5, save_path=
         L_two = L_two.copy()
         val = L_two[i, j]
         val += scale
-        # no need for symmetric change - it's a cholesky
         L_two[i, j] = val
 
     np.fill_diagonal(L_two, 1.0)
@@ -1291,13 +1139,6 @@ def simulate_changepoint_cai(omega, U, N=1000):
     mat_shift = np.eye(dim)*delta
     precision_one = omega + mat_shift
     precision_two = omega + U + mat_shift
-    # sns.heatmap(precision_one)
-    # plt.savefig('debugging_figs/cai_heatmap_one.png')
-    # plt.close()
-    # sns.heatmap(precision_two)
-    # plt.savefig('debugging_figs/cai_heatmap_two.png')
-    # plt.close()
-    # exit()
     assert(is_pos_def(precision_one))
     assert(is_pos_def(precision_two))
     data_one = np.random.multivariate_normal(np.zeros(dim), inv(precision_one), N)
@@ -1306,7 +1147,6 @@ def simulate_changepoint_cai(omega, U, N=1000):
     return data_full, precision_one, precision_two
 
 def changepoint_cai_model_one(args, dim, N=100, save_path=None):
-    #print("Simulating Cai Model One")
     omega = sim_changepoint_cai_model_one(dim=dim)
     U = create_U_cai(omega, dim=dim, N=N, num_indices=args.num_indices)
     data_full, precision_one, precision_two = simulate_changepoint_cai(omega, U, N=N)
@@ -1314,11 +1154,9 @@ def changepoint_cai_model_one(args, dim, N=100, save_path=None):
     neq_indices_arr = np.concatenate((np.expand_dims(neq_indices[0],1), np.expand_dims(neq_indices[1], 1)), 1)
     if save_path is not None:
         np.savetxt(os.path.join(save_path, 'changed_indx.csv'), neq_indices_arr)
-    #print("Finished Simulation")
     return data_full
 
 def changepoint_cai_model_one_no_change(dim, N=100, save_path=None):
-    #print("Simulating Cai Model One")
     omega = sim_changepoint_cai_model_one(dim=dim)
     U = create_U_cai_no_change(omega, dim=dim, N=N)
     data_full, precision_one, precision_two = simulate_changepoint_cai(omega, U, N=N)
@@ -1326,7 +1164,6 @@ def changepoint_cai_model_one_no_change(dim, N=100, save_path=None):
     neq_indices_arr = np.concatenate((np.expand_dims(neq_indices[0],1), np.expand_dims(neq_indices[1], 1)), 1)
     if save_path is not None:
         np.savetxt(os.path.join(save_path, 'changed_indx.csv'), neq_indices_arr)
-    #print("Finished Simulation")
     return data_full
 
 

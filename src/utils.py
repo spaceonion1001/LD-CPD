@@ -54,30 +54,12 @@ def load_mesonet_data(args):
     data = pd.read_csv(os.path.join(args.data_path, args.data_fname), delimiter=',')
     data = data.drop('YYYYMMDDhhmm', axis=1)
     
-    #data = data.loc[:,~data.columns.str.contains('GUTH', case=False)] 
     for col in data.columns:
         data.loc[data[col]>np.mean(data[col])+5*np.std(data[col]),col] = np.nan
         data.loc[data[col]<np.mean(data[col])-5*np.std(data[col]),col] = np.nan
     data = pd.DataFrame(data).interpolate('linear', axis=0).fillna(method='backfill') # interpolate
     data = data.diff(1).dropna()
     data = data.values.astype(np.float64)
-    #data_df = pd.DataFrame(data).diff(1).dropna() # first differencing
-    #data = data_df.values
-    
-    # scaler = StandardScaler()
-    # data = scaler.fit_transform(data)
-    # quantiles = pd.DataFrame(data).quantile(0.95).values
-    # for col in range(data.shape[1]):
-    #     curr_col = data[:, col]
-    #     std_col = curr_col.std()
-    #     #curr_col[np.abs(curr_col) >= 3*std_col] = 3*std_col
-    #     curr_col[np.abs(curr_col) >= quantiles[col]] = quantiles[col]
-    #     data[:, col] = curr_col.copy()
-    
-    
-    #sns.histplot(data.values, bins=40, legend=False)
-    #plt.savefig('mesonet_hist.png')
-    #plt.close()
 
     return data
 
@@ -91,15 +73,10 @@ def load_mesonet_pressure_data(args):
             raw_df = raw_df.drop(col, axis=1)
         else:
             raw_df.loc[raw_df[col]<=0.0,col] = np.nan
-            # raw_df.loc[raw_df[col]>np.mean(raw_df[col])+2*np.std(raw_df[col]),col] = np.nan
-            # raw_df.loc[raw_df[col]<np.mean(raw_df[col])-2*np.std(raw_df[col]),col] = np.nan
     raw_df = raw_df.interpolate('linear', axis=0).fillna(method='backfill')
     raw_df = raw_df.diff(1).dropna()
     raw_df = raw_df.values.astype(np.float64)
     
-    #np.random.seed(42)
-    #random_sampled_cols = np.random.choice(np.arange(0, raw_df.shape[1]), replace=False, size=80)
-    #raw_df = raw_df[:, random_sampled_cols]
 
     return raw_df
 

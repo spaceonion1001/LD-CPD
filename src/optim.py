@@ -33,7 +33,7 @@ class JacWrapper(object):
             H_j = symmetrize_from_vector(self.H_s[j], self.dim)
             first_term = np.trace(inv_psi_hat.dot(H_j))
             second_term = np.trace(H_j.dot(self.C))
-            jacobian[j] = -1*(first_term - second_term) # TODO is this sign right?!
+            jacobian[j] = -1*(first_term - second_term)
         
         return jacobian
 
@@ -47,7 +47,6 @@ def boyd_likelihood(x, H_s, C, dim):
     new_psi_hat = calc_psi_hat(alphas=alphas, H_s=H_s, dim=dim)
     assert is_pos_def(new_psi_hat), pdb.set_trace()
     P = dim
-    #_, first_term = np.linalg.slogdet(new_psi_hat)
     first_term = fast_logdet(new_psi_hat)
     likelihood = first_term - np.trace(new_psi_hat@C) - P*np.log(2*np.pi)
 
@@ -59,7 +58,6 @@ def boyd_likelihood_dc(x, H, C, dim):
     P = dim
 
     first_term = fast_logdet(psi_hat)
-    #first_term = np.linalg.slogdet(psi_hat)[1]
     likelihood = first_term - np.trace(psi_hat@C) - P*np.log(2*np.pi)
 
     return -likelihood
@@ -76,7 +74,7 @@ def calc_hessian(alphas, H_s, dim):
             H_j = symmetrize_from_vector(H_s[j], dim)
             H_k = symmetrize_from_vector(H_s[k], dim)
             prod = inv_psi_hat.dot(H_j).dot(inv_psi_hat).dot(H_k)
-            hessian[j,k] = np.trace(prod) # double check sign
+            hessian[j,k] = np.trace(prod)
     assert is_pos_def(hessian)
     return hessian
 
@@ -91,7 +89,7 @@ def calc_jacobian(x, *args, H_s, C, dim):
         H_j = symmetrize_from_vector(H_s[j], dim)
         first_term = np.trace(inv_psi_hat.dot(H_j))
         second_term = np.trace(H_j.dot(C))
-        jacobian[j] = -1*(first_term - second_term) # double check sign
+        jacobian[j] = -1*(first_term - second_term)
     
     return jacobian
 
@@ -123,16 +121,12 @@ def calc_jacobian_hessian_dc(x, H, C, dim):
     """
     psi_hat = x*H
     psi_hat = symmetrize_from_vector(psi_hat, dim)
-    #psi_hat = psi_hat[:, ~np.all(psi_hat == 0, axis=0)]
     psi_hat = psi_hat[:, ~np_all_axis0(psi_hat == 0)]
-    #psi_hat = psi_hat[~np.all(psi_hat == 0, axis=1), :]
     psi_hat = psi_hat[~np_all_axis1(psi_hat == 0), :]
     assert psi_hat.shape[0] == C.shape[0]
 
     inv_psi_hat = inv(psi_hat)
     H_curr = symmetrize_from_vector(H, dim)
-    #H_curr = H_curr[:, ~np.all(H_curr == 0, axis=0)]
-    #H_curr = H_curr[~np.all(H_curr == 0, axis=1), :]
     H_curr = H_curr[:, ~np_all_axis0(H_curr == 0)]
     H_curr = H_curr[~np_all_axis1(H_curr == 0), :]
 
@@ -147,9 +141,8 @@ def calc_jacobian_hessian_dc(x, H, C, dim):
 #@jit(nopython=True)
 def perform_line_search_dc(local_slope, newton_direction, alpha, H, C, dim, tau, control_factor):
     t = -control_factor*local_slope
-    #print("t {}".format(t))
     max_iters = 500
-    # calculate maximum step size heuristic
+    # calculate maximum step size
     new_alph_temp = alpha + 1.0*newton_direction
     lr_val = 1.0
     if not new_alph_temp <= 0:
@@ -157,34 +150,15 @@ def perform_line_search_dc(local_slope, newton_direction, alpha, H, C, dim, tau,
     else:
         while np.array(alpha + lr_val*newton_direction <= 1e-8).any():
             lr_val = lr_val*0.95
-        # alph_diff = alphas - new_alph_temp
-        # min_val = np.min(new_alph_temp) # most negative value
-        # min_idx = np.argmin(new_alph_temp)
-        # # TODO FIX THIS LINE
-        # """
-        # INCOMPLETE
-        # """
-        # lr_val = -(alphas[min_idx]/newton_direction[min_idx])*0.5
-        # """
-        # """
-    #print("\nLINE SEARCH\n")
     for j in range(max_iters):
         f_x = boyd_likelihood_dc(x=alpha, H=H, C=C, dim=C.shape[0])
         new_alphas = alpha+lr_val*newton_direction
         f_x_update = boyd_likelihood_dc(x=new_alphas, H=H, C=C, dim=C.shape[0])
         fx_diff = f_x - f_x_update
-        #print("***********")
-        #print("ITER {}".format(j))
-        #print("FX Diff {} Orig {} New {}".format(fx_diff, f_x, f_x_update))
-        #print("New Alphas {}".format(new_alphas))
-        #print("Stopping Criteria {}".format(lr_val*t))
-        #print("************")
         if fx_diff >= lr_val*t:
             break
         lr_val = tau*lr_val
     
-    #print("LR Val {}".format(lr_val))
-
     return lr_val
 
 def optim_boyd_dc(C, H, tolerance=0.5, iters=200, tau=0.95, control_factor=0.5):
@@ -202,8 +176,6 @@ def optim_boyd_dc(C, H, tolerance=0.5, iters=200, tau=0.95, control_factor=0.5):
         lambd = np.power(newton_direction*hessian*newton_direction, 0.5)
         hhat = 1
         if lambd > 0.5:
-            #print("Lambda {}".format(lambd))
-            # do line search
             local_slope = jacobian*newton_direction
             hhat = 1
             hhat = perform_line_search_dc(local_slope=local_slope,  
@@ -212,12 +184,7 @@ def optim_boyd_dc(C, H, tolerance=0.5, iters=200, tau=0.95, control_factor=0.5):
                                        H=H_reduced, C=C_reduced, dim=dim, tau=tau, control_factor=control_factor
                                       )
         elif lambd < 1e-8:
-            # termination condition for newton's mathod
             break
-        #print('***********')
-        #print("ITER {}".format(it))
-        #print("Newton Direction: ", newton_direction)
-        #print("Lambda ", lambd)
         new_alphas = alphas_imo + hhat*newton_direction
         likelihood_curr = boyd_likelihood_dc(x=alphas_imo, H=H_reduced, C=C_reduced, dim=C_reduced.shape[0])
         likelihood_new = boyd_likelihood_dc(x=new_alphas, H=H_reduced, C=C_reduced, dim=C_reduced.shape[0])
@@ -225,45 +192,19 @@ def optim_boyd_dc(C, H, tolerance=0.5, iters=200, tau=0.95, control_factor=0.5):
         if likelihood_new < likelihood_best:
             likelihood_best = likelihood_new
             alpha_best = new_alphas
-        # print("Iter {} Likelihood Diff {}".format(it, likelihood_curr - likelihood_new))
-        # if likelihood_diff < 0.0:
-        #     print("NEGATIVE LIKELIHOOD UPDATE")
-        #     pdb.set_trace()
         alphas_imo = copy.copy(new_alphas)
-        #print("New Alphas", new_alphas)
-        #print('***********')
-        #print()
-    #exit()
-    #print()
-    #print("################")
-    #print("ALPHAS {}".format(alphas_imo))
-    #print("################")
     if (alpha_best <= 0.0):
         print("ALPHAS OUT OF BOUNDS")
         exit(1)
     return alpha_best # scalar return value
 
 
-
-#@jit(nopython=True)
-# def perform_line_search(alphas, H_s, C, dim):
-#     jac_wrapper = JacWrapper(H_s=H_s, C=C, dim=dim)
-#     obj_fn = jac_wrapper.boyd_likelihood
-#     grad_fn = jac_wrapper.calc_jacobian
-#     start_point = alphas
-#     search_gradient = grad_fn(alphas)
-#     res = line_search(obj_fn, grad_fn, start_point, search_gradient)
-#     print(res)
-#     exit()
-
 def calculate_local_slope(newton_direction, jacobian):
     return np.dot(jacobian, newton_direction)
 
 def perform_line_search(local_slope, newton_direction, alphas, H_s, C, dim, tau, control_factor):
     t = -control_factor*local_slope
-    #print("t {}".format(t))
     max_iters = 200
-    # calculate maximum step size heuristic
     new_alph_temp = alphas + 1.0*newton_direction
     lr_val = 1.0
     if not (new_alph_temp <= 0).any():
@@ -271,33 +212,15 @@ def perform_line_search(local_slope, newton_direction, alphas, H_s, C, dim, tau,
     else:
         while (alphas + lr_val*newton_direction <= 1e-8).any():
             lr_val = lr_val*0.95
-        # alph_diff = alphas - new_alph_temp
-        # min_val = np.min(new_alph_temp) # most negative value
-        # min_idx = np.argmin(new_alph_temp)
-        # # TODO FIX THIS LINE
-        # """
-        # INCOMPLETE
-        # """
-        # lr_val = -(alphas[min_idx]/newton_direction[min_idx])*0.5
-        # """
-        # """
-    #print("\nLINE SEARCH\n")
     for j in range(max_iters):
         f_x = boyd_likelihood(x=alphas, H_s=H_s, C=C, dim=dim)
         new_alphas = alphas+lr_val*newton_direction
         f_x_update = boyd_likelihood(x=new_alphas, H_s=H_s, C=C, dim=dim)
         fx_diff = f_x - f_x_update
-        #print("***********")
-        #print("ITER {}".format(j))
-        #print("FX Diff {} Orig {} New {}".format(fx_diff, f_x, f_x_update))
-        #print("New Alphas {}".format(new_alphas))
-        #print("Stopping Criteria {}".format(lr_val*t))
-        #print("************")
         if fx_diff >= lr_val*t:
             break
         lr_val = tau*lr_val
     
-    #print("LR Val {}".format(lr_val))
 
     return lr_val
 
@@ -316,8 +239,6 @@ def optim_boyd(C, H_s, tolerance=0.5, iters=10, tau=0.95, control_factor=0.5):
         lambd = np.power(newton_direction.dot(hessian).dot(newton_direction), 0.5)
         hhat = 1
         if lambd > 0.5:
-            #print("Lambda {}".format(lambd))
-            # do line search
             local_slope = calculate_local_slope(newton_direction, jacobian)
             hhat = 1
             hhat = perform_line_search(local_slope=local_slope,  
@@ -326,29 +247,12 @@ def optim_boyd(C, H_s, tolerance=0.5, iters=10, tau=0.95, control_factor=0.5):
                                        H_s=H_s, C=C, dim=dim, tau=tau, control_factor=control_factor
                                       )
         elif lambd < 1e-5:
-            # termination condition for newton's mathod
             break
-        #print('***********')
-        #print("ITER {}".format(it))
-        #print("Newton Direction: ", newton_direction)
-        #print("Lambda ", lambd)
         new_alphas = alphas_imo + hhat*newton_direction
         likelihood_curr = boyd_likelihood(x=alphas_imo, H_s=H_s, C=C, dim=dim)
         likelihood_new = boyd_likelihood(x=new_alphas, H_s=H_s, C=C, dim=dim)
         likelihood_diff = likelihood_curr - likelihood_new
-        # print("Iter {} Likelihood Diff {}".format(it, likelihood_curr - likelihood_new))
-        # if likelihood_diff < 0.0:
-        #     print("NEGATIVE LIKELIHOOD UPDATE")
-        #     pdb.set_trace()
         alphas_imo = new_alphas.copy()
-        #print("New Alphas", new_alphas)
-        #print('***********')
-        #print()
-    #exit()
-    #print()
-    #print("################")
-    #print("ALPHAS {}".format(alphas_imo))
-    #print("################")
     if (alphas_imo <= 0.0).any():
         print("ALPHAS OUT OF BOUNDS")
         exit(1)
@@ -357,7 +261,6 @@ def optim_boyd(C, H_s, tolerance=0.5, iters=10, tau=0.95, control_factor=0.5):
 @jit(nopython=True)
 def calc_psi_hat(alphas, H_s, dim):
     P = dim
-    #psi_hat = sum([alphas[i]*H_s[i] for i in range(H_s.shape[0])])
     psi_hat = np.sum(np.expand_dims(alphas, 1)*H_s, 0)
     psi_hat = symmetrize_from_vector(psi_hat, P)
 
@@ -376,15 +279,8 @@ def calc_matrices_precision(psi_hat, H_s, C):
             mult = ((inv_psi_hat.dot(H_g)).dot(inv_psi_hat)).dot(H_h)
             lhs = np.trace(mult)
             A[g, h] = lhs
-        #print("PSI_HAT PROJ", np.trace(inv_psi_hat.dot(H_g)))
-        #print()
-        #print("C PROJ", np.trace(C.dot(H_g)))
-        #print()
         rhs = np.trace(inv_psi_hat.dot(H_g)) - np.trace(C.dot(H_g))
         B[g] = rhs
-        #print("H_g", H_s[g])
-        #print()
-    #exit()
     return A, B
 
 """
@@ -397,15 +293,11 @@ def iterative_soln_precision_single(coeffs_zero, H_s, C, dim, modify_index=0, it
     s_i = s_imo.copy()
     H_dim = H_s.shape[0]
     for it in range(iters):
-        #psi_hat = (s_imo.reshape(-1, 1, 1)*H_s).sum(0) # calculate psi_hat
         psi_hat = np.zeros(int((dim*(dim+1))/2))
         for i in range(H_s.shape[0]):
             psi_hat = psi_hat + s_imo[i]*H_s[i]
         psi_hat = symmetrize_from_vector(psi_hat, dim)
         A, B = calc_matrices_precision(psi_hat, H_s, C)
-        #print("DIAG", np.diag(A))
-        #print("A", A)
-        #print("EV", np.linalg.eig(A)[0])
         t_i = inv(A).dot(B)
         s_i[modify_index] = s_imo[modify_index] + t_i[modify_index]
         s_imo = s_i
@@ -418,21 +310,12 @@ def iterative_soln_precision(coeffs_zero, H_s, C, iters=5):
     H_dim = H_s.shape[0]
     dim = C.shape[0]
     for it in range(iters):
-        #psi_hat = (s_imo.reshape(-1, 1, 1)*H_s).sum(0) # calculate psi_hat
         psi_hat = np.zeros(int((dim*(dim+1))/2))
         for i in range(H_s.shape[0]):
             psi_hat = psi_hat + s_imo[i]*H_s[i]
         psi_hat = symmetrize_from_vector(psi_hat, dim)
         A, B = calc_matrices_precision(psi_hat, H_s, C)
-        # try:
-        #     
-        # except:
-        #     pdb.set_trace()
-        #t_i = inv(A).dot(B)
         t_i = np.linalg.solve(A, B)
-        #print("STEP SIZE", t_i)
-        #print("ALPHAS", s_imo)
-        #print()
         s_i = s_imo + t_i
         s_imo = s_i
         
@@ -661,7 +544,7 @@ def optimize_coeffs(H_s, C, lam=1e-2):
     l1_penalty = sum([cp.abs(psi_hat[i, j])
                 for i in range(dim)
                 for j in range(dim) if i != j])
-    objective = cp.Maximize(cp.log_det(psi_hat) - cp.trace(psi_hat@C)) #- lam*l1_penalty)
+    objective = cp.Maximize(cp.log_det(psi_hat) - cp.trace(psi_hat@C))
     constr1 = (psi_hat >> 0)
     constr2 = (psi_hat == psi_hat.T)
     constraints = [constr1, constr2]
@@ -682,15 +565,10 @@ def optimize_single_coeff(alphas, H_s, C, coeff_idx=0, lam=1e-2):
         if i != coeff_idx:
             temp_psi_hat += alphas[i]*symmetrize_from_vector_alt(H_s[i], dim)
     psi_hat = single_alpha * symmetrize_from_vector_alt(H_s[coeff_idx], dim) + temp_psi_hat
-#     for i in range(M):
-#         if i == coeff_idx:
-#             psi_hat += cp.multiply(single_alpha, symmetrize_from_vector_alt(H_s[i], dim))
-#         else:
-#             psi_hat += alphas[i]*symmetrize_from_vector_alt(H_s[i], dim)
     l1_penalty = sum([cp.abs(psi_hat[i, j])
                 for i in range(dim)
                 for j in range(dim) if i != j])
-    objective = cp.Maximize(cp.log_det(psi_hat) - cp.trace(psi_hat@C))# - lam*l1_penalty)
+    objective = cp.Maximize(cp.log_det(psi_hat) - cp.trace(psi_hat@C))
     constr1 = (psi_hat >> 0)
     constr2 = (psi_hat == psi_hat.T)
     constraints = [constr1, constr2]
@@ -701,8 +579,6 @@ def optimize_single_coeff(alphas, H_s, C, coeff_idx=0, lam=1e-2):
                   eps_infeas=1e-7,
                   alpha=1.0
                  )
-#     if problem.status != cp.OPTIMAL:
-#         raise Exception('CVXPY Error')
     
     new_alphas = alphas.copy()
     new_alphas[coeff_idx] = single_alpha.value
@@ -737,7 +613,7 @@ def gradient_step(alphas, H_s, C, lam=1e-2, beta=1e-2, t=2.0):
         second = np.trace(inv_psi_hat@symmetrize_from_vector(H_s[i], dim))
         log_barrier = (1/t)*second
         l1_penalty = l1_penalty_subderiv(alphas, symmetrize_from_vector(H_s[i], dim), i)
-        deriv = first - second #- log_barrier #+ lam*l1_penalty
+        deriv = first - second
         alphas_new[i] = alphas[i] - beta*deriv
 
     return alphas_new
@@ -756,14 +632,13 @@ def gradient_step_single(alphas, H_s, C, lam=1e-2, beta=1e-2, t=2.0, optim_indx=
     second = np.trace(inv_psi_hat@symmetrize_from_vector(H_s[optim_indx], dim))
     log_barrier = (1/t)*second
     l1_penalty = l1_penalty_subderiv(alphas, symmetrize_from_vector(H_s[optim_indx], dim), optim_indx)
-    deriv = first - second #- log_barrier #+ lam*l1_penalty
+    deriv = first - second
     alphas_new[optim_indx] = alphas[optim_indx] - beta*deriv
 
     return alphas_new
 
 @jit(nopython=True)
 def optimize_coeffs_first_order(H_s, C, lam=1e-2, beta=1e-2, iters=200, include_l1=True, t=2.0):
-    #print('*********\n\n')
     M = H_s.shape[0]
     alphas_imo = np.ones(M)
     best_likelihood = lasso_likelihood(alphas_imo, H_s, C, lam=lam, include_l1=include_l1)
@@ -777,7 +652,6 @@ def optimize_coeffs_first_order(H_s, C, lam=1e-2, beta=1e-2, iters=200, include_
         # schedule t
         t = t*1.4
 
-    #best_coeffs = alphas_imo.copy()
     return best_coeffs
 
 @jit(nopython=True)
@@ -795,7 +669,6 @@ def optimize_coeffs_first_order_single(alphas, H_s, C, lam=1e-2, beta=1e-2, iter
         # schedule t
         t = t*1.4
     
-    #best_coeffs = alphas_imo.copy()
     return best_coeffs
 
 

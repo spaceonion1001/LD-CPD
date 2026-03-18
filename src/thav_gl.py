@@ -29,16 +29,14 @@ from utils import is_symmetric, is_pos_def, vectorize_matrix, symmetrize_from_ve
 
 
 import warnings
-warnings.filterwarnings('ignore')  # <- remember to comment this if something breaks and you get confused
+warnings.filterwarnings('ignore')
 
 def thav_gl_fn(data_train, lambda_search, C=0.5, threshold=0.5):
     j = len(lambda_search) - 2
     r = lambda_search[j]
     r_hat = lambda_search[0]
-    #data_cov = np.corrcoef(data_train)
     data_cov = np.cov(data_train)
     while r > lambda_search[0]:
-        #glasso_r = GraphicalLasso(max_iter=1500, alpha=r, tol=1e-4, verbose=False).fit(data_train.T)
         try:
             glasso_r = GraphicalLasso(max_iter=1500, alpha=r, tol=1e-4, verbose=False, covariance='precomputed', eps=1e-3).fit(data_cov)
         except FloatingPointError:
@@ -47,7 +45,6 @@ def thav_gl_fn(data_train, lambda_search, C=0.5, threshold=0.5):
         j_prime = len(lambda_search) - 1
         r_prime = lambda_search[j_prime]
         while r_prime > r:
-            #glasso_rprime = GraphicalLasso(max_iter=1500, alpha=r_prime, tol=1e-4, verbose=False).fit(data_train.T)
             try:
                 glasso_rprime = GraphicalLasso(max_iter=1500, alpha=r_prime, tol=1e-4, verbose=False, covariance='precomputed', eps=1e-3).fit(data_cov)
             except FloatingPointError:
@@ -61,7 +58,6 @@ def thav_gl_fn(data_train, lambda_search, C=0.5, threshold=0.5):
                 r_prime = lambda_search[j_prime]
         j = j - 1
         r = lambda_search[j]
-    #glasso_rhat = GraphicalLasso(max_iter=1500, alpha=r_hat, tol=1e-4, verbose=False).fit(data_train.T)
     glasso_rhat = GraphicalLasso(max_iter=1500, alpha=r_hat, tol=1e-4, verbose=False, covariance='precomputed', eps=1e-3).fit(data_cov)
     theta_hat_rhat = glasso_rhat.precision_
     a_v = theta_hat_rhat

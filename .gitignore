@@ -131,3 +131,32 @@ dmypy.json
 figs/
 results/
 amoc_figs/
+
+# Generated output directories (method-specific results siblings of results/)
+debugging_figs/
+results_kesh/
+results_kesh_alt/
+results_kesh_clime/
+results_kesh_alt_clime/
+results_cai/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# NumPy binary outputs
+*.npy
+*.npz
+
+# Python pickle / serialized results
+*.pkl
+*.pickle
+
+# Local data files (real-world datasets loaded by utils.py)
+data/

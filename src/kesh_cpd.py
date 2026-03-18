@@ -1,17 +1,9 @@
-from pickletools import read_string1
-from cvxpy import vec
 import numpy as np
 from numpy.linalg import inv as inv
-import scipy
-from scipy.optimize import least_squares, minimize
-from scipy.stats import chi2
 from simulate import sim_changepoint_mv_normal_cholesky, sim_changepoint_mv_normal_ldlt, sim_changepoint_var_process, changepoint_cai_model_one, changepoint_cai_model_three, anderson_sim_with_residual
 from utils import scale_data, difference_data, vectorize_matrix, symmetrize_from_vector, load_mesonet_data
-from statsmodels.stats.multitest import fdrcorrection
 from tqdm import tqdm
-from scipy.stats import norm
 from scipy.special import comb, polygamma, erf, erfinv
-from sklearn.covariance import graphical_lasso, GraphicalLasso, GraphicalLassoCV
 import seaborn as sns
 
 from simulate import *
@@ -19,7 +11,6 @@ from utils import difference_data, load_alaska_data, scale_data, load_hjandrews_
 from numba import jit
 import time
 from datetime import timedelta
-from scipy.optimize import linprog
 import rpy2
 import rpy2.robjects as robjects
 import rpy2.robjects.numpy2ri
@@ -46,8 +37,7 @@ packnames = ('scalreg', 'fastclime')
 # R vector of strings
 from rpy2.robjects.vectors import StrVector
 
-# Selectively install what needs to be install.
-# We are fancy, just because we can.
+# Selectively install what needs to be installed.
 names_to_install = [x for x in packnames if not rpackages.isinstalled(x)]
 if len(names_to_install) > 0:
     utils.install_packages(StrVector(names_to_install))
@@ -58,14 +48,14 @@ import argparse
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--lam', type=float, default=1e-1)
+    parser.add_argument('--lam', type=float, default=5e-2)
     parser.add_argument('--dim', type=int, default=16)
     parser.add_argument('--N', type=int, default=500)
     parser.add_argument('--M', type=int, default=2)
     parser.add_argument('--sim', type=int, default=1)
     parser.add_argument('--sim_type', type=str, default='cai_model_three')
     parser.add_argument('--data', type=str, default='alaska')
-    parser.add_argument('--data_path', type=str, default='/home/dink/Documents/Research/data')
+    parser.add_argument('--data_path', type=str, default='../data')
     parser.add_argument('--data_fname', type=str, default='mesonet_test_out.csv')
     parser.add_argument('--sim_scale', type=float, default=0.8)
     parser.add_argument('--random_seed', type=int, default=42)
@@ -76,18 +66,18 @@ def get_args():
     parser.add_argument('--buffer_size', type=int, default=50)
     parser.add_argument('--pi_0', type=float, default=0.05)
     parser.add_argument('--num_coeffs_change', type=int, default=2)
-    parser.add_argument('--results_path', type=str, default='/home/dink/Documents/Research/Correlation-Changepoint-Detection/results')
+    parser.add_argument('--results_path', type=str, default='./results')
     parser.add_argument('--percent', type=float, default=0.25, help='Percent to use for scaling data')
     parser.add_argument('--kesh_d', type=int, default=10)
     parser.add_argument('--resid_type', type=str, choices=['unstructured', 'block'], default='unstructured', help='Residual Type')
     parser.add_argument('--num_indices', type=int, default=4)
-    parser.add_argument('--train_percent', type=float, default=0.25)
+    parser.add_argument('--train_percent', type=float, default=0.1)
     parser.add_argument('--single_test', type=int, default=0)
     parser.add_argument('--results_fldr_name', type=str, default=None)
     parser.add_argument('--results_filename', type=str, default=None)
     parser.add_argument('--sap', type=int, default=0)
     parser.add_argument('--alt', type=int, default=0)
-    parser.add_argument('--estimator', type=str, choices=['clime', 'scalreg'], default='scalreg')
+    parser.add_argument('--estimator', type=str, choices=['clime', 'scalreg'], default='clime')
     parser.add_argument('--auto_lambda', type=int, default=0)
     parser.add_argument('--load_lambdas', type=str, default=None)
     args = parser.parse_args()
@@ -155,8 +145,6 @@ def resolve_data(args, save_path=None, data_seed=42):
         elif args.data == 'holidayfarm':
             return load_holiday_farm_data(args)
         elif args.data == 'stocks':
-            # python src/main.py --M 5 --lam 2e-5 --window_size 200 --step_size 1 --data stocks --local 1 --sim 0 --split_variance 0 --train_percent 0.6
-            # stocks need a low lambda value I think
             return load_stock_market_data(args)
         elif args.data == 'mesonet':
             return scale_data(load_mesonet_data(args), percent=None, end_idx=args.window_size)
@@ -232,19 +220,11 @@ class KeshOnline:
             self.clime_init = self.fastclime_init_fn(args, self.data_full[0:self.N, :])
         else:
             self.clime_init = self.scalreg_init_fn(args, self.data_full[0:self.N, :])
-        #self.prec_est = self.clime_init_fn(self.data_full)
-        #self.glasso_est = GraphicalLasso(max_iter=100, alpha=self.lam, tol=1e-5, verbose=False).fit(self.data_full)
-        #print(self.prec_mat, end='\n\n')
-        #print(self.prec_est, end='\n\n')
-        #print(self.glasso_est.precision_)
-        #self.glasso = GraphicalLasso(max_iter=100, alpha=self.lam, tol=1e-5, verbose=False).fit(self.data_full[0:self.N, :])
-        #self.clime_init = self.glasso.precision_
         self.g1 = calc_g1(self.w)
         #print("G1 {}".format(self.g1))
         self.g2 = calc_g2(self.w)
         #print("G2 {}".format(self.g2))
         self.rhat0 = calc_rhat(self.clime_init, self.p)
-        #self.rhat0 = calc_rhat(self.prec_mat, self.p)
         self.T0 = calc_T_t(X=self.data_full, omega_hat=self.clime_init, r_hat=self.rhat0, w=self.w, p=self.p, t=0, g1=self.g1, g2=self.g2)
         self.critical_value = inv_Q_func(self.pi_0)
 
@@ -253,28 +233,6 @@ class KeshOnline:
             self.test_stats = self.iterate_alt(self.data)
         else:
             self.test_stats = self.iterate(self.data)
-        # self.rhat0 = calc_rhat(self.glasso.precision_, self.p)
-        # self.T0 = calc_T_t(X=self.data, omega_hat=self.glasso.precision_, r_hat=self.rhat0, w=self.w, p=self.p, t=0, g1=self.g1, g2=self.g2)
-        # print(self.T0)
-        # print(inv_Q_func(self.pi_0))
-        #self.clime_init = self.clime_init_fn(self.data_full)
-
-        # print(self.clime_init)
-        # print(self.glasso.precision_)
-        # print(args.prec_mat)
-        # exit()
-
-        
-
-        #self.critical_value = self.critical_value_init(self.pi_0, self.p, self.w)
-
-        #self.D_hat = 0
-        #self.k = 0
-        #self.t_hat_last = 0
-
-        #print(scipy.linalg.norm(calc_E_hat(self.data, self.clime_init, t=0, p=self.p, w=self.w, prec_mat=self.prec_mat), ord=np.inf))
-        #print(scipy.linalg.norm(calc_E_hat(self.data, self.glasso.precision_, t=0, p=self.p, w=self.w, prec_mat=self.prec_mat), ord=np.inf))
-        #print(self.critical_value)
 
     def scalreg_init_fn(self, args, data_minimal):
         nrow, ncol = data_minimal.shape
@@ -426,21 +384,17 @@ class KeshOnline:
 
 #@jit(nopython=True)
 def calc_E_hat(data, omega_hat, t, p, w):
-    #prec_mat = inv(np.eye(p))
     summand_mat = np.zeros((p, p))
     for r in range(1, w):
         X_t_r = np.expand_dims(data[t+r, :], 1)
         dot_prod = (np.dot(omega_hat, X_t_r)@np.dot(omega_hat, X_t_r).T)
-        #dot_prod = (np.dot(prec_mat, X_t_r)@np.dot(prec_mat, X_t_r).T)
         subtr = omega_hat
-        #subtr = prec_mat
         first = (dot_prod-subtr)/np.sqrt(w)
         summand_mat += first
     second = np.zeros((p, p))
     for u in range(p):
         for v in range(p):
             val = omega_hat[u, u]*omega_hat[v,v]+(omega_hat[u,v]**2)
-            #val = prec_mat[u, u]*prec_mat[v,v]+(prec_mat[u,v]**2)
             val = 1/np.sqrt(val)
             second[u,v] = val
     
@@ -498,29 +452,11 @@ def calc_T_t(X, omega_hat, r_hat, w, p, t, g1, g2):
     w_s = []
     for s in range(p):
         curr_y = calc_y_s_t_w(X, omega_hat, w=w, s=s, t=t)
-        #print("Curr y {}".format(curr_y))
         curr_f = calc_f(curr_y)
-        #print("Curr F {}".format(curr_f))
         top += (curr_f - g1)
-        #print("Diff {}".format(curr_f-g1))
-        #print("W*Y {} (this is Chi-square W dof)".format(w*curr_y))
         w_s.append(w*curr_y)
-        #print("Top {}".format(top),end='\n\n')
-    
 
-    #plt.hist(w_s)
-    # x = np.arange(0, 300, 0.01)
-    # fig, axes = plt.subplots(1, 2, figsize=(12, 5))
-    # axes[0].plot(x, chi2.pdf(x, df=w))
-    # axes[1].hist(w_s, density=True, bins=40)
-    # axes[0].set_xlim(0.0, 300.0)
-    # axes[1].set_xlim(0.0, 300.0)
-    # axes[0].set_ylim(0.0, 0.06)
-    # axes[1].set_ylim(0.0, 0.06)
-    # plt.show()
     bot = g2 * calc_hw(r_hat)
-    #print("Bot {}".format(bot))
-    #print("Rhat {}".format(calc_hw(r_hat)))
 
     return top/bot
 
@@ -550,13 +486,9 @@ def perform_single_run(args):
     
 
 def perform_simulation_batch(args):
-    # run a batch of 50 simulations/results with a specified simulation model
-    # only local test
-    # should do step_size = 1 because it's easier
-    # save everything to files - I guess
     print("\n*******************************************************************************")
     print("Performing Batch Simulation of {} with Dim = {}, Window = {}".format(args.sim_type, args.dim, args.window_size))
-    seeds_list = np.arange(50, 70)
+    seeds_list = np.arange(51, 70)
     sim_results_root = os.path.join(args.results_path, "simulation_results_kesh")
     if args.alt:
         sim_results_root = os.path.join(args.results_path, "simulation_results_kesh_alt")
@@ -570,8 +502,6 @@ def perform_simulation_batch(args):
     print(sim_type_path)
     if not os.path.isdir(sim_type_path):
         os.makedirs(sim_type_path, exist_ok=True)
-    timing = []
-    import timeit
     for seed in seeds_list:
         np.random.seed(seed)
         save_path = os.path.join(sim_type_path, str(seed))
@@ -579,10 +509,7 @@ def perform_simulation_batch(args):
             os.makedirs(save_path, exist_ok=True)
         data_full = resolve_data(args, save_path=save_path, data_seed=seed)
         print(data_full.shape)
-        t0 = timeit.default_timer()
         model = KeshOnline(args, data_full, seed=seed)
-        t1 = timeit.default_timer()
-        timing.append(round(t1-t0, 3))
         global_test_vals = model.test_stats
         print("Test Vals Shape", global_test_vals.shape)
         print()
@@ -590,7 +517,6 @@ def perform_simulation_batch(args):
         plt.plot(global_test_vals)
         plt.savefig(os.path.join(save_path, "test_stat.png"))
         plt.close()
-    np.savetxt('debugging_figs/timing_kesh_{}.csv'.format(args.dim), np.array(timing))
     print("*******************************************************************************")
     print("Done!")
 
@@ -599,7 +525,7 @@ def perform_sap_batch(args):
     # batch constitutes a random sample of a subset of tickers
     print("\n*******************************************************************************")
     print("Performing SAP Run with Dim = {}, Window = {}, Post Window {}".format(args.dim, args.window_size, args.post_window_size))
-    seeds_list = np.arange(50, 60)
+    seeds_list = np.arange(50, 51)
     sim_results_root = os.path.join(args.results_path, "sap_results_kesh")
     if args.alt:
         sim_results_root = os.path.join(args.results_path, "sap_results_kesh_alt")
