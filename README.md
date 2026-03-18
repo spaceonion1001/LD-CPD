@@ -6,7 +6,7 @@ This repository contains the code for the paper "Online Precision Matrix Changep
 
 ### Requirements
 
-The requirements are outlines in the `requirements.txt` file. A working R installation is also required for the XCC and KM/KMA algorithms. 
+The requirements are outlined in the `requirements.txt` file. A working R installation is also required for the XCC and KM/KMA algorithms. 
 
 ## Examples
 
